@@ -14,7 +14,7 @@ services:
       - key: NEXTAUTH_URL
         value: https://academic-leap.onrender.com
       - key: NEXTAUTH_SECRET
-        generate: true
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
 
