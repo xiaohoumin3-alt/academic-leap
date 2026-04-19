@@ -1,0 +1,24 @@
+services:
+  - name: web
+    type: worker
+    build_command: pnpm install && pnpm build
+    start_command: pnpm start
+    env:
+      - name: NODE_VERSION
+        value: "18"
+      - name: PORT
+        value: "3000"
+    ports:
+      - port: 3000
+        type: HTTP
+    resources:
+      cpu: 0.5
+      memory: 512
+
+databases:
+  - name: db
+    type: postgres
+    version: "15"
+    resources:
+      cpu: 0.5
+      memory: 512
