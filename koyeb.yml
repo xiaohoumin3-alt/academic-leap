@@ -1,0 +1,35 @@
+name: academic-leap
+services:
+  - name: web
+    type: web
+    build_command: pnpm install && pnpm build
+    run_command: pnpm start
+    env:
+      - name: NODE_VERSION
+        value: "18"
+      - name: DATABASE_URL
+        value: "${DATABASE_URL}"
+      - name: NEXTAUTH_URL
+        value: "https://academic-leap.koyeb.app"
+      - name: NEXTAUTH_SECRET
+        value: "${NEXTAUTH_SECRET}"
+      - name: GEMINI_API_KEY
+        value: "${GEMINI_API_KEY}"
+    ports:
+      - port: 3000
+        protocol: http
+    instance_type: nano
+    regions:
+      - was
+    health_check:
+      http:
+        path: /
+        port: 3000
+
+databases:
+  - name: db
+    type: postgresql
+    version: "15"
+    size: nano
+    regions:
+      - was
