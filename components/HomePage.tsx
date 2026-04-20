@@ -162,7 +162,7 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, onAssess, onOpenConsole })
                 </div>
                 <div className="mt-3 flex items-center gap-4">
                   <div className="flex flex-col gap-1">
-                    <span className="text-[10px] text-on-surface-variant font-medium">可信区间：72–78</span>
+                    <span className="text-[10px] text-on-surface-variant font-medium">可信区间：{userData.averageScore - 3}–{userData.averageScore + 3}</span>
                     <div className="w-24 bg-surface-variant rounded-full h-1.5 relative overflow-hidden">
                       <div className="absolute top-0 left-[10%] h-full rounded-full bg-primary" style={{ width: `${Math.min(80, userData.averageScore)}%` }}></div>
                     </div>
@@ -272,7 +272,7 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, onAssess, onOpenConsole })
                 </div>
                 <div>
                   <h3 className="font-display font-bold text-on-surface text-sm">薄弱知识点</h3>
-                  <p className="font-sans text-xs text-on-surface-variant">发现 3 个急需巩固的盲区</p>
+                  <p className="font-sans text-xs text-on-surface-variant">发现 {recommendations?.insights.weakPoints.length || 3} 个急需巩固的盲区</p>
                 </div>
               </div>
               <ArrowRight className="w-5 h-5 text-on-surface-variant" />
@@ -339,7 +339,7 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, onAssess, onOpenConsole })
               <div>
                 <h3 className="font-display text-md font-extrabold text-on-secondary-container mb-1 tracking-tight">提分小贴士</h3>
                 <p className="font-sans text-sm text-on-surface-variant leading-relaxed">
-                  根据你的错题分析，建议今晚重点复习<strong>「函数极值问题」</strong>，预计能提升 2-3 分成绩。
+                  根据你的错题分析，建议今晚重点复习<strong>「{recommendations?.insights.weakPoints[0] || '函数极值问题'}」</strong>，预计能提升 2-3 分成绩。
                 </p>
               </div>
             </div>
@@ -348,7 +348,7 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, onAssess, onOpenConsole })
       </div>
 
       {/* 底部导航栏 */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-surface-container-highest border-t border-surface-variant/20 px-6 py-3 flex justify-around items-center safe-area-bottom">
+      <nav className="fixed bottom-0 left-0 right-0 bg-surface-container-highest border-t border-surface-variant/20 px-6 py-3 flex justify-around items-center">
         <button
           onClick={() => window.location.reload()}
           className="flex flex-col items-center gap-1 px-4 py-2 rounded-full hover:bg-surface-container-low transition-colors"

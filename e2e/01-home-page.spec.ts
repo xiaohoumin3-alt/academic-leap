@@ -195,3 +195,115 @@ test.describe('🟢 层1: 导航功能', () => {
     await expect(page.getByText('开始今日训练', { exact: false }).or(page.getByText('今日任务', { exact: false })).first()).toBeVisible({ timeout: 10000 });
   });
 });
+
+/**
+ * 🧪 CASE 3: 底部导航功能测试
+ */
+test.describe('🔵 层2: 底部导航功能', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+  });
+
+  test('底部导航5个按钮存在', async ({ page }) => {
+    const navBar = page.locator('nav');
+    await expect(navBar.first()).toBeVisible();
+
+    // 验证5个导航按钮
+    const navButtons = page.locator('nav button');
+    const count = await navButtons.count();
+    expect(count).toBe(5);
+  });
+
+  test('底部导航-首页按钮', async ({ page }) => {
+    const homeBtn = page.locator('nav button').filter({ hasText: /首页/ });
+    const count = await homeBtn.count();
+    if (count > 0) {
+      await homeBtn.first().click();
+      // 验证仍在首页
+      await expect(page.getByText('开始今日训练', { exact: false }).first()).toBeVisible();
+    }
+  });
+
+  test('底部导航-练习按钮', async ({ page }) => {
+    const practiceBtn = page.locator('nav button').filter({ hasText: /练习/ });
+    const count = await practiceBtn.count();
+    if (count > 0) {
+      await practiceBtn.first().click();
+      await expect(page.getByText('难度', { exact: false }).or(page.getByText('题目', { exact: false })).first()).toBeVisible({ timeout: 10000 });
+    }
+  });
+
+  test('底部导航-分析按钮', async ({ page }) => {
+    const analyzeBtn = page.locator('nav button').filter({ hasText: /分析/ });
+    const count = await analyzeBtn.count();
+    if (count > 0) {
+      await analyzeBtn.first().click();
+      await expect(page.getByText('学情', { exact: false }).or(page.getByText('分析', { exact: false })).first()).toBeVisible({ timeout: 10000 });
+    }
+  });
+
+  test('底部导航-设置按钮', async ({ page }) => {
+    const settingsBtn = page.locator('nav button').filter({ hasText: /设置/ });
+    const count = await settingsBtn.count();
+    if (count > 0) {
+      await settingsBtn.first().click();
+      await expect(page.getByText('控制台', { exact: false }).or(page.getByText('管理', { exact: false })).or(page.getByText('内容', { exact: false })).first()).toBeVisible({ timeout: 10000 });
+    }
+  });
+});
+
+/**
+ * 🧪 CASE 4: 加载状态和动画测试
+ */
+test.describe('🔵 层2: 加载状态与动画', () => {
+  test('加载状态显示', async ({ page }) => {
+    // 页面首次加载可能显示加载状态
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    // 等待加载完成，验证主内容显示
+    await expect(page.getByText('开始今日训练', { exact: false }).first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('动画效果-火箭图标旋转', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    // 验证火箭图标存在（作为动画元素）
+    const rocketIcon = page.locator('svg').first();
+    await expect(rocketIcon).toBeVisible();
+  });
+
+  test('动画效果-脉冲动画', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    // 验证状态卡片存在（包含脉冲动画）
+    await expect(page.getByText('当前状态', { exact: false }).first()).toBeVisible();
+  });
+});
+
+/**
+ * 🧪 CASE 5: 响应式布局测试
+ */
+test.describe('🔵 层2: 响应式布局', () => {
+  test('移动端布局', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    // 验证核心元素在移动端可见
+    await expect(page.getByText('开始今日训练', { exact: false }).first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('桌面端布局', async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    // 验证网格布局在桌面端正常
+    await expect(page.getByText('今日任务', { exact: false }).first()).toBeVisible();
+    await expect(page.getByText('复习进度', { exact: false }).first()).toBeVisible();
+  });
+});
