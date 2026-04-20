@@ -31,6 +31,7 @@ import {
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { userApi, analyticsApi } from '../lib/api';
+import { realApi } from '../lib/real-api';
 
 interface HomePageProps {
   onStart: () => void;
@@ -72,37 +73,48 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, onAssess, onOpenConsole })
   const loadUserData = async () => {
     setLoading(true);
     try {
-      const [statsRes, overviewRes, recRes] = await Promise.all([
-        userApi.getStats(),
-        analyticsApi.getOverview(),
-        analyticsApi.getRecommendations(),
-      ]);
+      // 获取或创建真实用户
+      let userId = localStorage.getItem('userId');
+      if (!userId) {
+        const user = await realApi.createUser('测试学生', 9);
+        userId = user.id;
+        localStorage.setItem('userId', userId);
+        console.log('✅ 创建新用户:', userId);
+      }
 
-      const stats = (statsRes.data as any) || {};
-      const overview = (overviewRes.overview as any) || {};
-      const rec = recRes;
+      // 获取真实估分数据
+      const estimateScore = await realApi.getEstimateScore(userId);
+      console.log('📊 真实估分:', estimateScore);
+
+      // 获取真实能力数据
+      const abilities = await realApi.getAbilities(userId);
+      console.log('🎯 能力数据:', abilities);
+
+      const avgScore = estimateScore.score || 75;
 
       setUserData({
-        averageScore: overview.averageScore || stats.averageScore || 75,
+        averageScore: avgScore,
         targetScore: 90,
-        totalAttempts: overview.totalAttempts || stats.totalAttempts || 0,
-        completionRate: overview.completionRate || stats.completionRate || 0,
-        stability: ((overview.averageScore || stats.averageScore || 75) > 80 ? 'high' : (overview.averageScore || stats.averageScore || 75) > 60 ? 'medium' : 'low') as 'high' | 'medium' | 'low',
+        totalAttempts: abilities.length * 5, // 估算
+        completionRate: abilities.length > 0 ? 100 : 0,
+        stability: avgScore > 80 ? 'high' : avgScore > 60 ? 'medium' : 'low',
       });
 
-      // 如果API返回空数据，使用Mock数据
+      // 使用真实API或Mock数据
+      const rec = await analyticsApi.getRecommendations();
       setRecommendations({
         recommendations: rec?.recommendations || [],
         todayPractice: rec?.todayPractice?.length ? rec.todayPractice : MOCK_TODAY_PRACTICE,
         insights: rec?.insights || {
           weakPoints: MOCK_WEAK_POINTS,
           strongPoints: [],
-          avgScore: 75,
+          avgScore: avgScore,
           speedLevel: 'normal'
         },
       });
     } catch (error) {
-      console.error('加载用户数据失败:', error);
+      console.error('❌ 加载用户数据失败，使用Mock数据:', error);
+      // 降级到Mock数据
       setUserData({
         averageScore: 75,
         targetScore: 90,
@@ -110,7 +122,6 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, onAssess, onOpenConsole })
         completionRate: 0,
         stability: 'medium',
       });
-      // 使用Mock数据
       setRecommendations({
         recommendations: [],
         todayPractice: MOCK_TODAY_PRACTICE,
