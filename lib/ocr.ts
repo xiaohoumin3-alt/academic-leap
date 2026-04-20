@@ -131,7 +131,6 @@ export async function recognizeWithTesseract(
 ): Promise<OCRResult> {
   try {
     // 动态导入Tesseract.js
-    // @ts-expect-error - tesseract.js是可选依赖
     const module = await import('tesseract.js');
     const Tesseract = module.default || module;
 
