@@ -1,56 +1,30 @@
 @import url('https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-@import "tailwindcss";
 
-@theme {
-  --font-sans: "Lexend", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-
-  --color-surface: #d8fff0;
-  --color-surface-container-low: #bffee7;
-  --color-surface-container-lowest: #ffffff;
-  --color-surface-container-highest: #9decd2;
-  --color-surface-variant: #9decd2;
-
-  --color-on-surface: #00362a;
-  --color-on-surface-variant: #2f6555;
-
-  --color-primary: #006a28;
-  --color-primary-container: #5cfd80;
-  --color-primary-dim: #005d22;
-  --color-on-primary: #cfffce;
-  --color-on-primary-container: #005d22;
-
-  --color-secondary: #005e9f;
-  --color-secondary-container: #b3d4ff;
-  --color-on-secondary: #edf3ff;
-  --color-on-secondary-container: #004a7e;
-
-  --color-tertiary: #6d5a00;
-  --color-tertiary-container: #fdd400;
-  --color-on-tertiary: #fff2ce;
-
-  --color-error: #b31b25;
-  --color-error-container: #fb5151;
-  --color-on-error: #ffefee;
-
-  --radius-xl: 3rem;
-  --radius-lg: 2rem;
-  --radius-default: 1rem;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 @layer base {
+  * {
+    @apply border-border;
+  }
+
   body {
-    @apply font-sans bg-surface text-on-surface antialiased transition-colors duration-300;
+    @apply bg-surface text-on-surface antialiased;
+    font-family: 'Lexend', ui-sans-serif, system-ui, sans-serif;
+    background-color: #d8fff0;
+    color: #00362a;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    @apply font-display tracking-tight;
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+    @apply tracking-tight;
   }
 }
 
 @layer components {
   .glass-panel {
-    @apply bg-surface-container-lowest/70 backdrop-blur-2xl;
+    @apply bg-white/70 backdrop-blur-2xl;
   }
 
   .ambient-shadow {
@@ -60,6 +34,7 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
