@@ -53,29 +53,349 @@ model KnowledgePoint {
 }
 ```
 
-### 2.2 集成影响矩阵
+### 2.2 现有后台管理系统完整分析
 
-| 组件 | 影响级别 | 变化内容 |
-|------|---------|---------|
-| `ConsolePage.tsx` | 🔴 高 | data 标签页重构为3个子标签 |
-| `/api/admin/knowledge` | 🔴 高 | 创建/编辑需指定 chapterId |
-| `Template` 关联 | 🟡 中 | knowledgeId 指向实例，不影响现有模板 |
-| 分数地图（权重） | 🟡 中 | 权重计算规则调整 |
-| 难度校准 | 🟢 低 | 通过知识点ID关联，无影响 |
-| 用户端练习/测评 | 🟢 低 | 新增筛选功能，向后兼容 |
+#### 2.2.1 现有系统架构
 
-### 2.3 兼容性策略
-
-#### API 版本控制
+**前端组件：**
 ```
-旧 API (保留兼容):
-- GET /api/admin/knowledge
-  → 返回 subject, category (通过 Chapter join 获取)
-  → 标记为 deprecated
+components/ConsolePage.tsx
+├── 标签页系统 (Tab系统)
+│   ├── dashboard    - 仪表盘（统计数据）
+│   ├── template     - 模板编辑器
+│   ├── difficulty   - 难度校准
+│   ├── data         - 知识点管理 ← 需要重构
+│   ├── quality      - 质量分析
+│   └── config       - 分数地图（权重配置）
+├── 权限系统 (角色: admin/editor/viewer)
+└── EditModal        - 知识点编辑弹窗
+```
 
-新 API:
-- POST /api/admin/knowledge
-  → 必填 chapterId, conceptId
+**API 路由：**
+```
+app/api/admin/
+├── knowledge/
+│   ├── route.ts              - GET(list), POST(create)
+│   ├── [id]/route.ts         - PUT(update), DELETE(soft)
+│   ├── [id]/restore/route.ts - 恢复删除
+│   └── weight-validate/route.ts - 权重验证
+├── templates/
+│   ├── route.ts              - GET(list), POST(create)
+│   └── [id]/
+│       ├── route.ts          - GET, PUT, DELETE
+│       ├── publish/route.ts  - 发布
+│       ├── deploy/route.ts   - 部署
+│       └── rollback/route.ts - 回滚
+├── analytics/
+│   └── difficulty-matrix/route.ts - 难度矩阵
+├── audit-logs/route.ts       - 审计日志
+├── users/route.ts            - 用户管理
+└── login/me/logout/*         - 认证相关
+```
+
+**数据模型 (Prisma)：**
+```prisma
+// 核心模型
+User {
+  grade, targetScore, ... (现有字段)
+  assessments Assessment[]
+  knowledge UserKnowledge[]
+}
+
+KnowledgePoint {
+  id, name, subject, category, weight, inAssess, status
+  histories KnowledgePointHistory[]
+  templates Template[]
+}
+
+Template {
+  id, name, type, structure, params, steps, version, status
+  knowledgeId String?  // 关联知识点
+  knowledge KnowledgePoint?
+}
+
+Admin {
+  id, userId, role  // admin/editor/viewer
+  user User
+  auditLogs AuditLog[]
+  templates Template[]
+}
+
+KnowledgePointHistory {
+  id, knowledgeId, field, oldValue, newValue, operator, reason
+  knowledge KnowledgePoint
+}
+```
+
+**Hooks (useAdminData.ts)：**
+```typescript
+- useKnowledgePoints(page, limit, filters) - 知识点列表
+- useTemplates() - 模板列表
+- useDifficultyMatrix() - 难度矩阵
+- useWeightValidation() - 权重验证
+- useAdminUser() - 当前管理员用户
+```
+
+#### 2.2.2 集成影响矩阵（详细版）
+
+| 组件 | 影响级别 | 变化内容 | 代码位置 |
+|------|---------|---------|---------|
+| **前端组件** ||||
+| `ConsolePage.tsx` | 🔴 高 | data标签页重构为3个子标签，新增子标签切换UI | components/ConsolePage.tsx:120-230 |
+| EditModal | 🔴 高 | 新增教材/章节选择器，概念选择器 | components/ConsolePage.tsx:677-780 |
+| **API路由** ||||
+| `/api/admin/knowledge` | 🔴 高 | POST需指定chapterId/conceptId，GET需兼容旧字段 | app/api/admin/knowledge/route.ts:58-100 |
+| `/api/admin/knowledge/[id]` | 🔴 高 | PUT需处理新字段，history记录扩展 | app/api/admin/knowledge/[id]/route.ts:5-86 |
+| **新增API** ||||
+| `/api/admin/textbooks` | 🟢 新增 | 教材CRUD | 新建 |
+| `/api/admin/chapters` | 🟢 新增 | 章节CRUD + 树形结构 | 新建 |
+| `/api/admin/concepts` | 🟢 新增 | 概念CRUD | 新建 |
+| **数据模型** ||||
+| `KnowledgePoint` | 🔴 高 | 新增chapterId, conceptId字段，移除subject/category | prisma/schema.prisma:189-203 |
+| `User` | 🟡 中 | 新增selectedGrade, selectedSubject等字段 | prisma/schema.prisma:13-42 |
+| `UserKnowledge` | 🟢 低 | 无变化，继续关联knowledgePoint实例ID | prisma/schema.prisma:115-126 |
+| `Template` | 🟢 低 | knowledgeId继续指向实例，无需修改 | prisma/schema.prisma:220-239 |
+| **Hooks** ||||
+| `useKnowledgePoints` | 🟡 中 | 新增教材/章节过滤参数 | lib/hooks/useAdminData.ts:57-115 |
+| `useWeightValidation` | 🟡 中 | 权重计算改为去重概念后累加 | lib/hooks/useAdminData.ts |
+| **其他系统** ||||
+| 分数地图(config) | 🟡 中 | 权重计算规则调整：按概念去重 | components/ConsolePage.tsx:474-506 |
+| 难度校准 | 🟢 低 | 通过知识点ID关联，无影响 | components/ConsolePage.tsx:298-471 |
+| 质量分析 | 🟢 低 | 通过模板关联，无影响 | components/QualityAnalysis.tsx |
+| 权限系统 | 🟢 低 | 基于角色，新功能沿用现有权限 | lib/admin-auth.ts |
+| 审计日志 | 🟢 低 | 新增表/字段自动记录，无需修改 | prisma/schema.prisma:269+ |
+
+### 2.3 兼容性策略详解
+
+#### 2.3.1 API 兼容性设计
+
+**旧API保留（兼容模式）：**
+```typescript
+// GET /api/admin/knowledge (保留兼容)
+// 旧客户端继续工作，通过 join 获取 subject/category
+export async function GET(req: NextRequest) {
+  const items = await prisma.knowledgePoint.findMany({
+    include: {
+      chapter: {
+        include: {
+          textbook: { select: { grade: true, subject: true } }
+        }
+      }
+    }
+  });
+
+  // 兼容旧格式：从教材信息推导 subject
+  const legacyFormat = items.map(item => ({
+    ...item,
+    subject: item.chapter?.textbook?.subject === '数学'
+      ? (item.chapter?.textbook?.grade <= 9 ? '初中' : '高中')
+      : item.chapter?.textbook?.subject,
+    category: item.concept?.category || '未分类'
+  }));
+
+  return NextResponse.json({ success: true, data: legacyFormat });
+}
+```
+
+**新API（增量）：**
+```typescript
+// POST /api/admin/knowledge (新逻辑)
+export async function POST(req: NextRequest) {
+  const { name, chapterId, conceptId, weight, inAssess, status } = body;
+
+  // 验证必填
+  if (!chapterId || !conceptId) {
+    return NextResponse.json(
+      { error: '必须指定章节和概念' },
+      { status: 400 }
+    );
+  }
+
+  const knowledge = await prisma.knowledgePoint.create({
+    data: { name, chapterId, conceptId, weight, inAssess, status }
+  });
+
+  return NextResponse.json({ success: true, data: knowledge });
+}
+```
+
+**新增API端点：**
+```typescript
+GET    /api/admin/textbooks              // 教材列表
+POST   /api/admin/textbooks              // 创建教材
+PUT    /api/admin/textbooks/[id]         // 更新教材
+DELETE /api/admin/textbooks/[id]         // 删除教材
+
+GET    /api/admin/chapters?textbookId=xxx  // 章节树
+POST   /api/admin/chapters                  // 创建章节
+PUT    /api/admin/chapters/[id]             // 更新章节
+DELETE /api/admin/chapters/[id]             // 删除章节
+PUT    /api/admin/chapters/[id]/reorder     // 调整顺序
+
+GET    /api/admin/concepts               // 概念列表
+POST   /api/admin/concepts               // 创建概念
+PUT    /api/admin/concepts/[id]          // 更新概念
+GET    /api/admin/concepts/[id]/instances // 概念的所有实例
+```
+
+#### 2.3.2 数据迁移路径
+
+**Phase 1: 添加新表（不影响现有数据）**
+```sql
+-- 新增表，不影响现有数据
+CREATE TABLE TextbookVersion (...);
+CREATE TABLE Chapter (...);
+CREATE TABLE KnowledgeConcept (...);
+CREATE TABLE UserEnabledKnowledge (...);
+```
+
+**Phase 2: 创建默认教材数据**
+```typescript
+// scripts/seed-textbooks.ts
+const textbooks = [
+  { grade: 7, subject: '数学', name: '人教版', year: '2024' },
+  { grade: 8, subject: '数学', name: '人教版', year: '2024' },
+  // ...
+];
+```
+
+**Phase 3: 迁移现有知识点**
+```typescript
+// scripts/migrate-knowledge-points.ts
+
+// 策略1: 按名称分组创建概念
+const groupedByName = groupBy(existingPoints, 'name');
+for (const [name, points] of groupedByName) {
+  const concept = await prisma.knowledgeConcept.create({
+    data: {
+      name,
+      category: points[0].category, // 从第一个提取
+      weight: points[0].weight
+    }
+  });
+  conceptMap.set(name, concept.id);
+}
+
+// 策略2: 为每种 subject 创建默认教材和"未分类"章节
+const defaultTextbook = await prisma.textbookVersion.upsert({
+  where: { grade_subject_name: { grade: 7, subject: '数学', name: '人教版' } },
+  create: { grade: 7, subject: '数学', name: '人教版', year: '2024' }
+});
+
+const uncategorizedChapter = await prisma.chapter.create({
+  data: {
+    textbookId: defaultTextbook.id,
+    chapterNumber: 0,
+    chapterName: '未分类（迁移数据）',
+    sort: 999
+  }
+});
+
+// 策略3: 更新知识点实例
+await prisma.knowledgePoint.updateMany({
+  data: {
+    chapterId: uncategorizedChapter.id,
+    conceptId: conceptMap.get(point.name)
+  }
+});
+```
+
+**Phase 4: 更新后台管理界面**
+- 重构 data 标签页为3个子标签
+- 更新知识点创建/编辑表单
+
+**Phase 5: 废弃旧 API（3个月后）**
+```typescript
+// 添加 deprecation 警告
+export async function GET(req: NextRequest) {
+  // 添加警告头
+  return NextResponse.json(
+    { data: legacyFormat, _warning: 'deprecated: use new API' },
+    { headers: { 'X-API-Deprecation': 'Use /api/admin/knowledge-points with chapterId filter' } }
+  );
+}
+```
+
+#### 2.3.3 前端兼容性
+
+**知识点列表组件：**
+```typescript
+// 旧版本：直接显示 subject, category
+<table>
+  <tr>
+    <td>{item.subject}</td>
+    <td>{item.category}</td>
+  </tr>
+</table>
+
+// 新版本：通过 chapter 获取，保留旧字段兼容
+<table>
+  <tr>
+    <td>{item.subject || item.chapter?.textbook?.subject}</td>
+    <td>{item.category || item.concept?.category}</td>
+  </tr>
+</table>
+```
+
+**创建知识点表单：**
+```typescript
+// 旧版本表单
+<select name="subject">
+  <option>初中</option>
+  <option>高中</option>
+</select>
+<select name="category">
+  <option>代数</option>
+  <option>几何</option>
+</select>
+
+// 新版本表单（级联选择）
+<select name="textbookId" onChange={loadChapters}>
+  <option>选择教材版本...</option>
+</select>
+<select name="chapterId">
+  <option>选择章节...</option>
+</select>
+<select name="conceptId">
+  <option>选择或创建概念...</option>
+</select>
+```
+
+#### 2.3.4 权重系统迁移
+
+**旧权重计算：**
+```typescript
+// 所有 inAssess=true 的知识点权重总和 = 100
+const totalWeight = knowledgePoints
+  .filter(k => k.inAssess)
+  .reduce((sum, k) => sum + k.weight, 0);
+```
+
+**新权重计算：**
+```typescript
+// 用户勾选的知识点中，去重概念后计算总权重
+async function calculateTotalWeight(enabledPointIds: string[]): number {
+  // 1. 获取勾选的知识点实例
+  const points = await prisma.knowledgePoint.findMany({
+    where: { id: { in: enabledPointIds } },
+    select: { conceptId: true },
+    distinct: ['conceptId'] // 去重概念
+  });
+
+  // 2. 累加概念权重
+  const concepts = await prisma.knowledgeConcept.findMany({
+    where: { id: { in: points.map(p => p.conceptId) } },
+    select: { weight: true }
+  });
+
+  return concepts.reduce((sum, c) => sum + c.weight, 0);
+}
+```
+
+**迁移影响：**
+- 分数地图显示逻辑需要更新
+- 权重验证API需要修改
+- 后台config标签页需要适配
 - GET /api/admin/textbooks
 - GET /api/admin/chapters
 ```
@@ -247,9 +567,265 @@ TextbookVersion (1) ────── (N) Chapter
 
 ## 4. 后台管理系统设计
 
-### 4.1 data 标签页重构
+### 4.1 ConsolePage.tsx 重构详解
 
-#### 新的标签页结构
+#### 4.1.1 现有代码结构分析
+
+**当前 data 标签页渲染逻辑（ConsolePage.tsx:120-230）：**
+```typescript
+// 当前实现：单一表格视图
+case 'data':
+  return (
+    <div className="space-y-6">
+      {/* 筛选器 */}
+      <input placeholder="搜索知识点..." value={filters.search} />
+      <select value={filters.subject}>
+        <option>全部学科</option>
+        <option>初中</option>
+        <option>高中</option>
+      </select>
+
+      {/* 知识点表格 */}
+      <table>
+        <thead>
+          <tr>
+            <th>名称</th>
+            <th>学科</th>      // ← 需要移除，改为显示教材
+            <th>分类</th>      // ← 需要移除，改为显示章节
+            <th>权重</th>
+            <th>参与测评</th>
+            <th>状态</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {knowledgePoints.map(item => (
+            <tr key={item.id}>
+              <td>{item.name}</td>
+              <td>{item.subject}</td>    // ← 需要修改
+              <td>{item.category}</td>   // ← 需要修改
+              ...
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+```
+
+#### 4.1.2 新代码结构设计
+
+**重构后的 data 标签页：**
+```typescript
+// 新实现：子标签切换
+case 'data':
+  return (
+    <DataManagementTab        // 新组件
+      activeSubTab={dataSubTab}  // 'textbooks' | 'chapters' | 'points'
+      onSubTabChange={setDataSubTab}
+      canEdit={canEdit}
+      canDelete={canDelete}
+    />
+  );
+```
+
+**DataManagementTab 组件结构：**
+```typescript
+// components/DataManagementTab.tsx (新建)
+
+type DataSubTab = 'textbooks' | 'chapters' | 'points';
+
+interface DataManagementTabProps {
+  activeSubTab: DataSubTab;
+  onSubTabChange: (tab: DataSubTab) => void;
+  canEdit: boolean;
+  canDelete: boolean;
+}
+
+const DataManagementTab: React.FC<DataManagementTabProps> = ({
+  activeSubTab, onSubTabChange, canEdit, canDelete
+}) => {
+  // 共享状态
+  const [selectedTextbook, setSelectedTextbook] = useState<string>();
+  const [selectedChapter, setSelectedChapter] = useState<string>();
+
+  return (
+    <div className="space-y-6">
+      {/* 子标签导航 */}
+      <div className="flex gap-2">
+        <button
+          className={activeSubTab === 'textbooks' ? 'bg-primary text-on-primary' : ''}
+          onClick={() => onSubTabChange('textbooks')}
+        >
+          教材管理
+        </button>
+        <button
+          className={activeSubTab === 'chapters' ? 'bg-primary text-on-primary' : ''}
+          onClick={() => onSubTabChange('chapters')}
+          disabled={!selectedTextbook}
+        >
+          章节管理
+        </button>
+        <button
+          className={activeSubTab === 'points' ? 'bg-primary text-on-primary' : ''}
+          onClick={() => onSubTabChange('points')}
+          disabled={!selectedChapter}
+        >
+          知识点管理
+        </button>
+      </div>
+
+      {/* 子标签内容 */}
+      {activeSubTab === 'textbooks' && <TextbookList onSelect={setSelectedTextbook} />}
+      {activeSubTab === 'chapters' && <ChapterTree textbookId={selectedTextbook} onSelect={setSelectedChapter} />}
+      {activeSubTab === 'points' && <KnowledgePointList chapterId={selectedChapter} canEdit={canEdit} />}
+    </div>
+  );
+};
+```
+
+#### 4.1.3 EditModal 重构
+
+**现有编辑弹窗（ConsolePage.tsx:677-780）：**
+```typescript
+// 现有实现：固定字段表单
+<div className="space-y-4">
+  <div>
+    <label>学科</label>
+    <select value={editForm.subject}>
+      <option>初中</option>
+      <option>高中</option>
+    </select>
+  </div>
+  <div>
+    <label>分类</label>
+    <select value={editForm.category}>
+      <option>代数</option>
+      <option>几何</option>
+      <option>统计</option>
+    </select>
+  </div>
+  <div>
+    <label>权重</label>
+    <input type="number" value={editForm.weight} />
+  </div>
+  ...
+</div>
+```
+
+**新编辑弹窗设计：**
+```typescript
+// 新实现：级联选择器 + 概念选择
+<div className="space-y-4">
+  {/* 级联选择：教材 -> 章节 */}
+  <div className="grid grid-cols-2 gap-4">
+    <div>
+      <label>教材版本</label>
+      <select
+        value={editForm.textbookId}
+        onChange={e => loadChapters(e.target.value)}
+      >
+        <option value="">选择教材...</option>
+        {textbooks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+      </select>
+    </div>
+    <div>
+      <label>章节</label>
+      <select
+        value={editForm.chapterId}
+        onChange={e => setEditForm({...editForm, chapterId: e.target.value})}
+      >
+        <option value="">选择章节...</option>
+        {chapters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+    </div>
+  </div>
+
+  {/* 概念选择器：可搜索、可创建 */}
+  <div>
+    <label>知识点概念</label>
+    <ConceptSelector
+      value={editForm.conceptId}
+      onChange={conceptId => setEditForm({...editForm, conceptId})}
+      onCreateNew={handleCreateConcept}
+    />
+  </div>
+
+  {/* 实例权重（可选覆盖概念权重） */}
+  <div>
+    <label>权重（留空则使用概念权重）</label>
+    <input
+      type="number"
+      placeholder={selectedConcept?.weight}
+      value={editForm.weight || ''}
+      onChange={e => setEditForm({...editForm, weight: parseInt(e.target.value)})}
+    />
+  </div>
+</div>
+```
+
+#### 4.1.4 hooks 扩展
+
+**useAdminData.ts 新增 hooks：**
+```typescript
+// 新增：教材管理
+export function useTextbooks(filters?: { grade?: number; subject?: string }) {
+  const [data, setData] = useState<Textbook[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (filters?.grade) params.append('grade', String(filters.grade));
+    if (filters?.subject) params.append('subject', filters.subject);
+
+    fetch(`/api/admin/textbooks?${params}`)
+      .then(res => res.json())
+      .then(json => {
+        if (json.success) setData(json.data);
+      })
+      .finally(() => setLoading(false));
+  }, [filters]);
+
+  return { data, loading };
+}
+
+// 新增：章节树
+export function useChapterTree(textbookId?: string) {
+  const [tree, setTree] = useState<ChapterNode[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!textbookId) return;
+
+    fetch(`/api/admin/chapters?textbookId=${textbookId}`)
+      .then(res => res.json())
+      .then(json => {
+        if (json.success) setTree(json.tree);
+      })
+      .finally(() => setLoading(false));
+  }, [textbookId]);
+
+  return { tree, loading };
+}
+
+// 修改：知识点列表（新增章节过滤）
+export function useKnowledgePoints(
+  page = 1,
+  limit = 20,
+  filters?: {
+    subject?: string;
+    status?: string;
+    search?: string;
+    chapterId?: string;  // ← 新增
+    textbookId?: string; // ← 新增
+  }
+) {
+  // ... 现有逻辑
+  // 在 URL 参数中添加 chapterId 和 textbookId
+}
+```
+
+### 4.2 data 标签页子页面设计
 ```
 ┌─────────────────────────────────────────┐
 │ Data                                    │
