@@ -19,6 +19,7 @@ import {
 import { analyticsApi } from '../lib/api';
 import MaterialIcon from './MaterialIcon';
 import { StartingScoreCalibrationCard } from './StartingScoreCalibrationCard';
+import { BottomNavigation } from './BottomNavigation';
 
 interface AnalyzePageProps {
   onBack: () => void;
@@ -201,6 +202,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
     : overview?.overview?.lowestScore ?? currentScore;
 
   return (
+    <>
     <div className="px-6 pt-4 pb-32 space-y-8 bg-surface no-scrollbar">
       {/* Page Header */}
       <div className="mb-4">
@@ -471,6 +473,8 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
         <MaterialIcon icon="chevron_right" className="" style={{ fontSize: '24px' }} />
       </button>
     </div>
+    <BottomNavigation />
+    </>
   );
 };
 

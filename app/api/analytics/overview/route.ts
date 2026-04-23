@@ -150,17 +150,20 @@ export async function GET(req: NextRequest) {
 
     // 条件：最低分 < 平均分 - 50，且记录数 >= 5
     if (totalAttempts >= 5 && lowestScore < averageScore - 50) {
-      needsCalibration = !user?.startingScoreCalibrated;
-
-      // 计算校准后的起始分（去掉最低分后的最小值）
-      if (needsCalibration) {
-        const scoresCopy = [...allScores];
-        const lowestIndex = scoresCopy.indexOf(lowestScore);
-        if (lowestIndex !== -1) {
-          scoresCopy.splice(lowestIndex, 1);
+      // 计算校准后的起始分（删除所有重复的最低分，只保留第一个）
+      const scoresCopy = [...allScores];
+      // 从后往前删除所有最低分，保留第一个
+      for (let i = scoresCopy.length - 1; i >= 0; i--) {
+        if (scoresCopy[i] === lowestScore) {
+          scoresCopy.splice(i, 1);
         }
-        calibratedStartingScore =
-          scoresCopy.length > 0 ? Math.min(...scoresCopy) : lowestScore;
+      }
+      const newStartingScore = scoresCopy.length > 0 ? Math.min(...scoresCopy) : lowestScore;
+
+      // 只有当新起始分确实更高时，才提示校准
+      if (newStartingScore > lowestScore) {
+        needsCalibration = !user?.startingScoreCalibrated;
+        calibratedStartingScore = newStartingScore;
       }
     }
 

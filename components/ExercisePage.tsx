@@ -25,7 +25,7 @@ export interface ExerciseResult {
     reason: string;
   }>;
   independenceResult?: ScoreCalculation;
-  attemptId?: string; // 测评模式下用于获取完整分析
+  attemptId?: string | null; // 测评模式下用于获取完整分析
 }
 
 interface DiagnosticConfig {
@@ -1143,7 +1143,7 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
       </div>
 
       {/* 虚拟键盘 */}
-      <div className="p-6 bg-surface">
+      <div className="p-6 pb-24 bg-surface">
         <div className="max-w-2xl mx-auto space-y-2">
           {/* 额外按钮行 - 只在有额外键时显示 */}
           {extraKeys.length > 0 && (

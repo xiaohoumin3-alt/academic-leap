@@ -31,13 +31,15 @@ export async function POST(req: NextRequest) {
     const allScores = attempts.map((a) => a.score);
     const oldStartingScore = Math.min(...allScores);
 
-    // 计算新起始分：去掉最低分后的最小值
+    // 计算新起始分：删除所有重复的最低分，只保留第一个
     const scoresCopy = [...allScores];
-    const lowestIndex = scoresCopy.indexOf(oldStartingScore);
-    if (lowestIndex !== -1) {
-      scoresCopy.splice(lowestIndex, 1);
+    // 从后往前删除所有最低分，保留第一个
+    for (let i = scoresCopy.length - 1; i >= 0; i--) {
+      if (scoresCopy[i] === oldStartingScore) {
+        scoresCopy.splice(i, 1);
+      }
     }
-    const newStartingScore = Math.min(...scoresCopy);
+    const newStartingScore = scoresCopy.length > 0 ? Math.min(...scoresCopy) : oldStartingScore;
 
     // 更新用户校准状态
     await prisma.user.update({

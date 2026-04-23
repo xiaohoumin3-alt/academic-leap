@@ -144,7 +144,7 @@ export const practiceApi = {
   /**
    * 提交单步答案
    */
-  async submit(data: { attemptId: string; stepNumber: number; userAnswer: string; isCorrect: boolean; duration: number }) {
+  async submit(data: { attemptId: string; stepNumber: number; userAnswer: string; isCorrect: boolean; duration: number; questionStepId?: string | null }) {
     const res = await fetch(`${API_BASE}/practice/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -271,6 +271,11 @@ export interface QuestionStep {
   expression: string;
   answer: string;
   hint: string;
+  instruction?: string;
+  inputTarget?: string;
+  inputHint?: string;
+  ui?: { instruction?: string; inputTarget?: string; inputHint?: string };
+  keyboard?: 'numeric' | 'coordinate' | 'fraction' | 'full';
 }
 
 export interface Attempt {

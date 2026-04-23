@@ -5,6 +5,7 @@ import { useState, Suspense } from 'react';
 import ExercisePage from '@/components/ExercisePage';
 import { practiceApi } from '@/lib/api';
 import type { ExerciseResult } from '@/components/ExercisePage';
+import { BottomNavigation } from '@/components/BottomNavigation';
 
 function PracticePageContent() {
   const router = useRouter();
@@ -44,13 +45,16 @@ function PracticePageContent() {
   };
 
   return (
-    <ExercisePage
-      mode={mode}
-      initialDifficulty={2}
-      onBack={handleBack}
-      onStart={handleStart}
-      onFinish={handleFinish}
-    />
+    <>
+      <ExercisePage
+        mode={mode}
+        initialDifficulty={2}
+        onBack={handleBack}
+        onStart={handleStart}
+        onFinish={handleFinish}
+      />
+      <BottomNavigation />
+    </>
   );
 }
 
