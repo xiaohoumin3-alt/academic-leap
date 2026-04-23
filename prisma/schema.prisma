@@ -5,7 +5,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -20,12 +20,25 @@ model User {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  // 测评相关字段
+  initialAssessmentCompleted  Boolean   @default(false)  // 是否完成初始测评
+  initialAssessmentScore     Int?                       // 初始测评等效分
+  initialAssessmentDate      DateTime?                  // 初始测评日期
+  reviewAssessmentCompleted  Boolean   @default(false)  // 是否完成复测评
+  reviewAssessmentScore      Int?                       // 复测评等效分
+  reviewAssessmentDate       DateTime?                  // 复测评日期
+  currentLevel               Int       @default(0)     // 当前学力等级
+  startingScoreCalibrated    Boolean   @default(false) // 是否已完成起始分校准
+  calibratedStartingScore    Int?                      // 校准后的起始分数
+
   // 关联
   attempts      Attempt[]
   knowledge     UserKnowledge[]
   ocrTasks      OCRTask[]
   accounts      Account[]
   sessions      Session[]
+  admin         Admin?
+  assessments   Assessment[]
 }
 
 // 题目模型
@@ -41,6 +54,11 @@ model Question {
   isAI           Boolean   @default(false)
   createdAt      DateTime  @default(now())
 
+  // 新增：题目引擎相关字段
+  templateId     String?   // 关联模板ID
+  params         String?   @default("{}") // 参数JSON {a:1, b:-4, c:3}
+  stepTypes      String?   @default("[]") // 步骤类型JSON ['compute_vertex_x', ...]
+
   // 关联
   steps    QuestionStep[]
 }
@@ -53,6 +71,12 @@ model QuestionStep {
   expression String
   answer     String
   hint       String?
+
+  // 新增：题目引擎相关字段
+  type       String?  // StepType枚举值
+  inputType  String?  // numeric/coordinate/fraction/expression
+  tolerance  Float?   // 容差
+  keyboard   String?  // numeric/coordinate/fraction/full
 
   question   Question      @relation(fields: [questionId], references: [id], onDelete: Cascade)
   attempts   AttemptStep[]
@@ -147,4 +171,126 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// 管理员用户（扩展User）
+model Admin {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  role      String   @default("viewer") // admin/editor/viewer
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  auditLogs AuditLog[]
+  templates Template[]
+}
+
+// 知识点
+model KnowledgePoint {
+  id          String    @id @default(cuid())
+  name        String
+  subject     String    // 初中/高中
+  category    String    // 代数/几何/统计
+  weight      Int       @default(0) // 分值权重 1-100
+  inAssess    Boolean   @default(true) // 参与测评
+  status      String    @default("active") // active/draft/archived
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  histories   KnowledgePointHistory[]
+  templates   Template[]
+}
+
+// 知识点变更历史
+model KnowledgePointHistory {
+  id          String   @id @default(cuid())
+  knowledgeId String
+  field       String   // weight/inAssess/status
+  oldValue    String
+  newValue    String
+  operator    String   // admin userId
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  knowledge   KnowledgePoint @relation(fields: [knowledgeId], references: [id], onDelete: Cascade)
+}
+
+// 题目模板
+model Template {
+  id          String    @id @default(cuid())
+  name        String
+  type        String    // calculation/geometry/worded
+  structure   Json      // 方程结构定义
+  params      Json      // 参数约束
+  steps       Json      // 解题步骤
+  version     Int       @default(1)
+  status      String    @default("draft") // draft/staging/production
+  knowledgeId String?   // 关联知识点
+  createdBy   String    // admin userId
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  publishedAt DateTime?
+
+  creator     Admin     @relation(fields: [createdBy], references: [id])
+  knowledge   KnowledgePoint? @relation(fields: [knowledgeId], references: [id])
+  qualities   QuestionQuality[]
+  versions    TemplateVersion[]
+}
+
+// 模板版本历史
+model TemplateVersion {
+  id         String   @id @default(cuid())
+  templateId String
+  version    Int
+  structure  Json
+  params     Json
+  steps      Json
+  createdBy  String
+  createdAt  DateTime @default(now())
+
+  template   Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+}
+
+// 题目质量检测
+model QuestionQuality {
+  id          String    @id @default(cuid())
+  templateId  String
+  checkType   String    // infinite_solution/duplicate/symbol_conflict
+  status      String    // passed/warning/error
+  details     Json      // 检测详情
+  sampleData  Json?     // 样本数据
+  detectedAt  DateTime  @default(now())
+  resolvedAt  DateTime?
+
+  template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+}
+
+// 操作审计日志
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String   // admin userId
+  action    String   // create/update/delete/publish
+  entity    String   // knowledge/template/difficulty
+  entityId  String
+  changes   Json     // 变更内容
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  admin     Admin @relation(fields: [userId], references: [id])
+}
+
+// 测评记录
+model Assessment {
+  id            String   @id @default(cuid())
+  userId        String
+  type          String   // 'initial' | 'review'
+  score         Int      // 等效分
+  scoreRangeLow Int      // 波动区间下限
+  scoreRangeHigh Int     // 波动区间上限
+  knowledgeData Json     // 各知识点掌握详情 {knowledgePoint: {level, mastery, correctCount, totalCount}}
+  completedAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
