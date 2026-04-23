@@ -13,50 +13,53 @@ export async function GET() {
 
     const userId = session.user.id;
 
-    // 获取最近的练习记录
-    const recentAttempts = await prisma.attempt.findMany({
-      where: { userId },
-      orderBy: { completedAt: 'desc' },
-      take: 10,
-      select: {
-        id: true,
-        mode: true,
-        score: true,
-        duration: true,
-        completedAt: true,
-      },
-    });
-
-    // 计算统计数据
+    // 获取总练习次数（不限制数量）
     const totalAttempts = await prisma.attempt.count({
       where: { userId, completedAt: { not: null } },
     });
 
-    const avgScore = await prisma.attempt.aggregate({
+    // 获取最近 10 条练习记录用于计算详情
+    const recentAttempts = await prisma.attempt.findMany({
       where: { userId, completedAt: { not: null } },
-      _avg: { score: true },
+      include: {
+        steps: {
+          select: { isCorrect: true },
+        },
+      },
+      orderBy: { completedAt: 'desc' },
+      take: 10,
     });
 
-    // 获取知识点掌握情况
-    const knowledge = await prisma.userKnowledge.findMany({
-      where: { userId },
-      orderBy: { mastery: 'asc' },
-      take: 5,
+    // 获取全部答题统计（所有练习的所有 steps）
+    const allStepsCount = await prisma.attemptStep.count({
+      where: {
+        attempt: { userId, completedAt: { not: null } },
+      },
     });
 
-    // 计算当前水平（简化算法）
+    const correctStepsCount = await prisma.attemptStep.count({
+      where: {
+        attempt: { userId, completedAt: { not: null } },
+        isCorrect: true,
+      },
+    });
+
+    const avgScore = recentAttempts.length > 0
+      ? Math.round(recentAttempts.reduce((sum: number, a: any) => sum + (a.score || 0), 0) / recentAttempts.length)
+      : 0;
+
     const currentScore = recentAttempts.length > 0
-      ? Math.round(recentAttempts[0].score)
+      ? Math.round(recentAttempts[0].score || 0)
       : 60;
 
     const stats = {
       currentScore,
       targetScore: 90,
       totalAttempts,
-      avgScore: Math.round(avgScore._avg.score || 0),
-      recentAttempts,
-      weakKnowledge: knowledge.slice(0, 3),
-      streak: 7, // TODO: 实际计算连续登录
+      avgScore,
+      totalQuestions: allStepsCount,
+      correctRate: allStepsCount > 0 ? Math.round((correctStepsCount / allStepsCount) * 100) : 0,
+      recentAttempts: recentAttempts.slice(0, 10),
     };
 
     return NextResponse.json({ stats });

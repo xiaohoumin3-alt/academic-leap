@@ -1,398 +1,224 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
-import {
-  TrendingUp,
-  Zap,
-  Target,
-  Search,
-  Plus,
-  Rocket,
-  Calculator,
-  Beaker,
-  BookOpen,
-  Star,
-  SignalHigh,
-  SignalLow,
-  SignalMedium,
-  AlertTriangle,
-  Lightbulb,
-  ArrowRight,
-  ChevronRight,
-  PlayCircle,
-  FileCheck,
-  Trophy,
-  Activity,
-  Loader2,
-  Home,
-  Target as TargetIcon,
-  BarChart3,
-  Settings,
-  User
-} from 'lucide-react';
 import { motion } from 'motion/react';
-import { cn } from '../lib/utils';
-import { userApi, analyticsApi } from '../lib/api';
-import { realApi } from '../lib/real-api';
+import MaterialIcon from './MaterialIcon';
+import { BottomNavigation } from './BottomNavigation';
+import { analyticsApi } from '@/lib/api';
 
 interface HomePageProps {
   onStart: () => void;
-  onAssess: () => void;
+  onAssess: (retry?: boolean) => void;
   onOpenConsole: () => void;
 }
 
-interface UserData {
-  averageScore: number;
-  targetScore: number;
-  totalAttempts: number;
-  completionRate: number;
-  stability: 'high' | 'medium' | 'low';
+interface AssessmentStatus {
+  initialAssessmentCompleted: boolean;
+  initialAssessmentScore?: number;
+  currentLevel?: number;
+  currentScore?: number;
 }
-
-interface RecommendationData {
-  recommendations: Array<{ type: string; title: string; description: string; priority: number }>;
-  todayPractice: Array<{ knowledgePoint: string; suggestedCount: number; reason: string }>;
-  insights: { weakPoints: string[]; strongPoints: string[]; avgScore: number; speedLevel: string };
-}
-
-// Mock数据用于测试展示
-const MOCK_TODAY_PRACTICE = [
-  { knowledgePoint: '数学核心突破', suggestedCount: 20, reason: '二次函数强化训练' },
-  { knowledgePoint: '代数基础', suggestedCount: 15, reason: '方程求解强化' },
-];
-
-const MOCK_WEAK_POINTS = ['函数极值问题', '三角函数', '数列求和'];
 
 const HomePage: React.FC<HomePageProps> = ({ onStart, onAssess, onOpenConsole }) => {
   const [loading, setLoading] = useState(true);
-  const [userData, setUserData] = useState<UserData | null>(null);
-  const [recommendations, setRecommendations] = useState<RecommendationData | null>(null);
+  const [status, setStatus] = useState<AssessmentStatus | null>(null);
 
   useEffect(() => {
-    loadUserData();
+    fetchStatus();
   }, []);
 
-  const loadUserData = async () => {
-    setLoading(true);
+  const fetchStatus = async () => {
     try {
-      // 获取或创建真实用户
-      let userId = localStorage.getItem('userId');
-      if (!userId) {
-        const user = await realApi.createUser('测试学生', 9);
-        userId = user.id;
-        localStorage.setItem('userId', userId);
-        console.log('✅ 创建新用户:', userId);
+      // 获取用户概览数据
+      const overviewRes = await analyticsApi.getOverview();
+      // 兼容两种格式：ApiResponse包装 或 直接返回
+      const overview = overviewRes.data?.overview || overviewRes.overview;
+      if (overview) {
+        setStatus({
+          initialAssessmentCompleted: overview.initialAssessmentCompleted || overview.totalAttempts > 0,
+          currentScore: overview.initialAssessmentScore || overview.averageScore || 0,
+          currentLevel: 0,
+        });
       }
-
-      // 获取真实估分数据
-      const estimateScore = await realApi.getEstimateScore(userId);
-      console.log('📊 真实估分:', estimateScore);
-
-      // 获取真实能力数据
-      const abilities = await realApi.getAbilities(userId);
-      console.log('🎯 能力数据:', abilities);
-
-      const avgScore = estimateScore.score || 75;
-
-      setUserData({
-        averageScore: avgScore,
-        targetScore: 90,
-        totalAttempts: abilities.length * 5, // 估算
-        completionRate: abilities.length > 0 ? 100 : 0,
-        stability: avgScore > 80 ? 'high' : avgScore > 60 ? 'medium' : 'low',
-      });
-
-      // 使用真实API或Mock数据
-      const rec = await analyticsApi.getRecommendations();
-      setRecommendations({
-        recommendations: rec?.recommendations || [],
-        todayPractice: rec?.todayPractice?.length ? rec.todayPractice : MOCK_TODAY_PRACTICE,
-        insights: rec?.insights || {
-          weakPoints: MOCK_WEAK_POINTS,
-          strongPoints: [],
-          avgScore: avgScore,
-          speedLevel: 'normal'
-        },
-      });
-    } catch (error) {
-      console.error('❌ 加载用户数据失败，使用Mock数据:', error);
-      // 降级到Mock数据
-      setUserData({
-        averageScore: 75,
-        targetScore: 90,
-        totalAttempts: 0,
-        completionRate: 0,
-        stability: 'medium',
-      });
-      setRecommendations({
-        recommendations: [],
-        todayPractice: MOCK_TODAY_PRACTICE,
-        insights: {
-          weakPoints: MOCK_WEAK_POINTS,
-          strongPoints: [],
-          avgScore: 75,
-          speedLevel: 'normal'
-        },
+    } catch (error: any) {
+      console.error('获取状态失败:', error);
+      // 如果是认证错误，跳转到登录页
+      if (error.message?.includes('未登录') || error.message?.includes('401')) {
+        window.location.href = '/login';
+        return;
+      }
+      // 降级到localStorage判断
+      const hasDonePractice = localStorage.getItem('hasDonePractice') === 'true';
+      setStatus({
+        initialAssessmentCompleted: hasDonePractice,
       });
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading || !userData) {
+  if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <div className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
         <p className="font-medium text-on-surface-variant">加载中...</p>
       </div>
     );
   }
 
-  const scoreGap = userData.targetScore - userData.averageScore;
-  const progressPercent = 70; // 固定显示70%以匹配测试期望
-  const masteredCount = 140;
-  const totalCount = 200;
+  // 新用户引导页
+  if (!status?.initialAssessmentCompleted) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex-1 px-6 py-12 flex flex-col items-center justify-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center mb-12"
+          >
+            <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
+              <MaterialIcon icon="school" className="text-primary" style={{ fontSize: '48px' }} />
+            </div>
+            <h1 className="text-3xl font-display font-black text-on-surface mb-3">
+              欢迎来到学力跃迁
+            </h1>
+            <p className="text-on-surface-variant text-lg">
+              通过10-15道题，精准定位你的真实水平
+            </p>
+          </motion.div>
 
-  const SignalComponent = userData.stability === 'high' ? SignalHigh : userData.stability === 'medium' ? SignalMedium : SignalLow;
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="w-full max-w-sm space-y-4 mb-12"
+          >
+            <div className="flex items-center gap-4 p-4 bg-surface-container-low rounded-2xl">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <MaterialIcon icon="search" className="text-primary" style={{ fontSize: '24px' }} />
+              </div>
+              <div>
+                <h3 className="font-bold text-on-surface">精准估分</h3>
+                <p className="text-sm text-on-surface-variant">10-15题测出考试等效分±3分</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4 p-4 bg-surface-container-low rounded-2xl">
+              <div className="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center shrink-0">
+                <MaterialIcon icon="target" className="text-on-secondary-container" style={{ fontSize: '24px' }} />
+              </div>
+              <div>
+                <h3 className="font-bold text-on-surface">自适应练习</h3>
+                <p className="text-sm text-on-surface-variant">AI推送+4%-8%难度题目，效率最大化</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4 p-4 bg-surface-container-low rounded-2xl">
+              <div className="w-12 h-12 rounded-full bg-tertiary-container flex items-center justify-center shrink-0">
+                <MaterialIcon icon="trending_up" className="text-on-tertiary-container" style={{ fontSize: '24px' }} />
+              </div>
+              <div>
+                <h3 className="font-bold text-on-surface">量化提分</h3>
+                <p className="text-sm text-on-surface-variant">复测评对比，看清楚进步了多少</p>
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="w-full max-w-sm space-y-4"
+          >
+            <button
+              onClick={() => onAssess(false)}
+              className="w-full bg-gradient-to-r from-primary to-primary-container text-on-primary rounded-full py-5 px-6 flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 transition-all shadow-lg"
+            >
+              <MaterialIcon icon="play_arrow" className="fill-on-primary" style={{ fontSize: '28px' }} />
+              <span className="font-display font-bold text-lg">开始精准测评</span>
+            </button>
+
+            <p className="text-center text-sm text-on-surface-variant">
+              10-15道题 · 约5分钟 · 精准定位薄弱点
+            </p>
+          </motion.div>
+        </div>
+
+        <BottomNavigation />
+      </div>
+    );
+  }
+
+  // 老用户首页 - 根据分数显示不同入口
+  const currentScore = status?.currentScore ?? 0;
+
+  // 根据分数判断下一步
+  const getNextStep = () => {
+    if (currentScore >= 90) {
+      return {
+        label: '提高难度重新测评',
+        subLabel: '你已经超越当前难度',
+        icon: 'trending_up',
+        color: 'from-amber-500 to-orange-500',
+        action: () => onAssess(true), // 重新测评
+      };
+    } else if (currentScore >= 60) {
+      return {
+        label: '开始练习',
+        subLabel: '在心流区巩固进步',
+        icon: 'play_circle',
+        color: 'from-primary to-primary-container',
+        action: onStart,
+      };
+    } else {
+      return {
+        label: '降低难度重新测评',
+        subLabel: '当前难度对你太难',
+        icon: 'trending_down',
+        color: 'from-secondary to-tertiary',
+        action: () => onAssess(true), // 重新测评
+      };
+    }
+  };
+
+  const nextStep = getNextStep();
 
   return (
     <div className="flex flex-col h-full">
-      {/* 主内容区域 */}
-      <div className="flex-1 px-6 space-y-8 pt-4 pb-24 overflow-y-auto">
-        {/* Score Hero */}
-        <section className="bg-surface-container-low rounded-[2rem] p-6 relative overflow-hidden ambient-shadow">
-          <div className="absolute -right-6 -top-6 opacity-20 transform rotate-12 pointer-events-none">
-            <Activity className="w-48 h-48 text-primary" />
+      <div className="flex-1 px-6 py-8 flex flex-col">
+        {/* 顶部状态 - 等效分显示 */}
+        <div className="text-center mb-6">
+          <p className="text-sm text-on-surface-variant mb-2">当前等效分</p>
+          <div className="flex items-center justify-center gap-2">
+            <h1 className="text-5xl font-display font-black text-primary">
+              {currentScore}
+            </h1>
+            <span className="text-xl text-on-surface-variant">分</span>
           </div>
-
-          <div className="relative z-10 flex flex-col gap-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-on-surface-variant font-sans text-sm font-medium mb-1">当前水平</p>
-                <div className="flex items-baseline gap-1">
-                  <h2 className="text-6xl font-display font-black text-primary tracking-tight">{userData.averageScore}</h2>
-                  <span className="text-xl text-primary font-bold">分</span>
-                </div>
-                <div className="mt-3 flex items-center gap-4">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] text-on-surface-variant font-medium">可信区间：{userData.averageScore - 3}–{userData.averageScore + 3}</span>
-                    <div className="w-24 bg-surface-variant rounded-full h-1.5 relative overflow-hidden">
-                      <div className="absolute top-0 left-[10%] h-full rounded-full bg-primary" style={{ width: `${Math.min(80, userData.averageScore)}%` }}></div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 text-[10px] text-on-surface-variant font-medium bg-surface-container-lowest/50 px-2 py-1 rounded-full">
-                    <SignalComponent className="w-3 h-3 text-primary" />
-                    稳定度：{userData.stability === 'high' ? '高' : userData.stability === 'medium' ? '中' : '低'}
-                  </div>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-on-surface-variant font-sans text-sm font-medium mb-1">目标分数</p>
-                <p className="text-3xl font-display font-bold text-on-surface">{userData.targetScore}</p>
-              </div>
-            </div>
-
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              className="bg-primary/10 border border-primary/30 rounded-2xl p-4 relative overflow-hidden group cursor-pointer"
-              onClick={onOpenConsole}
-            >
-              <div className="absolute inset-0 bg-primary/5 animate-pulse group-hover:bg-primary/10"></div>
-              <div className="relative z-10 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-md">
-                  <Zap className="w-5 h-5 text-on-primary fill-on-primary" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-sm font-bold text-primary">当前状态</span>
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-                    >
-                      <Rocket className="w-3 h-3 text-primary" />
-                    </motion.div>
-                  </div>
-                  <p className="text-xs text-on-surface-variant">题目刚好适合你，系统正在微调难度</p>
-                </div>
-                <div className="bg-primary text-on-primary px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                  适配中
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </section>
-
-        {/* Grid: Tasks & Progress */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Today's Tasks */}
-          <section className="bg-surface-container-lowest rounded-[2rem] p-6 relative ambient-shadow">
-            <div className="absolute top-4 right-4 opacity-5">
-              <BookOpen className="w-16 h-16 text-primary" />
-            </div>
-            <h3 className="font-display text-xl font-bold text-on-surface mb-6 relative z-10">今日任务</h3>
-            <div className="space-y-4 relative z-10">
-              {(recommendations?.todayPractice || MOCK_TODAY_PRACTICE).slice(0, 2).map((task, index) => (
-                <div key={index} className="flex items-center gap-4 bg-surface-container-low p-4 rounded-2xl group transition-all hover:translate-x-1 cursor-pointer" onClick={onStart}>
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <Calculator className="w-6 h-6 text-primary" />
-                  </div>
-                  <div className="flex-grow">
-                    <h4 className="font-sans font-semibold text-on-surface">{task.knowledgePoint}</h4>
-                    <p className="font-sans text-xs text-on-surface-variant">{task.reason} - {task.suggestedCount}题</p>
-                  </div>
-                  <div className="shrink-0">
-                    <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-1 rounded-full">进行中</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Learning Health */}
-          <div className="flex flex-col gap-6">
-            <section className="bg-surface-container-lowest rounded-[2rem] p-6 flex flex-col justify-center relative ambient-shadow h-full">
-              <h3 className="font-display text-lg font-bold text-on-surface mb-4">复习进度</h3>
-              <div className="flex items-center gap-6">
-                <div className="relative w-20 h-20 shrink-0 flex items-center justify-center">
-                  <svg className="w-full h-full transform -rotate-90">
-                    <circle className="text-surface-variant" cx="40" cy="40" fill="transparent" r="34" stroke="currentColor" strokeWidth="6"></circle>
-                    <circle className="text-primary transition-all duration-1000 ease-out" cx="40" cy="40" fill="transparent" r="34" stroke="currentColor" strokeDasharray="213.6" strokeDashoffset={213.6 * (1 - progressPercent / 100)} strokeWidth="8" strokeLinecap="round"></circle>
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-lg font-display font-bold text-primary">{progressPercent}%</span>
-                  </div>
-                </div>
-                <div>
-                  <p className="font-sans text-sm text-on-surface-variant mb-2">已掌握 {masteredCount}/{totalCount} 个核心考点</p>
-                  <button
-                    onClick={() => onStart()}
-                    className="text-primary text-xs font-bold flex items-center gap-1 hover:underline cursor-pointer active:translate-y-0.5 transition-transform"
-                  >
-                    继续复习 <ChevronRight className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            {/* 薄弱知识点 - 始终显示 */}
-            <section
-              onClick={() => onStart()}
-              className="bg-error-container/10 border border-error-container/20 rounded-[2rem] p-5 flex items-center justify-between cursor-pointer hover:bg-error-container/20 active:scale-[0.98] transition-all group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-error-container/20 flex items-center justify-center">
-                  <AlertTriangle className="w-5 h-5 text-error" />
-                </div>
-                <div>
-                  <h3 className="font-display font-bold text-on-surface text-sm">薄弱知识点</h3>
-                  <p className="font-sans text-xs text-on-surface-variant">发现 {recommendations?.insights.weakPoints.length || 3} 个急需巩固的盲区</p>
-                </div>
-              </div>
-              <ArrowRight className="w-5 h-5 text-on-surface-variant" />
-            </section>
-          </div>
+          <p className="text-xs text-on-surface-variant mt-1">±3分波动区间</p>
         </div>
 
-        {/* Main Action */}
-        <section className="flex flex-col gap-4">
-          <button
-            onClick={onStart}
-            className="w-full bg-gradient-to-r from-primary to-primary-container text-on-primary rounded-full py-5 px-6 flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 transition-all ambient-shadow font-display font-bold text-xl group"
-          >
-            <PlayCircle className="w-8 h-8 fill-on-primary group-hover:scale-110 transition-transform" />
-            开始今日训练
-          </button>
-          <div className="grid grid-cols-2 gap-4">
-            <button
-              onClick={onAssess}
-              className="bg-secondary-container text-on-secondary-container rounded-2xl py-5 px-4 flex flex-col items-center justify-center gap-2 hover:bg-secondary-container/80 active:scale-95 transition-all shadow-sm"
-            >
-              <FileCheck className="w-6 h-6" />
-              <span className="font-sans font-bold text-sm">摸底评测</span>
-            </button>
-            <button
-              onClick={() => onStart()}
-              className="bg-surface-container-highest text-on-surface rounded-2xl py-5 px-4 flex flex-col items-center justify-center gap-2 hover:bg-surface-container-highest/80 active:scale-95 transition-all shadow-sm"
-            >
-              <Calculator className="w-6 h-6" />
-              <span className="font-sans font-bold text-sm">错题本</span>
-            </button>
-          </div>
-        </section>
+        {/* 主按钮 - 根据分数显示不同入口 */}
+        <button
+          onClick={nextStep.action}
+          className={`w-full bg-gradient-to-r ${nextStep.color} text-on-primary rounded-[2rem] py-8 px-6 flex flex-col items-center gap-3 hover:scale-[1.02] active:scale-95 transition-all shadow-xl mb-4`}
+        >
+          <MaterialIcon icon={nextStep.icon} className="fill-on-primary" style={{ fontSize: '48px' }} />
+          <span className="font-display font-black text-xl">{nextStep.label}</span>
+          <span className="text-sm text-on-primary/80">{nextStep.subLabel}</span>
+        </button>
 
-        {/* Gamification */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <section className="bg-surface-container-lowest rounded-[2rem] p-6 relative ambient-shadow">
-            <h3 className="font-display text-lg font-bold text-on-surface mb-4 flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-tertiary-container fill-tertiary-container" />
-              今日成就
-            </h3>
-            <div className="flex gap-4">
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-16 h-16 rounded-full bg-tertiary-container flex items-center justify-center relative shadow-inner">
-                  <div className="absolute inset-1 rounded-full border-2 border-on-tertiary/20 border-dashed animate-[spin_10s_linear_infinite]"></div>
-                  <Zap className="w-8 h-8 text-on-tertiary fill-on-tertiary" />
-                </div>
-                <span className="font-sans text-[10px] font-bold text-on-surface text-center">连续登陆<br/>7天</span>
-              </div>
-              <div className="flex flex-col items-center gap-2 opacity-30 grayscale">
-                <div className="w-16 h-16 rounded-full bg-surface-container-highest flex items-center justify-center group-hover:opacity-100 transition-opacity">
-                  <Star className="w-8 h-8 text-on-surface-variant" />
-                </div>
-                <span className="font-sans text-[10px] font-bold text-on-surface-variant text-center">全对大师<br/>未解锁</span>
-              </div>
-            </div>
-          </section>
-
-          <section className="bg-secondary-container/20 rounded-[2rem] p-6 flex flex-col justify-center border border-secondary-container/30">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center shrink-0">
-                <Lightbulb className="w-6 h-6 text-on-secondary-container fill-on-secondary-container" />
-              </div>
-              <div>
-                <h3 className="font-display text-md font-extrabold text-on-secondary-container mb-1 tracking-tight">提分小贴士</h3>
-                <p className="font-sans text-sm text-on-surface-variant leading-relaxed">
-                  根据你的错题分析，建议今晚重点复习<strong>「{recommendations?.insights.weakPoints[0] || '函数极值问题'}」</strong>，预计能提升 2-3 分成绩。
-                </p>
-              </div>
-            </div>
-          </section>
+        {/* 说明 */}
+        <div className="bg-surface-container-low rounded-2xl p-4 mt-auto">
+          <h3 className="font-bold text-on-surface mb-2 text-sm">学习原理</h3>
+          <p className="text-xs text-on-surface-variant leading-relaxed">
+            系统会推送<span className="text-primary font-medium">+4%-8%难度</span>的题目，
+            让你处于"有点难但能做"的心流区，学习效率最高。
+          </p>
         </div>
       </div>
 
-      {/* 底部导航栏 */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-surface-container-highest border-t border-surface-variant/20 px-6 py-3 flex justify-around items-center">
-        <button
-          onClick={() => window.location.reload()}
-          className="flex flex-col items-center gap-1 px-4 py-2 rounded-full hover:bg-surface-container-low transition-colors"
-        >
-          <Home className="w-5 h-5 text-primary" />
-          <span className="text-xs font-medium text-primary">首页</span>
-        </button>
-        <button
-          onClick={onStart}
-          className="flex flex-col items-center gap-1 px-4 py-2 rounded-full hover:bg-surface-container-low transition-colors"
-        >
-          <TargetIcon className="w-5 h-5 text-on-surface-variant" />
-          <span className="text-xs font-medium text-on-surface-variant">练习</span>
-        </button>
-        <button
-          onClick={() => window.location.href = '/analyze'}
-          className="flex flex-col items-center gap-1 px-4 py-2 rounded-full hover:bg-surface-container-low transition-colors"
-        >
-          <BarChart3 className="w-5 h-5 text-on-surface-variant" />
-          <span className="text-xs font-medium text-on-surface-variant">分析</span>
-        </button>
-        <button
-          onClick={onOpenConsole}
-          className="flex flex-col items-center gap-1 px-4 py-2 rounded-full hover:bg-surface-container-low transition-colors"
-        >
-          <Settings className="w-5 h-5 text-on-surface-variant" />
-          <span className="text-xs font-medium text-on-surface-variant">设置</span>
-        </button>
-        <button className="flex flex-col items-center gap-1 px-4 py-2 rounded-full hover:bg-surface-container-low transition-colors">
-          <User className="w-5 h-5 text-on-surface-variant" />
-          <span className="text-xs font-medium text-on-surface-variant">我的</span>
-        </button>
-      </nav>
+      <BottomNavigation />
     </div>
   );
 };

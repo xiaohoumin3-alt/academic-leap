@@ -1,182 +1,322 @@
 """
-题目生成引擎 - 根据知识点和难度动态生成题目
+题目生成引擎 - 参数化模板驱动（V2.0）
+
+核心思想：模板 + 参数 → 无限题目
+不再依赖硬编码或题库，而是通过参数化模板动态生成
 """
 import random
-from typing import Dict, Any
+import re
+from typing import Dict, Any, Optional
+from dataclasses import dataclass
 from sympy import symbols, solve, sympify
 
 
+@dataclass
+class Question:
+    """生成的题目"""
+    content: str
+    answer: str
+    input_type: str = "number"
+    steps: list = None
+
+    def __post_init__(self):
+        if self.steps is None:
+            self.steps = []
+
+
+@dataclass
+class Template:
+    """参数化模板"""
+    id: int
+    knowledge_id: int
+    name: str
+    structure: str  # 如 "[a]x + [b] = [c]"
+    parameters: Dict[str, Any]  # 参数定义
+    level_rules: Dict[str, Any]  # Level规则
+    validation_rules: Optional[Dict[str, Any]] = None
+
+
 class QuestionGenerator:
-    """题目生成器"""
+    """
+    参数化题目生成器（V2.0）
 
-    def __init__(self):
-        self.generators = {
-            1: self._generate_equation,  # 一元一次方程
-            2: self._generate_rational_number,  # 有理数运算
-            3: self._generate_triangle_angle,  # 三角形角度
-        }
+    核心逻辑：
+    1. 从数据库加载模板
+    2. 根据Level规则生成参数
+    3. 渲染模板生成题目
+    4. 求解并验证答案
+    """
 
-    def generate(self, knowledge_id: int, level: int) -> Dict[str, Any]:
+    def __init__(self, template_loader=None):
+        self.template_loader = template_loader
+        # 内置模板（fallback）
+        self._builtin_templates = self._init_builtin_templates()
+
+    def generate(self, knowledge_id: int, level: int) -> Question:
         """
-        生成题目
+        根据知识点和Level生成题目
 
         Args:
-            knowledge_id: 知识点ID (1=方程, 2=有理数, 3=三角形)
+            knowledge_id: 知识点ID
             level: 难度等级 (0-4)
 
         Returns:
-            {
-                "content": "题目内容",
-                "answer": "正确答案",
-                "input_type": "expression/number",
-                "steps": ["解题步骤"]
-            }
+            Question对象
         """
-        generator = self.generators.get(knowledge_id, self._generate_equation)
-        return generator(level)
+        # 获取模板
+        template = self._get_template(knowledge_id, level)
 
-    def _generate_equation(self, level: int) -> Dict[str, Any]:
-        """生成一元一次方程"""
-        # 根据level调整参数
-        level += 1  # level从0开始，但生成时从1开始
+        # 生成基础参数
+        params = self._generate_params(template, level)
 
-        if level == 1:
-            # 简单: ax = b (a∈[2,5], x∈[1,10])
-            a = random.randint(2, 5)
-            x = random.randint(1, 10)
-            b = a * x
-            content = f"{a}x = {b}"
-            answer = str(x)
-        elif level == 2:
-            # 中等: ax + b = c (a∈[2,3], b∈[-5,5])
-            a = random.randint(2, 3)
-            x = random.randint(1, 15)
-            b = random.randint(-5, 5)
-            c = a * x + b
-            content = f"{a}x + {b} = {c}"
-            answer = str(x)
-        elif level == 3:
-            # 困难: ax - b = c 或包含括号
-            if random.choice([True, False]):
-                a = random.randint(2, 4)
-                x = random.randint(2, 12)
-                b = random.randint(3, 10)
-                c = a * x - b
-                content = f"{a}x - {b} = {c}"
-            else:
-                a = random.randint(2, 3)
-                x = random.randint(1, 8)
-                b = random.randint(1, 5)
-                c = random.randint(1, 5)
-                d = a * x + b + c
-                content = f"{a}(x + {b}) + {c} = {d}"
-            answer = str(x)
-        else:  # level 4-5
-            # 高难度: 系数是小数或大数
-            if random.choice([True, False]):
-                a = random.choice([0.5, 1.5, 2.5])
-                x = random.randint(2, 20)
-                b = random.randint(-10, 10)
+        # 求解并生成derived参数
+        answer = self._solve_and_derive(template, params)
+
+        # 渲染题目（此时params已包含所有参数）
+        content = self._render_template(template.structure, params)
+
+        # 验证
+        if template.validation_rules:
+            self._validate(template, params, answer)
+
+        return Question(
+            content=content,
+            answer=str(answer),
+            input_type="number",
+            steps=[f"题目: {content}", f"答案: {answer}"]
+        )
+
+    def _get_template(self, knowledge_id: int, level: int) -> Template:
+        """获取模板（优先从数据库，否则使用内置模板）"""
+        if self.template_loader:
+            template = self.template_loader.load(knowledge_id, level)
+            if template:
+                return template
+
+        # 使用内置模板
+        return self._builtin_templates.get(knowledge_id, self._builtin_templates[1])
+
+    def _generate_params(self, template: Template, level: int) -> Dict[str, Any]:
+        """根据Level规则生成参数"""
+        level_key = str(level)
+        level_rule = template.level_rules.get(level_key, {})
+
+        params = {}
+        for param_name, param_def in template.parameters.items():
+            if param_def.get("type") == "derived":
+                # 派生参数，稍后计算
+                continue
+
+            # 根据Level规则调整参数范围
+            value_range = param_def.get("range", [1, 10])
+
+            # 应用Level规则
+            if param_name in level_rule:
+                rule_value = level_rule[param_name]
+                if isinstance(rule_value, int):
+                    params[param_name] = rule_value
+                elif isinstance(rule_value, list):
+                    params[param_name] = random.randint(rule_value[0], rule_value[1])
+                continue
+
+            # 默认：从范围中随机选择
+            params[param_name] = random.randint(value_range[0], value_range[1])
+
+        return params
+
+    def _render_template(self, structure: str, params: Dict[str, Any]) -> str:
+        """渲染模板，将参数替换到结构中"""
+        result = structure
+
+        # 替换 [param] 格式的参数
+        for param_name, param_value in params.items():
+            placeholder = f"[{param_name}]"
+            result = result.replace(placeholder, str(param_value))
+
+        return result
+
+    def _solve_and_derive(self, template: Template, params: Dict[str, Any]) -> Any:
+        """
+        求解题目答案并生成derived参数
+
+        对于方程 ax + b = c：
+        1. 随机生成x的答案
+        2. 根据a和b计算c = a*x + b
+        3. 返回答案x
+        """
+        # 对于一元一次方程: ax + b = c 或类似形式
+        if "x" in template.structure:
+            # 检查是否有derived参数
+            has_derived = any(
+                p.get("type") == "derived"
+                for p in template.parameters.values()
+            )
+
+            if has_derived:
+                # 随机生成答案x（范围-10到10，避免0）
+                x = random.randint(-10, 10)
+                while x == 0:
+                    x = random.randint(-10, 10)
+
+                # 根据已生成的参数计算derived参数
+                a = params.get("a", 1)
+                b = params.get("b", 0)
+
+                # 计算 c = a*x + b
                 c = a * x + b
-                content = f"{a}x + {b} = {c}"
-                # 验证答案是整数
-                answer = str(int(x))
-            else:
-                # 复杂括号
-                a = random.randint(2, 3)
-                x = random.randint(1, 6)
-                b = random.randint(1, 3)
-                c = random.randint(1, 3)
-                d = random.randint(1, 5)
-                result = a * (x + b) - c * x
-                content = f"{a}(x + {b}) - {c}x = {result}"
-                answer = str(x)
+                params["c"] = c
 
+                return x
+
+            # 无derived参数，使用原有求解逻辑
+            a = params.get("a", 1)
+            b = params.get("b", 0)
+            c = params.get("c", 0)
+            return (c - b) / a if a != 0 else 0
+
+        # 对于其他类型题目
+        return params.get("answer", 0)
+
+    def _solve(self, template: Template, params: Dict[str, Any]) -> Any:
+        """求解题目答案"""
+        # 对于一元一次方程: ax + b = c
+        if "x" in template.structure:
+            # 提取方程
+            equation = template.structure
+            for param_name, param_value in params.items():
+                equation = equation.replace(f"[{param_name}]", str(param_value))
+
+            # 使用sympy求解
+            x = symbols('x')
+            # 移项处理
+            equation = equation.replace("=", "-(") + ")"
+            try:
+                solution = solve(sympify(equation), x)
+                return solution[0] if solution else 0
+            except:
+                # 简单求解
+                if "x" in params:
+                    return params.get("x", 0)
+                # 从方程 ax + b = c 求解 x = (c-b)/a
+                a = params.get("a", 1)
+                b = params.get("b", 0)
+                c = params.get("c", 0)
+                return (c - b) / a if a != 0 else 0
+
+        return params.get("answer", 0)
+
+    def _validate(self, template: Template, params: Dict[str, Any], answer: Any) -> bool:
+        """验证题目合法性"""
+        rules = template.validation_rules or {}
+
+        if rules.get("avoid_no_solution"):
+            if answer is None:
+                raise ValueError("生成的题目无解")
+
+        if rules.get("avoid_infinite_solution"):
+            if answer == float("inf"):
+                raise ValueError("生成的题目有无限解")
+
+        if rules.get("integer_answer"):
+            if isinstance(answer, float) and not answer.is_integer():
+                # 重新生成
+                return False
+
+        return True
+
+    def _init_builtin_templates(self) -> Dict[int, Template]:
+        """初始化内置模板（fallback）"""
         return {
-            "content": f"解方程: {content}, x = ?",
-            "answer": answer,
-            "input_type": "number",
-            "steps": [f"解方程 {content}", f"x = {answer}"]
+            1: Template(
+                id=1,
+                knowledge_id=1,
+                name="一元一次方程基础模板",
+                structure="[a]x + [b] = [c]",
+                parameters={
+                    "a": {"type": "int", "range": [1, 5]},
+                    "b": {"type": "int", "range": [-10, 10]},
+                    "c": {"type": "derived", "formula": "a*x+b"}
+                },
+                level_rules={
+                    "0": {"a": 1, "allow_negative": False},
+                    "1": {"a": [1, 3], "allow_negative": True},
+                    "2": {"both_sides": True},
+                    "3": {"fractions": True},
+                    "4": {"parentheses": True}
+                },
+                validation_rules={
+                    "avoid_no_solution": True,
+                    "avoid_infinite_solution": True,
+                    "integer_answer": True
+                }
+            ),
+            2: Template(
+                id=2,
+                knowledge_id=2,
+                name="有理数运算模板",
+                structure="[a] + [b] = ?",
+                parameters={
+                    "a": {"type": "int", "range": [-20, 20]},
+                    "b": {"type": "int", "range": [-20, 20]}
+                },
+                level_rules={
+                    "0": {},
+                    "1": {},
+                    "2": {},
+                    "3": {},
+                    "4": {}
+                }
+            ),
+            3: Template(
+                id=3,
+                knowledge_id=3,
+                name="三角形角度模板",
+                structure="三角形中，∠A = [angle1]°, ∠B = [angle2]°, 求∠C = ?",
+                parameters={
+                    "angle1": {"type": "int", "range": [30, 80]},
+                    "angle2": {"type": "int", "range": [30, 80]}
+                },
+                level_rules={
+                    "0": {},
+                    "1": {},
+                    "2": {},
+                    "3": {},
+                    "4": {}
+                },
+                validation_rules={
+                    "triangle_angle_sum": True  # angle1 + angle2 < 180
+                }
+            )
         }
 
-    def _generate_rational_number(self, level: int) -> Dict[str, Any]:
-        """生成有理数运算题"""
-        level += 1
 
-        if level == 1:
-            # 简单加减法
-            a = random.randint(-20, 20)
-            b = random.randint(-20, 20)
-            content = f"{a} + ({b}) = ?"
-            answer = str(a + b)
-        elif level == 2:
-            # 简单乘法
-            a = random.choice([2, 3, 4, 5, -2, -3, -4, -5])
-            b = random.randint(-10, 10)
-            content = f"{a} × {b} = ?"
-            answer = str(a * b)
-        elif level == 3:
-            # 除法（整除）
-            b = random.choice([2, 3, 4, 5, -2, -3, -4, -5])
-            result = random.randint(-10, 10)
-            a = b * result
-            content = f"{a} ÷ {b} = ?"
-            answer = str(result)
-        else:
-            # 混合运算
-            a = random.randint(-10, 10)
-            b = random.randint(-5, 5)
-            c = random.randint(2, 5)
-            content = f"{a} + {b} × {c} = ?"
-            answer = str(a + b * c)
+class TemplateLoader:
+    """模板加载器（从数据库加载）"""
 
-        return {
-            "content": content,
-            "answer": answer,
-            "input_type": "number",
-            "steps": [f"计算: {content}", f"= {answer}"]
-        }
+    def __init__(self, db_session):
+        self.db_session = db_session
 
-    def _generate_triangle_angle(self, level: int) -> Dict[str, Any]:
-        """生成三角形角度题"""
-        level += 1
+    def load(self, knowledge_id: int, level: int) -> Optional[Template]:
+        """从数据库加载模板"""
+        from app.models import KnowledgeTemplate
 
-        if level == 1:
-            # 已知两角求第三角
-            angle1 = random.randint(30, 80)
-            angle2 = random.randint(30, 100)
-            angle3 = 180 - angle1 - angle2
-            content = f"三角形中，∠A = {angle1}°, ∠B = {angle2}°, 求∠C = ?"
-            answer = str(angle3)
-        elif level == 2:
-            # 等腰三角形
-            base_angle = random.randint(40, 70)
-            vertex_angle = 180 - 2 * base_angle
-            if random.choice([True, False]):
-                content = f"等腰三角形中，顶角 = {vertex_angle}°, 求底角 = ?"
-                answer = str(base_angle)
-            else:
-                content = f"等腰三角形中，底角 = {base_angle}°, 求顶角 = ?"
-                answer = str(vertex_angle)
-        elif level == 3:
-            # 直角三角形
-            angle1 = random.randint(20, 60)
-            angle2 = 90 - angle1
-            content = f"直角三角形中，一个锐角 = {angle1}°, 求另一个锐角 = ?"
-            answer = str(angle2)
-        else:
-            # 角平分线
-            angle = random.randint(40, 100)
-            half_angle = angle // 2
-            content = f"角平分线将一个{angle}°的角分成两个相等的角，每个角 = ?"
-            answer = str(half_angle)
+        template = self.db_session.query(KnowledgeTemplate).filter(
+            KnowledgeTemplate.knowledge_id == knowledge_id,
+            KnowledgeTemplate.is_active == True
+        ).first()
 
-        return {
-            "content": content,
-            "answer": f"{answer}°" if "°" not in answer else answer,
-            "input_type": "number",
-            "steps": ["三角形内角和为180°", f"答案: {answer}"]
-        }
+        if not template:
+            return None
+
+        return Template(
+            id=template.id,
+            knowledge_id=template.knowledge_id,
+            name=template.name,
+            structure=template.structure,
+            parameters=template.parameters,
+            level_rules=template.level_rules,
+            validation_rules=template.validation_rules
+        )
 
 
 # 全局实例

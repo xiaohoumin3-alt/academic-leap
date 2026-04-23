@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
-import { Mail, Lock, User, GraduationCap, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
+import MaterialIcon from '../../components/MaterialIcon';
 
 type AuthMode = 'login' | 'register';
 
@@ -119,7 +119,7 @@ export default function LoginPage() {
                   姓名
                 </label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-on-surface-variant" />
+                  <MaterialIcon icon="person" className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" style={{ fontSize: '20px' }} />
                   <input
                     type="text"
                     value={formData.name}
@@ -137,7 +137,7 @@ export default function LoginPage() {
                   年级
                 </label>
                 <div className="relative">
-                  <GraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-on-surface-variant" />
+                  <MaterialIcon icon="school" className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" style={{ fontSize: '20px' }} />
                   <select
                     value={formData.grade}
                     onChange={(e) => setFormData({ ...formData, grade: parseInt(e.target.value) })}
@@ -158,7 +158,7 @@ export default function LoginPage() {
                 邮箱
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-on-surface-variant" />
+                <MaterialIcon icon="email" className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" style={{ fontSize: '20px' }} />
                 <input
                   type="email"
                   value={formData.email}
@@ -175,7 +175,7 @@ export default function LoginPage() {
                 密码
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-on-surface-variant" />
+                <MaterialIcon icon="lock" className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" style={{ fontSize: '20px' }} />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={formData.password}
@@ -190,7 +190,7 @@ export default function LoginPage() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showPassword ? <MaterialIcon icon="visibility_off" className="" style={{ fontSize: '20px' }} /> : <MaterialIcon icon="visibility" className="" style={{ fontSize: '20px' }} />}
                 </button>
               </div>
             </div>
@@ -211,7 +211,7 @@ export default function LoginPage() {
               ) : (
                 <>
                   {mode === 'login' ? '登录' : '注册'}
-                  <ArrowRight className="w-5 h-5" />
+                  <MaterialIcon icon="arrow_forward" className="" style={{ fontSize: '20px' }} />
                 </>
               )}
             </button>

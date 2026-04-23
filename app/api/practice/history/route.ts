@@ -23,10 +23,22 @@ export async function GET(req: NextRequest) {
       take: limit,
       include: {
         steps: {
-          select: {
-            stepNumber: true,
-            isCorrect: true,
-            duration: true,
+          include: {
+            questionStep: {
+              include: {
+                question: {
+                  select: {
+                    id: true,
+                    type: true,
+                    difficulty: true,
+                    content: true,
+                    answer: true,
+                    hint: true,
+                    knowledgePoints: true,
+                  },
+                },
+              },
+            },
           },
         },
       },

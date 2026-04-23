@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { verifyAnswer, calculateBehaviorTag } from '@/lib/gemini';
+import { judgeStep } from '@/lib/question-engine';
+import { calculateBehaviorTag } from '@/lib/adaptive-difficulty';
 
-// POST /api/questions/verify - AI批改答案
+// POST /api/questions/verify - 使用判题引擎批改答案
 export async function POST(req: NextRequest) {
+  const { questionId, stepNumber, userAnswer, duration } = await req.json();
+
   try {
     const session = await auth();
 
@@ -12,104 +15,85 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '未登录' }, { status: 401 });
     }
 
-    const { questionId, stepNumber, userAnswer, duration } = await req.json();
-
     // 验证参数
     if (userAnswer === undefined || !stepNumber) {
       return NextResponse.json(
-        { error: '缺少必要参数' },
+        { error: '缺少必要参数', success: false },
         { status: 400 }
       );
     }
 
-    let correctAnswer: string | undefined;
-    let expression: string | undefined;
-    let questionContext: string | undefined;
-
-    // 如果有questionId，从数据库获取正确答案
-    if (questionId) {
-      const step = await prisma.questionStep.findFirst({
-        where: {
-          questionId,
-          stepNumber,
-        },
-      });
-
-      if (step) {
-        correctAnswer = step.answer;
-        expression = step.expression;
-      }
-
-      const question = await prisma.question.findUnique({
-        where: { id: questionId },
-      });
-
-      if (question) {
-        const content = question.content as { description?: string } | null;
-        questionContext = content?.description;
-      }
-    }
-
-    // 调用Gemini API批改
-    const result = await verifyAnswer({
-      questionId,
-      stepNumber,
-      userAnswer,
-      questionContext,
-      correctAnswer,
-      expression,
+    // 从数据库获取题目和步骤
+    const question = await prisma.question.findUnique({
+      where: { id: questionId },
     });
 
-    // 计算行为标签
-    const behaviorTag = calculateBehaviorTag(duration || 0);
+    if (!question) {
+      return NextResponse.json({ error: '题目不存在', success: false }, { status: 404 });
+    }
 
+    // 检查是否是旧格式题目（没有templateId）
+    if (!question.templateId) {
+      return NextResponse.json({
+        error: '该题目使用旧格式，请重新生成',
+        success: false,
+        requiresRegenerate: true,
+      }, { status: 400 });
+    }
+
+    const step = await prisma.questionStep.findFirst({
+      where: {
+        questionId,
+        stepNumber,
+      },
+    });
+
+    if (!step) {
+      return NextResponse.json({ error: '步骤不存在', success: false }, { status: 404 });
+    }
+
+    // 解析参数和步骤类型
+    const params = JSON.parse(question.params || '{}');
+    const stepType = step.type as any;
+
+    // 使用判题引擎进行判题（结构驱动，100%可靠）
+    const result = judgeStep(
+      {
+        stepId: `s${stepNumber}`,
+        type: stepType,
+        inputType: (step.inputType as any) || 'numeric',
+        keyboard: (step.keyboard as any) || 'numeric',
+        answerType: 'number',
+        tolerance: step.tolerance ?? undefined,
+        ui: {
+          instruction: step.expression,
+          inputTarget: '',
+          inputHint: step.hint || '',
+        },
+      },
+      params,
+      userAnswer,
+      duration
+    );
+
+    // 返回判题结果，包含correctAnswer
     return NextResponse.json({
-      ...result,
-      behaviorTag,
+      isCorrect: result.isCorrect,
+      correctAnswer: result.correctAnswer,
+      errorType: result.errorType,
+      behaviorTag: result.behaviorTag,
+      feedback: result.hint || (result.isCorrect ? '正确！' : '答案错误'),
       success: true,
     });
   } catch (error) {
     console.error('批改答案错误:', error);
 
-    // API失败时使用简单字符串匹配作为降级方案
-    const { questionId, stepNumber, userAnswer, duration } = await req.json();
-
-    let isCorrect = false;
-    let feedback = '';
-
-    if (questionId) {
-      const step = await prisma.questionStep.findFirst({
-        where: {
-          questionId,
-          stepNumber,
-        },
-      });
-
-      if (step) {
-        isCorrect = userAnswer.trim() === step.answer;
-        feedback = isCorrect
-          ? '正确！'
-          : `答案错误。提示：${step.hint || '请仔细检查计算过程'}`;
-      }
-    } else {
-      // 降级示例答案
-      const correctAnswers: Record<number, string> = {
-        1: '1/4',
-        2: '19/4',
-        3: '19/6',
-      };
-      isCorrect = userAnswer.trim() === (correctAnswers[stepNumber] || '');
-      feedback = isCorrect ? '正确！' : '答案错误，请重新计算';
-    }
-
-    const behaviorTag = calculateBehaviorTag(duration || 0);
-
+    // 不再有降级方案 - 直接返回错误
     return NextResponse.json({
-      isCorrect,
-      feedback,
-      behaviorTag,
-      success: true,
-      fallback: true,
-    });
+      isCorrect: false,
+      feedback: '批改失败，请稍后重试',
+      behaviorTag: calculateBehaviorTag(duration || 0, false),
+      success: false,
+    }, { status: 500 });
   }
 }

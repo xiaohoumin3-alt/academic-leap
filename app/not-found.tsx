@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Home, ArrowLeft } from 'lucide-react';
+import MaterialIcon from '../components/MaterialIcon';
 
 export default function NotFound() {
   return (
@@ -21,7 +21,7 @@ export default function NotFound() {
           href="/"
           className="inline-flex items-center gap-2 w-full py-4 rounded-full bg-primary text-on-primary font-display font-bold text-lg justify-center hover:scale-[1.02] active:scale-95 transition-all"
         >
-          <Home className="w-5 h-5" />
+          <MaterialIcon icon="home" className="" style={{ fontSize: '20px' }} />
           返回首页
         </Link>
       </div>

@@ -3,6 +3,22 @@
  * 根据用户答题表现动态调整题目难度
  */
 
+/**
+ * 帮助强度级别
+ * L0: 完全独立完成
+ * L1: 使用了提示
+ * L2: 使用了步骤辅助
+ */
+export type HelpLevel = 'L0' | 'L1' | 'L2';
+
+export interface HelpUsage {
+  level: HelpLevel;
+  hintUsed: boolean;
+  stepUsed: boolean;
+  timeToFirstHint: number | null;  // 毫秒
+  retryCount: number;
+}
+
 export interface DifficultyConfig {
   level: number;        // 当前难度等级 1-5
   consecutiveCorrect: number;  // 连续正确次数
@@ -236,4 +252,85 @@ export function createAdaptiveDifficultySystem(
       }
     },
   };
+}
+
+/**
+ * 独立性评估系统：根据帮助使用情况计算得分
+ */
+export interface ScoreCalculation {
+  finalScore: number;
+  breakdown: {
+    baseScore: number;
+    hintPenalty: number;
+    stepPenalty: number;
+    retryPenalty: number;
+  };
+  independenceLabel: string;
+  independenceEmoji: string;
+}
+
+/**
+ * 计算独立性得分
+ * @param baseScore 基础分（通常100）
+ * @param helpUsage 帮助使用情况
+ * @param retryCount 重试次数
+ */
+export function calculateIndependenceScore(
+  baseScore: number = 100,
+  helpUsage: HelpUsage,
+  retryCount: number = 0
+): ScoreCalculation {
+  const hintPenalty = helpUsage.hintUsed ? 15 : 0;
+  const stepPenalty = helpUsage.stepUsed ? 30 : 0;
+  const retryPenalty = retryCount * 10;
+
+  const finalScore = Math.max(0, baseScore - hintPenalty - stepPenalty - retryPenalty);
+
+  // 确定独立性标签
+  let independenceLabel = '独立完成';
+  let independenceEmoji = '🟢';
+
+  if (helpUsage.stepUsed) {
+    independenceLabel = '步骤辅助';
+    independenceEmoji = '🔴';
+  } else if (helpUsage.hintUsed) {
+    independenceLabel = '提示辅助';
+    independenceEmoji = '🟡';
+  }
+
+  return {
+    finalScore,
+    breakdown: {
+      baseScore,
+      hintPenalty,
+      stepPenalty,
+      retryPenalty,
+    },
+    independenceLabel,
+    independenceEmoji,
+  };
+}
+
+/**
+ * 根据帮助使用情况确定帮助级别
+ */
+export function determineHelpLevel(
+  hintUsed: boolean,
+  stepUsed: boolean
+): HelpLevel {
+  if (stepUsed) return 'L2';
+  if (hintUsed) return 'L1';
+  return 'L0';
+}
+
+/**
+ * 获取独立性描述
+ */
+export function getIndependenceDescription(level: HelpLevel): string {
+  const descriptions = {
+    'L0': '完全独立完成，展现了扎实的知识掌握',
+    'L1': '在提示下完成，建议加强练习以提高独立性',
+    'L2': '需要步骤辅助，建议回顾基础知识',
+  };
+  return descriptions[level];
 }

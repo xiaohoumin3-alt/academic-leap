@@ -13,48 +13,91 @@ export async function GET(req: NextRequest) {
 
     const userId = session.user.id;
 
-    // 获取所有知识点掌握度
-    const knowledge = await prisma.userKnowledge.findMany({
-      where: { userId },
-      orderBy: { mastery: 'asc' }, // 从低到高排序，优先显示薄弱项
+    // 获取所有活跃的知识点（从 KnowledgePoint 表）
+    const activeKnowledgePoints = await prisma.knowledgePoint.findMany({
+      where: { status: 'active', inAssess: true, deletedAt: null },
+      select: { name: true },
+      orderBy: { weight: 'desc' },
     });
 
-    // 按掌握度分组
-    const mastered = knowledge.filter((k: { mastery: number }) => k.mastery >= 0.8);
-    const learning = knowledge.filter((k: { mastery: number }) => k.mastery >= 0.5 && k.mastery < 0.8);
-    const weak = knowledge.filter((k: { mastery: number }) => k.mastery < 0.5);
+    const activePointNames = activeKnowledgePoints.map((kp) => kp.name);
 
-    // 获取各知识点最近练习记录
-    const knowledgeWithRecent = await Promise.all(
-      knowledge.map(async (k) => {
-        const recentSteps = await prisma.attemptStep.findMany({
-          where: {
-            attempt: {
-              userId,
-              completedAt: { not: null },
+    // 获取用户在这些知识点上的掌握度
+    const userKnowledge = await prisma.userKnowledge.findMany({
+      where: {
+        userId,
+        knowledgePoint: { in: activePointNames }, // 只查询活跃的知识点
+      },
+      orderBy: { mastery: 'asc' },
+    });
+
+    let knowledgeWithRecent;
+    let mastered: any[] = [];
+    let learning: any[] = [];
+    let weak: any[] = [];
+
+    // 如果用户没有练习记录，返回所有活跃知识点供随机选择
+    if (userKnowledge.length === 0) {
+      knowledgeWithRecent = activeKnowledgePoints.map((kp) => ({
+        knowledgePoint: kp.name,
+        mastery: 0,
+        practiceCount: 0,
+        lastPractice: null,
+        recentAccuracy: 0,
+      }));
+      weak = knowledgeWithRecent;
+    } else {
+      // 为每个活跃知识点创建记录（如果没有用户数据，使用默认值）
+      knowledgeWithRecent = await Promise.all(
+        activeKnowledgePoints.map(async (kp) => {
+          const uk = userKnowledge.find((u) => u.knowledgePoint === kp.name);
+
+          if (!uk) {
+            // 用户还没有这个知识点的记录
+            return {
+              knowledgePoint: kp.name,
+              mastery: 0,
+              practiceCount: 0,
+              lastPractice: null,
+              recentAccuracy: 0,
+            };
+          }
+
+          // 获取该知识点最近练习记录
+          const recentSteps = await prisma.attemptStep.findMany({
+            where: {
+              attempt: {
+                userId,
+                completedAt: { not: null },
+              },
             },
-          },
-          take: 10,
-          orderBy: { submittedAt: 'desc' },
-        });
+            take: 10,
+            orderBy: { submittedAt: 'desc' },
+          });
 
-        const correctCount = recentSteps.filter((s: { isCorrect: boolean }) => s.isCorrect).length;
-        const recentAccuracy = recentSteps.length > 0 ? correctCount / recentSteps.length : 0;
+          const correctCount = recentSteps.filter((s: { isCorrect: boolean }) => s.isCorrect).length;
+          const recentAccuracy = recentSteps.length > 0 ? correctCount / recentSteps.length : 0;
 
-        return {
-          knowledgePoint: k.knowledgePoint,
-          mastery: Math.round(k.mastery * 100),
-          practiceCount: k.practiceCount,
-          lastPractice: k.lastPractice,
-          recentAccuracy: Math.round(recentAccuracy * 100),
-        };
-      })
-    );
+          return {
+            knowledgePoint: kp.name,
+            mastery: Math.round(uk.mastery * 100),
+            practiceCount: uk.practiceCount,
+            lastPractice: uk.lastPractice,
+            recentAccuracy: Math.round(recentAccuracy * 100),
+          };
+        })
+      );
+
+      // 按掌握度分组
+      mastered = knowledgeWithRecent.filter((k: any) => k.mastery >= 80);
+      learning = knowledgeWithRecent.filter((k: any) => k.mastery >= 50 && k.mastery < 80);
+      weak = knowledgeWithRecent.filter((k: any) => k.mastery < 50);
+    }
 
     return NextResponse.json({
       knowledge: knowledgeWithRecent,
       summary: {
-        total: knowledge.length,
+        total: knowledgeWithRecent.length,
         mastered: mastered.length,
         learning: learning.length,
         weak: weak.length,

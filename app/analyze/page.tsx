@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { SessionProvider } from 'next-auth/react';
 import AnalyzePage from '@/components/AnalyzePage';
 
 export default function AnalyzePageRoute() {
@@ -10,5 +11,9 @@ export default function AnalyzePageRoute() {
     router.push('/');
   };
 
-  return <AnalyzePage onBack={handleBack} />;
+  return (
+    <SessionProvider>
+      <AnalyzePage onBack={handleBack} />
+    </SessionProvider>
+  );
 }

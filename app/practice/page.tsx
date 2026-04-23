@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, Suspense } from 'react';
 import ExercisePage from '@/components/ExercisePage';
 import { practiceApi } from '@/lib/api';
+import type { ExerciseResult } from '@/components/ExercisePage';
 
 function PracticePageContent() {
   const router = useRouter();
@@ -26,20 +27,19 @@ function PracticePageContent() {
     }
   };
 
-  const handleFinish = async (results: { score: number; duration: number; steps: any[] }) => {
-    try {
-      if (attemptId) {
-        await practiceApi.finish({
-          attemptId,
-          score: results.score,
-          duration: results.duration,
-        });
-      }
-    } catch (error) {
-      console.error('保存练习结果失败:', error);
-    } finally {
-      // 测评模式跳转到分析页面，训练模式返回首页
-      router.push(mode === 'diagnostic' ? '/analyze' : '/');
+  const handleFinish = async (results: ExerciseResult) => {
+    console.log('练习完成:', results);
+
+    // 显示独立性评估结果
+    if (results.independenceResult) {
+      const { independenceLabel, independenceEmoji, finalScore, breakdown } = results.independenceResult;
+      console.log(`${independenceEmoji} ${independenceLabel} - 得分: ${finalScore}`);
+      console.log('得分明细:', breakdown);
+    }
+
+    // 仅测评模式跳转到分析页面，训练模式不跳转让用户选择
+    if (mode === 'diagnostic') {
+      router.push('/analyze');
     }
   };
 

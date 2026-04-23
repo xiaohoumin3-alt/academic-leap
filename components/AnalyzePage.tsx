@@ -46,6 +46,9 @@ interface OverviewInner {
   needsCalibration: boolean;
   calibratedStartingScore: number | null;
   startingScoreCalibrated: boolean;
+  // Stats for "My" page
+  totalQuestions: number;
+  correctRate: number;
 }
 
 interface OverviewData {

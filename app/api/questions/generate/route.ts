@@ -1,114 +1,132 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { generateQuestions } from '@/lib/gemini';
+import { generateQuestions as engineGenerateQuestions, QuestionProtocol } from '@/lib/question-engine';
 
-// POST /api/questions/generate - AI生成新题目
+// 知识点映射（模板返回英文，数据库需要中文）
+const INTERNAL_TO_KNOWLEDGE: Record<string, string> = {
+  'quadratic_function': '二次函数',
+  'pythagoras_theorem': '勾股定理',
+  'probability': '概率统计',
+  'linear_equation': '一元一次方程',
+};
+
+// 模板引擎使用中文键查找
+const KNOWLEDGE_TO_TEMPLATES: Record<string, string[]> = {
+  '二次函数': ['quadratic_vertex', 'quadratic_evaluate'],
+  '勾股定理': ['pythagoras'],
+  '概率统计': ['probability'],
+  '一元一次方程': ['linear_equation'],
+};
+
+/**
+ * 将模板返回的英文知识点转为中文（用于数据库存储）
+ */
+function mapToChinese(knowledgePoint: string): string {
+  return INTERNAL_TO_KNOWLEDGE[knowledgePoint] || knowledgePoint;
+}
+
+// POST /api/questions/generate - 使用模板引擎生成题目
 export async function POST(req: NextRequest) {
+  let knowledgePoint = '二次函数';  // 使用中文知识点名称
+  let difficulty = 2;
+  let count = 1;
+  let renderStyle: 'standard' | 'guided' | 'gamified' | 'story' = 'standard';
+
   try {
-    const session = await auth();
+    const requestData = await req.json();
+    // 直接使用中文知识点名称，不转换（模板引擎期望中文）
+    knowledgePoint = requestData.knowledgePoint || '二次函数';
+    difficulty = requestData.difficulty || 2;
+    count = requestData.count || 1;
+    renderStyle = requestData.renderStyle || 'standard';
 
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 });
-    }
+    console.log('=== 使用模板引擎生成题目 ===', { knowledgePoint, difficulty, count, renderStyle });
+  } catch (e) {
+    console.error('解析请求失败:', e);
+  }
 
-    const { type, difficulty, knowledgePoint, count = 1 } = await req.json();
-
-    // 验证参数
-    if (!type || !difficulty || !knowledgePoint) {
-      return NextResponse.json(
-        { error: '缺少必要参数' },
-        { status: 400 }
-      );
-    }
-
-    // 调用Gemini API生成题目
-    const questions = await generateQuestions({
-      type,
-      difficulty,
+  try {
+    // 使用模板引擎生成题目
+    const questions = await engineGenerateQuestions(
       knowledgePoint,
       count,
-    });
+      difficulty,
+      renderStyle
+    );
+
+    if (questions.length === 0) {
+      return NextResponse.json({
+        success: false,
+        error: '未找到匹配的题目模板',
+      }, { status: 400 });
+    }
 
     // 保存到数据库
     const savedQuestions = await Promise.all(
       questions.map(async (q) => {
         const question = await prisma.question.create({
           data: {
-            type: q.type,
-            difficulty: q.difficulty,
-            content: q.content as any,
-            answer: q.answer,
-            hint: q.hint,
-            knowledgePoints: JSON.stringify(q.knowledgePoints),
-            isAI: true,
+            type: 'calculation',
+            difficulty,
+            content: JSON.stringify(q.content),
+            answer: '', // 答案在步骤中
+            hint: q.content.context || '',
+            knowledgePoints: JSON.stringify([mapToChinese(q.knowledgePoint)]),
+            isAI: renderStyle !== 'standard', // 非标准风格使用了AI
+            templateId: q.templateId,
+            params: JSON.stringify(q.params),
+            stepTypes: JSON.stringify(q.steps.map(s => s.type)),
           },
         });
 
-        // 保存步骤
-        await prisma.questionStep.createMany({
-          data: q.steps.map((step) => ({
-            questionId: question.id,
-            stepNumber: step.stepNumber,
-            expression: step.expression,
-            answer: step.answer,
-            hint: step.hint,
-          })),
-        });
+        // 创建 QuestionStep 并获取返回的 id
+        const createdSteps = await Promise.all(
+          q.steps.map(async (step) => {
+            const stepNumber = parseInt(step.stepId.replace('s', ''));
+            const created = await prisma.questionStep.create({
+              data: {
+                questionId: question.id,
+                stepNumber,
+                expression: step.ui.instruction,
+                answer: '',
+                hint: step.ui.inputHint,
+                type: step.type,
+                inputType: step.inputType,
+                keyboard: step.keyboard,
+                tolerance: step.tolerance,
+              },
+            });
+            // 返回带 id 的步骤信息，用于前端提交时关联
+            return {
+              ...step,
+              id: created.id,
+              stepNumber,
+            };
+          })
+        );
 
-        return question;
+        return { ...question, stepsWithIds: createdSteps };
       })
     );
 
     return NextResponse.json({
       success: true,
-      questions: savedQuestions,
+      questions: savedQuestions.map((q, i) => ({
+        id: q.id,
+        templateId: questions[i].templateId,
+        knowledgePoint: mapToChinese(questions[i].knowledgePoint),  // 转为中文
+        difficultyLevel: questions[i].difficultyLevel,
+        params: questions[i].params,
+        steps: q.stepsWithIds,  // 返回带数据库 id 的步骤
+        content: questions[i].content,
+        meta: questions[i].meta,
+      })),
     });
   } catch (error) {
     console.error('生成题目错误:', error);
-
-    // API失败时返回示例题目作为降级方案
-    const { type, difficulty, knowledgePoint, count = 1 } = await req.json().catch(() => ({}));
-
-    const fallbackQuestions = Array.from({ length: count }, (_, i) => ({
-      id: `fallback_${Date.now()}_${i}`,
-      type: type || 'calculation',
-      difficulty: difficulty || 2,
-      content: {
-        title: '分数四则运算',
-        description: '计算以下表达式的值',
-        context: '基础数学练习',
-      },
-      answer: '1/4',
-      hint: '先计算括号内，再进行除法',
-      knowledgePoints: knowledgePoint ? [knowledgePoint] : ['分数运算'],
-      steps: [
-        {
-          stepNumber: 1,
-          expression: '(1/2) ÷ 2 =',
-          answer: '1/4',
-          hint: '除以2等于乘以1/2',
-        },
-        {
-          stepNumber: 2,
-          expression: '5 - 1/4 =',
-          answer: '19/4',
-          hint: '整数减分数，先通分',
-        },
-        {
-          stepNumber: 3,
-          expression: '(2/3) × 19/4 =',
-          answer: '19/6',
-          hint: '分子相乘，分母相乘',
-        },
-      ],
-      isAI: true,
-    }));
-
     return NextResponse.json({
-      success: true,
-      questions: fallbackQuestions,
-      fallback: true,
-    });
+      success: false,
+      error: error instanceof Error ? error.message : '生成失败',
+    }, { status: 500 });
   }
 }

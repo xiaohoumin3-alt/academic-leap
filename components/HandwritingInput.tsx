@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { Camera, RotateCcw, Check, Loader2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import MaterialIcon from './MaterialIcon';
 
 interface HandwritingInputProps {
   onRecognized: (text: string, expressions: string[]) => void;
@@ -151,7 +151,7 @@ const HandwritingInput: React.FC<HandwritingInputProps> = ({ onRecognized, onClo
             onClick={onClose}
             className="p-2 hover:bg-surface-container-high rounded-full transition-colors"
           >
-            <X className="w-5 h-5 text-on-surface-variant" />
+            <MaterialIcon icon="close" className="text-on-surface-variant" style={{ fontSize: '20px' }} />
           </button>
         </div>
 
@@ -220,7 +220,7 @@ const HandwritingInput: React.FC<HandwritingInputProps> = ({ onRecognized, onClo
                   disabled={isProcessing}
                   className="flex-1 py-4 rounded-full bg-surface-container-highest text-on-surface font-bold flex items-center justify-center gap-2 active:scale-95 transition-all"
                 >
-                  <RotateCcw className="w-5 h-5" />
+                  <MaterialIcon icon="refresh" className="" style={{ fontSize: '20px' }} />
                   重拍
                 </button>
 
@@ -229,7 +229,7 @@ const HandwritingInput: React.FC<HandwritingInputProps> = ({ onRecognized, onClo
                     onClick={confirmResult}
                     className="flex-1 py-4 rounded-full bg-primary text-on-primary font-bold flex items-center justify-center gap-2 active:scale-95 transition-all"
                   >
-                    <Check className="w-5 h-5" />
+                    <MaterialIcon icon="check" className="" style={{ fontSize: '20px' }} />
                     确认
                   </button>
                 ) : (
@@ -240,12 +240,12 @@ const HandwritingInput: React.FC<HandwritingInputProps> = ({ onRecognized, onClo
                   >
                     {isProcessing ? (
                       <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <div className="w-5 h-5 rounded-full border-2 border-on-primary border-t-transparent animate-spin" />
                         识别中...
                       </>
                     ) : (
                       <>
-                        <Camera className="w-5 h-5" />
+                        <MaterialIcon icon="photo_camera" className="" style={{ fontSize: '20px' }} />
                         识别
                       </>
                     )}
@@ -264,7 +264,7 @@ const HandwritingInput: React.FC<HandwritingInputProps> = ({ onRecognized, onClo
                   onClick={capturePhoto}
                   className="flex-1 py-4 rounded-full bg-primary text-on-primary font-bold flex items-center justify-center gap-2 active:scale-95 transition-all"
                 >
-                  <Camera className="w-5 h-5" />
+                  <MaterialIcon icon="photo_camera" className="" style={{ fontSize: '20px' }} />
                   拍照
                 </button>
               </>

@@ -57,8 +57,8 @@ async def get_next_question(request: NextQuestionRequest, db: Session = Depends(
         user_id=request.user_id,
         knowledge_id=request.knowledge_id,
         level=question_level,
-        content=question_data["content"],
-        answer=question_data["answer"]
+        content=question_data.content,
+        answer=question_data.answer
     )
     db.add(generated)
     db.commit()
@@ -66,9 +66,9 @@ async def get_next_question(request: NextQuestionRequest, db: Session = Depends(
 
     return NextQuestionResponse(
         question_id=generated.id,
-        content=question_data["content"],
+        content=question_data.content,
         level=question_level,
-        input_type=question_data["input_type"]
+        input_type=question_data.input_type
     )
 
 

@@ -1,17 +1,20 @@
 /**
- * LLM API 封装 (通过 litellm)
- * 支持多种模型提供商，统一接口
- * 用于题目生成和答案批改
+ * Gemini API 封装
+ * 使用 Google 官方 SDK
  */
 
-import { completion } from 'litellm';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const API_KEY = process.env.GEMINI_API_KEY;
-const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/openai';
 
 if (!API_KEY) {
   console.warn('GEMINI_API_KEY not configured');
 }
+
+const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
+
+// 使用可用的模型
+const MODEL_NAME = 'models/gemma-4-31b-it';
 
 export interface GenerateQuestionOptions {
   type: 'calculation' | 'geometry' | 'algebra';
@@ -53,50 +56,24 @@ export interface VerifyAnswerOptions {
 export interface VerifyResult {
   isCorrect: boolean;
   feedback: string;
-  behaviorTag?: string;
-}
-
-interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
-
-async function callChat(messages: ChatMessage[]): Promise<string> {
-  if (!API_KEY) {
-    throw new Error('GEMINI_API_KEY not configured');
-  }
-
-  try {
-    const response = await completion({
-      model: 'openai/gemma-4-31b-it',
-      messages: messages.map(m => ({
-        role: m.role,
-        content: m.content
-      })),
-      temperature: 0.7,
-      apiKey: API_KEY,
-      baseUrl: API_BASE,
-    });
-
-    return response.choices[0]?.message?.content || '';
-  } catch (error: any) {
-    console.error('LiteLLM API error:', error);
-    throw new Error(`LLM API error: ${error.message || JSON.stringify(error)}`);
-  }
+  hint?: string;
 }
 
 export async function generateQuestions(
   options: GenerateQuestionOptions
 ): Promise<GeneratedQuestion[]> {
+  if (!genAI) {
+    throw new Error('GEMINI_API_KEY not configured');
+  }
+
   const { type, difficulty, knowledgePoint, count = 1 } = options;
 
   const prompt = buildGeneratePrompt(type, difficulty, knowledgePoint, count);
 
   try {
-    const text = await callChat([
-      { role: 'system', content: '你是一个专业的数学教育AI助手，擅长生成高质量的数学练习题。' },
-      { role: 'user', content: prompt },
-    ]);
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
 
     return parseGeneratedQuestions(text, type, difficulty, knowledgePoint);
   } catch (error) {
@@ -108,6 +85,10 @@ export async function generateQuestions(
 export async function verifyAnswer(
   options: VerifyAnswerOptions
 ): Promise<VerifyResult> {
+  if (!genAI) {
+    throw new Error('GEMINI_API_KEY not configured');
+  }
+
   const {
     stepNumber,
     userAnswer,
@@ -125,10 +106,9 @@ export async function verifyAnswer(
   );
 
   try {
-    const text = await callChat([
-      { role: 'system', content: '你是一个专业的数学教育AI助手，擅长批改学生答案并提供有针对性的反馈。' },
-      { role: 'user', content: prompt },
-    ]);
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
 
     return parseVerifyResult(text);
   } catch (error) {
@@ -165,14 +145,13 @@ function buildGeneratePrompt(
   {
     "title": "题目标题",
     "description": "题目描述",
-    "context": "题目背景",
     "answer": "最终答案",
-    "hint": "整体提示",
+    "hint": "解题提示",
     "steps": [
       {
         "stepNumber": 1,
-        "expression": "表达式",
-        "answer": "答案",
+        "expression": "步骤表达式",
+        "answer": "步骤答案",
         "hint": "步骤提示"
       }
     ]
@@ -187,31 +166,20 @@ function buildVerifyPrompt(
   correctAnswer?: string,
   expression?: string
 ): string {
-  let prompt = `批改以下答案：\n\n`;
+  return `请批改学生的第${stepNumber}步答案。
 
-  if (expression) {
-    prompt += `题目：${expression}\n`;
-  }
-  if (questionContext) {
-    prompt += `上下文：${questionContext}\n`;
-  }
+题目内容：${questionContext || '无'}
+步骤表达式：${expression || '无'}
+正确答案：${correctAnswer || '无'}
+学生答案：${userAnswer}
 
-  prompt += `学生答案：${userAnswer}\n`;
+请判断学生答案是否正确，并给出反馈。请严格按照以下JSON格式输出：
 
-  if (correctAnswer) {
-    prompt += `正确答案：${correctAnswer}\n`;
-  }
-
-  prompt += `
-请判断答案是否正确，并给出反馈。对于数学表达式，要考虑等价形式（如1/2和2/4）。
-
-请严格按照以下JSON格式输出：
 {
   "isCorrect": true/false,
-  "feedback": "反馈内容"
+  "feedback": "反馈内容",
+  "hint": "提示信息（可选）"
 }`;
-
-  return prompt;
 }
 
 function parseGeneratedQuestions(
@@ -258,19 +226,11 @@ function parseVerifyResult(text: string): VerifyResult {
 
     return {
       isCorrect: parsed.isCorrect || false,
-      feedback: parsed.feedback || '批改完成',
+      feedback: parsed.feedback || '',
+      hint: parsed.hint,
     };
   } catch (error) {
     console.error('解析批改结果失败:', error);
-    return {
-      isCorrect: false,
-      feedback: '批改失败，请重试',
-    };
+    throw new Error('批改结果格式错误');
   }
-}
-
-export function calculateBehaviorTag(duration: number): string {
-  if (duration < 5000) return '秒解';
-  if (duration > 30000) return '偏慢';
-  return '稳住';
 }

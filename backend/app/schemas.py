@@ -44,13 +44,17 @@ class SubmitAnswerRequest(BaseModel):
     question_id: uuid.UUID
     answer: str
     time_used: int = Field(..., ge=0, description="答题用时（秒）")
+    retry_count: int = Field(default=0, ge=0, description="重试次数")
 
 
 class SubmitAnswerResponse(BaseModel):
     """提交答案响应"""
     is_correct: bool
     new_level: int
+    stable_pass_count: int
     feedback: str
+    behavior_type: str  # fast_correct, normal_correct, slow_correct, retry_correct, wrong
+    mastery_score: float  # 掌握度分数 (0-1.2)
     correct_answer: Optional[str] = None
 
 
@@ -70,11 +74,24 @@ class ScoreBreakdown(BaseModel):
     score: float
 
 
+class ScoreBreakdown(BaseModel):
+    """分数明细"""
+    knowledge: str
+    score: float
+    level: int
+    mastery: float  # 掌握度百分比
+
+
 class EstimateScoreResponse(BaseModel):
     """估分响应"""
     score: float
     range: str
+    stability: str  # high, medium, low
+    confidence: float  # 置信度 (0-1)
     breakdown: List[ScoreBreakdown]
+    strong_points: List[str]  # 强项
+    weak_points: List[str]  # 弱项
+    suggestions: List[str]  # 提分建议
 
 
 class QuestionInAssessment(BaseModel):

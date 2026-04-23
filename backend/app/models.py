@@ -79,6 +79,21 @@ class QuestionTemplate(Base):
     knowledge_point = relationship("KnowledgePoint", back_populates="templates")
 
 
+class KnowledgeTemplate(Base):
+    """参数化模板表（核心 - 替代教研出题）"""
+    __tablename__ = "knowledge_templates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    knowledge_id = Column(Integer, ForeignKey("knowledge_points.id"), nullable=False)
+    name = Column(String(100), nullable=False)
+    structure = Column(String, nullable=False)  # 题目结构，如 "[a]x + [b] = [c]"
+    parameters = Column(JSON, nullable=False)  # 参数定义
+    level_rules = Column(JSON, nullable=False)  # Level规则
+    validation_rules = Column(JSON)  # 验证规则
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class GeneratedQuestion(Base):
     """生成题目记录"""
     __tablename__ = "generated_questions"
@@ -97,7 +112,7 @@ class GeneratedQuestion(Base):
 
 
 class Answer(Base):
-    """作答记录表"""
+    """作答记录表（扩展 - 添加行为数据）"""
     __tablename__ = "answers"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -106,6 +121,8 @@ class Answer(Base):
     is_correct = Column(Boolean, nullable=False)
     answer = Column(String)
     time_used = Column(Integer)
+    retry_count = Column(Integer, default=0)  # 重试次数
+    behavior_type = Column(String(20))  # fast_correct, normal_correct, slow_correct, retry_correct, wrong
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # 关系
@@ -114,14 +131,31 @@ class Answer(Base):
 
 
 class Assessment(Base):
-    """测评记录表"""
+    """测评记录表（扩展 - 添加稳定等级）"""
     __tablename__ = "assessments"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     score_estimate = Column(Float)
     score_range = Column(String(20))
+    stability_level = Column(String(10))  # high, medium, low
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # 关系
     user = relationship("User", back_populates="assessments")
+
+
+class DifficultyCalibration(Base):
+    """难度校准记录表（行为数据驱动）"""
+    __tablename__ = "difficulty_calibration"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    knowledge_id = Column(Integer, ForeignKey("knowledge_points.id"), nullable=False)
+    level = Column(Integer, nullable=False)
+    date = Column(String, nullable=False)  # DATE
+    correct_rate = Column(Float, nullable=False)  # 正确率
+    avg_time_used = Column(Float, nullable=False)  # 平均用时
+    retry_rate = Column(Float, nullable=False)  # 重试率
+    sample_count = Column(Integer, nullable=False)  # 样本数量
+    status = Column(String(20))  # easy, normal, hard, too_hard
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

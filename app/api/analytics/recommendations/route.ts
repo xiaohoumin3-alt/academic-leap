@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
         where: {
           userId,
           completedAt: { not: null },
+          score: { gt: 0 },  // 只计算有效练习
         },
         include: {
           steps: {

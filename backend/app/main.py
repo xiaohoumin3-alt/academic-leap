@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.database import Base, get_db
-from app.api import questions, answers, assessments
+from app.api import questions, answers, assessments, admin
 import os
 
 # 创建FastAPI应用
@@ -29,6 +29,7 @@ app.add_middleware(
 app.include_router(questions.router, prefix="/api/questions", tags=["questions"])
 app.include_router(answers.router, prefix="/api/answers", tags=["answers"])
 app.include_router(assessments.router, prefix="/api/assessments", tags=["assessments"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 
 @app.get("/")

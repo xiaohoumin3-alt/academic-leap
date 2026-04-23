@@ -200,6 +200,9 @@ export const analyticsApi = {
         needsCalibration: boolean;
         calibratedStartingScore: number | null;
         startingScoreCalibrated: boolean;
+        // Stats for "My" page
+        totalQuestions: number;
+        correctRate: number;
       };
       dailyData: Array<{ date: string; count: number; avgScore: number }>;
       topKnowledge: Array<{ knowledgePoint: string; mastery: number }>;

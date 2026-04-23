@@ -11,12 +11,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '未登录' }, { status: 401 });
     }
 
-    const { attemptId, stepNumber, userAnswer, isCorrect, duration } = await req.json();
+    const { attemptId, stepNumber, userAnswer, isCorrect, duration, questionStepId } = await req.json();
 
     // 保存步骤记录
     const attemptStep = await prisma.attemptStep.create({
       data: {
         attemptId,
+        questionStepId,  // 添加知识点关联
         stepNumber,
         userAnswer,
         isCorrect,

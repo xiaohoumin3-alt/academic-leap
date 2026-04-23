@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-import { Zap, Clock, TrendingUp, AlertCircle, CheckCircle2, X } from 'lucide-react';
+import MaterialIcon from './MaterialIcon';
 
 export type BehaviorTag = '秒解' | '流畅' | '稳住' | '偏慢' | '错误' | '完美';
 
@@ -17,37 +17,37 @@ const behaviorConfig: Record<BehaviorTag, BehaviorFeedback> = {
     tag: '秒解',
     message: '闪电般的反应！',
     color: 'success',
-    icon: <Zap className="w-4 h-4" />,
+    icon: <MaterialIcon icon="bolt" className="" style={{ fontSize: '16px' }} />,
   },
   '流畅': {
     tag: '流畅',
     message: '思路清晰，继续保持！',
     color: 'success',
-    icon: <CheckCircle2 className="w-4 h-4" />,
+    icon: <MaterialIcon icon="check_circle" className="" style={{ fontSize: '16px' }} />,
   },
   '稳住': {
     tag: '稳住',
     message: '慢慢来，准确率更重要',
     color: 'info',
-    icon: <Clock className="w-4 h-4" />,
+    icon: <MaterialIcon icon="schedule" className="" style={{ fontSize: '16px' }} />,
   },
   '偏慢': {
     tag: '偏慢',
     message: '可以再快一点哦',
     color: 'warning',
-    icon: <TrendingUp className="w-4 h-4" />,
+    icon: <MaterialIcon icon="trending_up" className="" style={{ fontSize: '16px' }} />,
   },
   '错误': {
     tag: '错误',
     message: '再仔细想想',
     color: 'error',
-    icon: <X className="w-4 h-4" />,
+    icon: <MaterialIcon icon="close" className="" style={{ fontSize: '16px' }} />,
   },
   '完美': {
     tag: '完美',
     message: '太棒了！满分回答！',
     color: 'success',
-    icon: <Zap className="w-4 h-4" />,
+    icon: <MaterialIcon icon="bolt" className="" style={{ fontSize: '16px' }} />,
   },
 };
 
@@ -174,7 +174,7 @@ export const StreakCounter: React.FC<StreakCounterProps> = ({ count, max = 10 })
         animate={{ scale: 1 }}
         className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 rounded-full"
       >
-        <Zap className="w-4 h-4 text-primary" />
+        <MaterialIcon icon="bolt" className="text-primary" style={{ fontSize: '16px' }} />
         <span className="font-bold text-primary text-sm">{count}</span>
       </motion.div>
 
@@ -213,13 +213,13 @@ export const DifficultyChange: React.FC<DifficultyChangeProps> = ({
     up: {
       bg: 'bg-success-container',
       text: 'text-on-success-container',
-      icon: <TrendingUp className="w-5 h-5" />,
+      icon: <MaterialIcon icon="trending_up" className="" style={{ fontSize: '20px' }} />,
       label: '难度提升',
     },
     down: {
       bg: 'bg-warning-container',
       text: 'text-on-warning-container',
-      icon: <AlertCircle className="w-5 h-5" />,
+      icon: <MaterialIcon icon="warning" className="" style={{ fontSize: '20px' }} />,
       label: '难度调整',
     },
   };

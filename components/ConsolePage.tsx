@@ -1,49 +1,13 @@
-import React, { useState } from 'react';
-import { 
-  LayoutDashboard, 
-  Network, 
-  BookOpen, 
-  Archive, 
-  Sliders, 
-  FileText, 
-  HelpCircle,
-  Plus,
-  Save,
-  RefreshCw,
-  PieChart as PieChartIcon,
-  ChevronRight,
-  TrendingUp,
-  AlertCircle,
-  CheckCircle2,
-  Database,
-  CheckSquare,
-  LogOut,
-  AppWindow,
-  Search,
-  Settings,
-  Bell,
-  Activity,
-  Heart,
-  Wrench,
-  Variable,
-  FileCode,
-  Check,
-  Send,
-  Trash2,
-  Rocket,
-  Zap,
-  Minus,
-  Edit3,
-  Filter,
-  MoreVertical,
-  Activity as Pulse,
-  Code2,
-  ShieldCheck,
-  FlaskConical,
-  Bug
-} from 'lucide-react';
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import MaterialIcon from './MaterialIcon';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { useKnowledgePoints, useTemplates, useDifficultyMatrix, useWeightValidation, useAdminUser } from '@/lib/hooks/useAdminData';
+import TemplateEditor from './TemplateEditor';
+import QualityAnalysis from './QualityAnalysis';
 
 interface ConsolePageProps {
   onExit: () => void;
@@ -52,28 +16,36 @@ interface ConsolePageProps {
 type Tab = 'dashboard' | 'template' | 'difficulty' | 'data' | 'quality' | 'config';
 
 const ConsolePage: React.FC<ConsolePageProps> = ({ onExit }) => {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>('data');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'info' | 'error' } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Template Preview State
-  const [previewLevel, setPreviewLevel] = useState(0);
+  // Admin User for permissions
+  const { user: adminUser, canEdit, canDelete } = useAdminUser();
 
-  // Knowledge Points State
-  const [knowledgePoints, setKnowledgePoints] = useState([
-    { id: 'K001', name: '一元一次方程', subject: '初中', weight: 25, master: 1.25, inAssess: true, status: 'Active' },
-    { id: 'K002', name: '勾股定理', subject: '初中', weight: 15, master: 0.98, inAssess: true, status: 'Active' },
-    { id: 'K003', name: '几何求角', subject: '初中', weight: 20, master: 0.85, inAssess: true, status: 'Review' },
-    { id: 'K004', name: '二次函数', subject: '初中', weight: 25, master: 0.72, inAssess: true, status: 'Active' },
-    { id: 'K005', name: '概率统计', subject: '初中', weight: 15, master: 1.10, inAssess: false, status: 'Draft' },
-  ]);
+  // Knowledge Points Data
+  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useState<{ subject?: string; status?: string; search?: string }>({});
+  const { data: knowledgePoints, loading: kpLoading, total: kpTotal, refetch: kpRefetch, create, update, remove } = useKnowledgePoints(page, 20, filters);
 
-  const totalScore = knowledgePoints.filter(k => k.inAssess).reduce((acc, curr) => acc + curr.weight, 0);
+  // Weight Validation
+  const { isValid: weightValid, total: weightTotal, validate: validateWeight } = useWeightValidation();
 
-  const toggleAssess = (id: string) => {
-    setKnowledgePoints(prev => prev.map(k => k.id === id ? { ...k, inAssess: !k.inAssess } : k));
-    showToast('测评参与状态已更新', 'info');
-  };
+  // Difficulty Matrix
+  const { levels, anomalies, loading: diffLoading } = useDifficultyMatrix();
+
+  // Templates
+  const { data: templates, loading: tplLoading, refetch: tplRefetch } = useTemplates();
+
+  // Edit Modal
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editForm, setEditForm] = useState<any>({});
+
+  // Template Editor
+  const [editingTemplate, setEditingTemplate] = useState<any>(null);
+
+  const totalScore = knowledgePoints.filter((k: any) => k.inAssess).reduce((acc: number, curr: any) => acc + curr.weight, 0);
 
   const showToast = (msg: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -82,20 +54,68 @@ const ConsolePage: React.FC<ConsolePageProps> = ({ onExit }) => {
 
   const handleAction = async (msg: string, type: 'success' | 'info' | 'error' = 'success') => {
     setIsProcessing(true);
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 500));
     setIsProcessing(false);
     showToast(msg, type);
   };
 
+  const handleSaveKnowledge = async () => {
+    setIsProcessing(true);
+    try {
+      if (editingItem?.id) {
+        await update(editingItem.id, editForm);
+        showToast('知识点已更新', 'success');
+      } else {
+        await create(editForm);
+        showToast('知识点已创建', 'success');
+      }
+      setEditingItem(null);
+      setEditForm({});
+      kpRefetch();
+    } catch (error: any) {
+      showToast(error.message || '操作失败', 'error');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDeleteKnowledge = async (id: string, name: string) => {
+    if (!confirm(`确定要删除知识点"${name}"吗？`)) return;
+    setIsProcessing(true);
+    try {
+      await remove(id);
+      showToast('知识点已删除', 'success');
+      kpRefetch();
+    } catch (error: any) {
+      showToast(error.message || '删除失败', 'error');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleToggleAssess = async (item: any) => {
+    setIsProcessing(true);
+    try {
+      await update(item.id, { inAssess: !item.inAssess });
+      showToast('测评参与状态已更新', 'success');
+      kpRefetch();
+      validateWeight();
+    } catch (error: any) {
+      showToast(error.message || '操作失败', 'error');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Menu items based on role
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'template', label: '模板编辑器', icon: Edit3 },
-    { id: 'difficulty', label: '难度校准', icon: TrendingUp },
-    { id: 'data', label: '知识点管理', icon: Database },
-    { id: 'quality', label: '质量分析', icon: ShieldCheck },
-    { id: 'config', label: '分数地图', icon: Network },
-  ];
+    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['admin', 'editor', 'viewer'] },
+    { id: 'template', label: '模板编辑器', icon: 'edit', roles: ['admin', 'editor'] },
+    { id: 'difficulty', label: '难度校准', icon: 'trending_up', roles: ['admin', 'editor'] },
+    { id: 'data', label: '知识点管理', icon: 'storage', roles: ['admin', 'editor', 'viewer'] },
+    { id: 'quality', label: '质量分析', icon: 'verified_user', roles: ['admin', 'editor', 'viewer'] },
+    { id: 'config', label: '分数地图', icon: 'hub', roles: ['admin', 'editor'] },
+  ].filter(item => adminUser && item.roles.includes(adminUser.role));
 
   const renderContent = () => {
     switch (activeTab) {
@@ -104,468 +124,490 @@ const ConsolePage: React.FC<ConsolePageProps> = ({ onExit }) => {
           <div className="space-y-6">
             <div className="flex justify-between items-center mb-4">
               <div className="flex items-center gap-4">
-                 <div className="bg-surface-container-low border border-outline-variant/10 rounded-full py-2 px-4 flex items-center gap-2">
-                    <Filter className="w-3 h-3 text-on-surface-variant" />
-                    <span className="text-xs font-bold">按学科筛选</span>
-                 </div>
-                 <div className="bg-surface-container-low border border-outline-variant/10 rounded-full py-2 px-4 flex items-center gap-2">
-                    <span className="text-xs font-bold text-primary">全部状态 (124)</span>
-                 </div>
+                <input
+                  type="text"
+                  placeholder="搜索知识点..."
+                  className="bg-surface-container-low border border-outline-variant/10 rounded-full py-2 px-4 text-sm"
+                  value={filters.search || ''}
+                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                />
+                <select
+                  className="bg-surface-container-low border border-outline-variant/10 rounded-full py-2 px-4 text-sm"
+                  value={filters.subject || ''}
+                  onChange={(e) => setFilters({ ...filters, subject: e.target.value || undefined })}
+                >
+                  <option value="">全部学科</option>
+                  <option value="初中">初中</option>
+                  <option value="高中">高中</option>
+                </select>
+                <span className="text-xs font-bold text-primary">共 {kpTotal} 条</span>
               </div>
+              {canEdit && (
+                <button
+                  onClick={() => { setEditingItem({}); setEditForm({ name: '', subject: '初中', category: '代数', weight: 10, inAssess: true, status: 'active' }); }}
+                  className="px-4 py-2 bg-primary text-on-primary rounded-full text-sm font-bold hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+                >
+                  <MaterialIcon icon="add" className="w-4 h-4" />
+                  新建知识点
+                </button>
+              )}
             </div>
 
-            <div className="bg-surface-container-lowest rounded-[2rem] overflow-hidden ambient-shadow border border-outline-variant/5">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-surface-container-low/50 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">
-                    <th className="px-8 py-4">ID / 名称</th>
-                    <th className="px-6 py-4">关联学科</th>
-                    <th className="px-6 py-4">分值权重</th>
-                    <th className="px-6 py-4">参与测评</th>
-                    <th className="px-6 py-4">掌握系数</th>
-                    <th className="px-6 py-4 text-right pr-12">操作</th>
-                  </tr>
-                </thead>
-                <tbody className="text-sm font-bold">
-                  {knowledgePoints.map((item) => (
-                    <tr key={item.id} className="border-t border-outline-variant/5 hover:bg-surface-container-low/30 transition-colors">
-                      <td className="px-8 py-5">
-                         <div className="flex flex-col">
-                            <span className="text-on-surface">{item.name}</span>
-                            <span className="text-[10px] font-mono text-on-surface-variant/40">{item.id}</span>
-                         </div>
-                      </td>
-                      <td className="px-6 py-5 text-on-surface-variant">{item.subject}</td>
-                      <td className="px-6 py-5">
-                         <div className="flex items-center gap-2">
+            {kpLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="bg-surface-container-lowest rounded-[2rem] overflow-hidden border border-outline-variant/5">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-surface-container-low/50 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">
+                      <th className="px-8 py-4">名称</th>
+                      <th className="px-6 py-4">学科</th>
+                      <th className="px-6 py-4">分类</th>
+                      <th className="px-6 py-4">权重</th>
+                      <th className="px-6 py-4">参与测评</th>
+                      <th className="px-6 py-4">状态</th>
+                      <th className="px-6 py-4 text-right pr-12">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-sm font-bold">
+                    {knowledgePoints.map((item: any) => (
+                      <tr key={item.id} className="border-t border-outline-variant/5 hover:bg-surface-container-low/30 transition-colors">
+                        <td className="px-8 py-5">
+                          <span className="text-on-surface">{item.name}</span>
+                        </td>
+                        <td className="px-6 py-5 text-on-surface-variant">{item.subject}</td>
+                        <td className="px-6 py-5 text-on-surface-variant">{item.category}</td>
+                        <td className="px-6 py-5">
+                          <div className="flex items-center gap-2">
                             <span className="text-primary">{item.weight}</span>
                             <span className="text-[10px] opacity-30">pts</span>
-                         </div>
-                      </td>
-                      <td className="px-6 py-5">
-                         <button 
-                            onClick={() => toggleAssess(item.id)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-5">
+                          <button
+                            onClick={() => handleToggleAssess(item)}
                             className={cn(
                               "w-12 h-6 rounded-full transition-all relative overflow-hidden",
                               item.inAssess ? "bg-primary shadow-[0_0_8px_rgba(0,106,40,0.4)]" : "bg-surface-variant"
                             )}
-                         >
-                            <motion.div 
+                          >
+                            <motion.div
                               animate={{ x: item.inAssess ? 24 : 4 }}
                               className="absolute top-1 w-4 h-4 rounded-full bg-surface"
                             />
-                         </button>
-                      </td>
-                      <td className="px-6 py-5 font-mono text-on-surface-variant/60">{item.master}x</td>
-                      <td className="px-6 py-5 text-right pr-12">
-                         <button 
-                           onClick={() => handleAction(`已执行 [${item.name}] 的快速管理操作`)}
-                           className="p-2 hover:bg-surface-container-high rounded-full transition-colors"
-                         >
-                            <MoreVertical className="w-4 h-4 text-outline-variant" />
-                         </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                          </button>
+                        </td>
+                        <td className="px-6 py-5">
+                          <span className={cn(
+                            "px-2 py-1 rounded-full text-[10px] font-black uppercase",
+                            item.status === 'active' ? "bg-primary/10 text-primary" : "bg-surface-variant text-on-surface-variant"
+                          )}>{item.status}</span>
+                        </td>
+                        <td className="px-6 py-5 text-right pr-12">
+                          <button
+                            onClick={() => { setEditingItem(item); setEditForm(item); }}
+                            className="p-2 hover:bg-surface-container-high rounded-full transition-colors mr-1"
+                          >
+                            <MaterialIcon icon="edit" className="w-4 h-4 text-outline-variant" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteKnowledge(item.id, item.name)}
+                            className="p-2 hover:bg-error-container rounded-full transition-colors"
+                          >
+                            <MaterialIcon icon="delete" className="w-4 h-4 text-error" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         );
       case 'template':
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-[calc(100vh-250px)]">
-             {/* Left List */}
-             <div className="lg:col-span-4 bg-surface-container-lowest rounded-[2.5rem] p-6 ambient-shadow overflow-y-auto no-scrollbar">
-                <div className="flex items-center justify-between mb-6">
-                   <h4 className="font-display font-black text-on-surface">模板列表 (24)</h4>
-                   <button className="p-2 bg-primary/10 rounded-xl text-primary"><Plus className="w-4 h-4" /></button>
-                </div>
-                <div className="space-y-3">
-                   {[
-                     { name: '一元一次方程解法 A', type: 'Calculation', id: 'T102', active: true },
-                     { name: '几何求角基本型', type: 'Geometry', id: 'T205' },
-                     { name: '应用题：行程问题', type: 'Worded', id: 'T088' },
-                     { name: '分式化简求值', type: 'Calculation', id: 'T312' },
-                     { name: '平行四边形性质', type: 'Geometry', id: 'T902' }
-                   ].map(t => (
-                     <div key={t.id} className={cn(
-                       "p-4 rounded-3xl border transition-all cursor-pointer",
-                       t.active ? "bg-primary/5 border-primary/20" : "bg-surface-container-low border-transparent hover:bg-surface-container-high"
-                     )}>
-                        <div className="flex justify-between items-start mb-2">
-                           <span className="text-xs font-black text-primary uppercase">{t.type}</span>
-                           <span className="text-[10px] font-mono opacity-30">{t.id}</span>
-                        </div>
-                        <p className="font-bold text-on-surface">{t.name}</p>
-                     </div>
-                   ))}
-                </div>
-             </div>
+        return editingTemplate ? (
+          <TemplateEditor
+            template={editingTemplate}
+            onSave={(data) => {
+              showToast('模板已保存', 'success');
+              setEditingTemplate(null);
+              tplRefetch();
+            }}
+            onCancel={() => setEditingTemplate(null)}
+          />
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="lg:col-span-4 bg-surface-container-lowest rounded-[2.5rem] p-6 overflow-y-auto max-h-[calc(100vh-250px)]">
+              <div className="flex items-center justify-between mb-6">
+                <h4 className="font-display font-black text-on-surface">模板列表 ({templates.length})</h4>
+                <button
+                  onClick={() => setEditingTemplate({})}
+                  className="px-3 py-1.5 bg-primary text-on-primary rounded-full text-xs font-bold flex items-center gap-1"
+                >
+                  <MaterialIcon icon="add" className="w-3 h-3" />
+                  新建
+                </button>
+              </div>
+              <div className="space-y-3">
+                {tplLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="w-6 h-6 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : templates.length === 0 ? (
+                  <p className="text-center text-on-surface-variant py-8">暂无模板</p>
+                ) : (
+                  templates.map((t: any) => (
+                    <div
+                      key={t.id}
+                      onClick={() => setEditingTemplate(t)}
+                      className="p-4 rounded-3xl border bg-surface-container-low border-transparent hover:bg-surface-container-high cursor-pointer transition-colors"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-xs font-black text-primary uppercase">{t.type}</span>
+                        <span className="text-[10px] font-mono opacity-30">v{t.version}</span>
+                      </div>
+                      <p className="font-bold text-on-surface">{t.name}</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-full text-[8px] font-black uppercase",
+                          t.status === 'production' ? "bg-primary/10 text-primary" :
+                          t.status === 'staging' ? "bg-secondary/10 text-secondary" :
+                          "bg-surface-variant text-on-surface-variant"
+                        )}>{t.status}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
 
-             {/* Right Editor */}
-             <div className="lg:col-span-8 bg-surface-container-lowest rounded-[2.5rem] p-8 ambient-shadow flex flex-col">
-                <div className="flex justify-between items-center mb-8">
-                   <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
-                         <Code2 className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <h4 className="font-display font-black text-on-surface">模板定义：一元一次方程解法 A</h4>
-                        <p className="text-[10px] text-on-surface-variant font-bold opacity-60 tracking-widest">JSON-STRUCTURE / PARAMS</p>
-                      </div>
-                   </div>
-                   <div className="flex gap-2">
-                       <button 
-                         onClick={() => handleAction(`预览实例生成成功，难度：L${previewLevel}`)}
-                         className="px-4 py-2 bg-service-container text-primary rounded-full text-xs font-black hover:scale-105 active:scale-95 transition-all flex items-center gap-2 border border-primary/20"
-                       >
-                         <Rocket className="w-3 h-3" />
-                         预览生成题
-                       </button>
-                       <button 
-                         onClick={() => handleAction('版本 v1.2 已发布至 Staging 环境')}
-                         className="px-4 py-2 bg-primary text-on-primary rounded-full text-xs font-bold hover:scale-105 active:scale-95 transition-all"
-                       >
-                         发布 v1.2
-                       </button>
-                   </div>
+            <div className="lg:col-span-8 bg-surface-container-lowest rounded-[2.5rem] p-8">
+              <div className="flex items-center justify-center h-64 text-on-surface-variant">
+                <div className="text-center">
+                  <MaterialIcon icon="edit_note" className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                  <p className="font-bold">模板编辑器</p>
+                  <p className="text-sm opacity-60 mt-2">选择左侧模板进行编辑或新建模板</p>
                 </div>
-
-                <div className="flex-1 space-y-8 overflow-y-auto no-scrollbar pr-4">
-                   <div className="space-y-4">
-                      <div className="flex justify-between items-center">
-                         <h5 className="text-[10px] font-black text-on-surface-variant uppercase">方程结构 / Equation Structure</h5>
-                         <div className="flex gap-1 bg-surface-container-low p-1 rounded-full border border-outline-variant/10">
-                            {[0, 2, 4].map(lv => (
-                              <button 
-                                key={lv}
-                                onClick={() => setPreviewLevel(lv)}
-                                className={cn(
-                                  "px-3 py-1 rounded-full text-[10px] font-black transition-all",
-                                  previewLevel === lv ? "bg-primary text-on-primary shadow-sm" : "text-on-surface-variant/40 hover:text-on-surface-variant"
-                                )}
-                              >
-                                L{lv}
-                              </button>
-                            ))}
-                         </div>
-                      </div>
-                      <motion.div 
-                       key={previewLevel}
-                       initial={{ opacity: 0, scale: 0.95 }}
-                       animate={{ opacity: 1, scale: 1 }}
-                       className="bg-surface-container-low p-6 rounded-3xl flex items-baseline gap-2 font-mono text-2xl border border-outline-variant/10"
-                      >
-                         {previewLevel === 0 ? (
-                           <>
-                             <span className="text-primary">[a]</span>x <span className="text-secondary">+</span> <span className="text-primary">[b]</span> <span className="text-on-surface/30">=</span> <span className="text-primary">[c]</span>
-                           </>
-                         ) : previewLevel === 2 ? (
-                           <>
-                             <span className="text-primary">[a]</span>(x <span className="text-secondary">+</span> <span className="text-primary">[b]</span>) <span className="text-on-surface/30">=</span> <span className="text-primary">[c]</span>
-                           </>
-                         ) : (
-                           <>
-                             (<span className="text-primary">[a]</span>/<span className="text-primary">[b]</span>)x <span className="text-secondary">+</span> <span className="text-primary">[c]</span> <span className="text-on-surface/30">=</span> <span className="text-primary">[d]</span>
-                           </>
-                         )}
-                      </motion.div>
-                   </div>
-
-                   <div className="grid grid-cols-2 gap-6">
-                      <div className="space-y-4">
-                         <h5 className="text-[10px] font-black text-on-surface-variant uppercase">参数限制 / Param Constraints</h5>
-                         <div className="space-y-3">
-                            {(previewLevel < 4 ? ['a', 'b', 'c'] : ['a', 'b', 'c', 'd']).map(p => (
-                              <div key={p} className="flex justify-between p-3 bg-surface rounded-2xl border border-outline-variant/10 text-xs font-bold">
-                                 <span>{p}</span>
-                                 <span className="text-primary">
-                                   {previewLevel === 4 && p === 'b' ? 'Natural (2, 12)' : 'Integer (-20, 20)'}
-                                 </span>
-                              </div>
-                            ))}
-                         </div>
-                      </div>
-                      <div className="space-y-4">
-                         <h5 className="text-[10px] font-black text-on-surface-variant uppercase">解构规则 / Step Rules</h5>
-                         <div className="space-y-3">
-                            <div className="p-3 bg-secondary/5 rounded-2xl text-xs font-bold flex items-center gap-2">
-                               <div className="w-2 h-2 rounded-full bg-secondary"></div>
-                               Step 1: {previewLevel === 0 ? '移项并合并' : previewLevel === 2 ? '展开括号应用分配律' : '全等式去分母 (两边乘 [b])'}
-                            </div>
-                            <div className="p-3 bg-secondary/5 rounded-2xl text-xs font-bold flex items-center gap-2 opacity-50">
-                               <div className="w-2 h-2 rounded-full bg-secondary"></div>
-                               Step 2: 求解未知数并化简
-                            </div>
-                         </div>
-                      </div>
-                   </div>
-                </div>
-             </div>
+              </div>
+            </div>
           </div>
         );
       case 'difficulty':
         return (
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                     {/* Stats Matrix */}
-                     <div className="lg:col-span-8 space-y-6">
-                        <div className="bg-surface-container-lowest rounded-[2.5rem] p-8 ambient-shadow relative overflow-hidden group">
-                           <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full -z-10 group-hover:scale-125 transition-transform duration-700"></div>
-                           
-                           <div className="flex justify-between items-center mb-8">
-                              <h4 className="text-xl font-display font-black text-on-surface">校准矩阵 / Matrix</h4>
-                              <span className="text-[10px] font-black text-on-surface-variant/40 tracking-widest uppercase">Target: Accuracy 60-80%</span>
-                           </div>
-
-                           <div className="space-y-3">
-                              {[
-                                { level: 'L0', accuracy: 92, time: '45s', retry: 5, status: '偏易' },
-                                { level: 'L1', accuracy: 78, time: '1m 12s', retry: 12, status: '正常' },
-                                { level: 'L2', accuracy: 52, time: '3m 45s', retry: 48, status: '⚠ 偏难', highlight: true },
-                                { level: 'L3', accuracy: 18, time: '7m 20s', retry: 82, status: '过难', error: true }
-                              ].map((row) => (
-                                <div 
-                                  key={row.level}
-                                  className={cn(
-                                    "grid grid-cols-5 gap-4 px-8 py-5 items-center rounded-3xl transition-all duration-300",
-                                    row.highlight ? "bg-tertiary-container/10 border-l-4 border-tertiary shadow-md translate-x-2" : 
-                                    row.error ? "bg-error-container/10 border-l-4 border-error" : 
-                                    "bg-surface-container-low/40 hover:bg-surface-container-low"
-                                  )}
-                                >
-                                  <div className="font-display font-black text-xl text-on-surface">{row.level}</div>
-                                  <div className="flex flex-col gap-1">
-                                     <span className="text-xs font-bold text-on-surface-variant">Accuracy</span>
-                                     <div className="flex items-center gap-2">
-                                        <span className="text-sm font-black text-on-surface">{row.accuracy}%</span>
-                                        <div className="flex-1 h-1.5 bg-surface-variant rounded-full overflow-hidden">
-                                           <div 
-                                             className={cn("h-full rounded-full", row.accuracy > 70 ? "bg-primary" : row.accuracy > 40 ? "bg-tertiary" : "bg-error")} 
-                                             style={{ width: `${row.accuracy}%` }} 
-                                           />
-                                        </div>
-                                     </div>
-                                  </div>
-                                  <div className="flex flex-col gap-1">
-                                     <span className="text-xs font-bold text-on-surface-variant">Avg Time</span>
-                                     <span className="text-sm font-black text-on-surface">{row.time}</span>
-                                  </div>
-                                  <div className="flex flex-col gap-1">
-                                     <span className="text-xs font-bold text-on-surface-variant">Retry Rate</span>
-                                     <span className="text-sm font-black text-on-surface">{row.retry}%</span>
-                                  </div>
-                                  <div className="text-right">
-                                     <span className={cn(
-                                       "px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-tight",
-                                       row.highlight ? "bg-tertiary text-on-tertiary shadow-sm" : 
-                                       row.error ? "bg-error text-on-error shadow-sm" : "bg-surface-container-highest text-on-surface-variant"
-                                     )}>
-                                        {row.status}
-                                     </span>
-                                  </div>
-                                </div>
-                              ))}
-                           </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-6">
-                           <div className="bg-surface-container-lowest rounded-[2rem] p-6 ambient-shadow flex flex-col justify-between">
-                              <div className="flex justify-between items-start">
-                                 <h4 className="text-lg font-display font-black text-on-surface">系统活力 / Health</h4>
-                                 <Heart className="w-5 h-5 text-primary fill-primary/20" />
-                              </div>
-                              <div className="mt-4 flex items-center gap-4">
-                                 <span className="text-4xl font-display font-black text-primary">82%</span>
-                                 <div className="flex-1 h-2 bg-surface-variant rounded-full overflow-hidden">
-                                    <div className="bg-primary h-full rounded-full" style={{ width: '82%' }}></div>
-                                 </div>
-                              </div>
-                              <p className="text-[10px] text-on-surface-variant font-bold mt-4 opacity-50">引擎目前稳定，结构偏移较小。</p>
-                           </div>
-                           <div 
-                              onClick={() => handleAction('全量同步指令已下达，正在广播变更...')}
-                              className="bg-surface-container-lowest rounded-[2rem] p-6 ambient-shadow flex items-center gap-6 group cursor-pointer hover:bg-primary/5 transition-colors"
-                           >
-                              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                 <Wrench className="w-8 h-8 text-primary" />
-                              </div>
-                              <div>
-                                 <h4 className="font-display font-black text-on-surface leading-tight">全量同步</h4>
-                                 <p className="text-xs text-on-surface-variant font-bold opacity-60">Sync all instances</p>
-                              </div>
-                              <ChevronRight className="ml-auto w-5 h-5 text-outline-variant" />
-                           </div>
-                        </div>
-                     </div>
-
-                     {/* Insights Panel */}
-                     <div className="lg:col-span-4 space-y-6">
-                        <section className="bg-surface-container-lowest rounded-[2.5rem] p-8 ambient-shadow relative overflow-hidden flex flex-col h-full">
-                           <div className="flex items-center gap-3 mb-6">
-                              <div className="w-10 h-10 rounded-2xl bg-secondary-container flex items-center justify-center shadow-lg shadow-secondary/10">
-                                 <Zap className="w-5 h-5 text-on-secondary-container fill-on-secondary-container" />
-                              </div>
-                              <h4 className="text-xl font-display font-black text-on-surface">系统洞察 / AI</h4>
-                           </div>
-                           
-                           <div className="space-y-6 flex-1">
-                              <div className="bg-surface p-5 rounded-3xl border-l-4 border-tertiary relative overflow-hidden shadow-sm">
-                                 <div className="flex flex-col gap-2 relative z-10">
-                                    <div className="flex items-center gap-2">
-                                       <AlertCircle className="w-4 h-4 text-tertiary" />
-                                       <span className="text-xs font-black text-tertiary tracking-tighter uppercase">Anomsly Detected</span>
-                                    </div>
-                                    <h5 className="font-display font-black text-on-surface">Level 2 跨度异常</h5>
-                                    <p className="text-xs text-on-surface-variant leading-relaxed font-bold opacity-60">
-                                       L1 到 L2 的正确率跌幅超过 25%，表明题目存在认知阶梯断层。
-                                    </p>
-                                    <button 
-                                       onClick={() => handleAction('正在修复 L2 跨度分布...')}
-                                       className="mt-2 w-full py-2 bg-tertiary-container text-on-tertiary-container text-[10px] font-black rounded-full hover:shadow-md active:scale-95 transition-all"
-                                     >
-                                       修复建议：降级计算量
-                                    </button>
-                                 </div>
-                              </div>
-                           </div>
-
-                           <div className="mt-8">
-                              <button 
-                                onClick={() => handleAction('演化模拟正在推演，采样点：15,000')}
-                                className="w-full h-14 bg-on-surface text-surface rounded-full font-display font-black tracking-tight hover:scale-[1.02] active:scale-95 transition-all shadow-xl"
-                              >
-                                 开始演化模拟
-                              </button>
-                           </div>
-                        </section>
-                     </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="lg:col-span-8 space-y-6">
+              <div className="bg-surface-container-lowest rounded-[2.5rem] p-8">
+                <div className="flex justify-between items-center mb-8">
+                  <div>
+                    <h4 className="text-xl font-display font-black text-on-surface">难度校准矩阵</h4>
+                    <p className="text-xs text-on-surface-variant/60 mt-1">实时监控各级别准确率，及时发现异常断层</p>
                   </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] font-black text-on-surface-variant/40 tracking-widest uppercase">Target: 60-80%</span>
+                    <button
+                      onClick={async () => {
+                        showToast('AI 正在分析数据...', 'info');
+                        await handleAction('调参建议已生成', 'success');
+                      }}
+                      className="px-4 py-2 bg-secondary text-on-secondary-container rounded-full text-sm font-bold flex items-center gap-2 hover:scale-105 active:scale-95 transition-all"
+                    >
+                      <MaterialIcon icon="auto_awesome" className="w-4 h-4" />
+                      AI 调参建议
+                    </button>
+                  </div>
+                </div>
+
+                {diffLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {levels.map((row) => (
+                      <div
+                        key={row.level}
+                        className={cn(
+                          "grid grid-cols-6 gap-4 px-8 py-5 items-center rounded-3xl transition-all",
+                          row.accuracy < 40 ? "bg-error-container/10 border-l-4 border-error" :
+                          row.accuracy < 60 ? "bg-tertiary-container/10 border-l-4 border-tertiary" :
+                          "bg-surface-container-low/40"
+                        )}
+                      >
+                        <div className="font-display font-black text-xl text-on-surface">L{row.level}</div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs font-bold text-on-surface-variant">Accuracy</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-black text-on-surface">{row.accuracy}%</span>
+                            <div className="flex-1 h-1.5 bg-surface-variant rounded-full overflow-hidden">
+                              <div
+                                className={cn("h-full rounded-full", row.accuracy > 70 ? "bg-primary" : row.accuracy > 40 ? "bg-tertiary" : "bg-error")}
+                                style={{ width: `${row.accuracy}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs font-bold text-on-surface-variant">Avg Time</span>
+                          <span className="text-sm font-black text-on-surface">{row.avgTime}s</span>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs font-bold text-on-surface-variant">Retry Rate</span>
+                          <span className="text-sm font-black text-on-surface">{row.retryRate}%</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] font-black uppercase text-on-surface-variant">
+                            {row.sampleCount} samples
+                          </span>
+                        </div>
+                        <div className="flex justify-end">
+                          {row.accuracy < 60 && (
+                            <button
+                              onClick={async () => {
+                                showToast(`L${row.level} 参数已优化`, 'success');
+                              }}
+                              className="px-3 py-1.5 bg-tertiary text-on-tertiary-container rounded-full text-xs font-bold flex items-center gap-1"
+                            >
+                              <MaterialIcon icon="tune" className="w-3 h-3" />
+                              调优
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="lg:col-span-4 space-y-6">
+              <div className="bg-surface-container-lowest rounded-[2.5rem] p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-tertiary-container flex items-center justify-center">
+                      <MaterialIcon icon="warning" className="w-5 h-5 text-on-tertiary-container" />
+                    </div>
+                    <h4 className="text-xl font-display font-black text-on-surface">异常检测</h4>
+                  </div>
+                </div>
+
+                {anomalies.length === 0 ? (
+                  <div className="text-center py-8">
+                    <MaterialIcon icon="check_circle" className="w-12 h-12 mx-auto mb-3 text-primary opacity-50" />
+                    <p className="text-on-surface-variant text-sm">未检测到异常</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {anomalies.map((anomaly, i) => (
+                      <div key={i} className="bg-tertiary-container/10 p-4 rounded-2xl border-l-4 border-tertiary">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <MaterialIcon icon="warning" className="w-4 h-4 text-tertiary" />
+                            <span className="text-xs font-black text-tertiary uppercase">Anomaly #{i + 1}</span>
+                          </div>
+                          <span className={cn(
+                            "px-2 py-0.5 rounded-full text-[8px] font-black uppercase",
+                            anomaly.severity === 'high' ? "bg-error-container/30 text-error" :
+                            anomaly.severity === 'medium' ? "bg-tertiary-container/30 text-tertiary" :
+                            "bg-secondary-container/30 text-secondary"
+                          )}>{anomaly.severity}</span>
+                        </div>
+                        <p className="font-bold text-on-surface">L{anomaly.from} → L{anomaly.to}</p>
+                        <p className="text-lg font-display font-black text-tertiary">{anomaly.dropRate}% 跌幅</p>
+                        <div className="flex gap-2 mt-3">
+                          <button
+                            onClick={async () => {
+                              showToast('修复方案已应用', 'success');
+                            }}
+                            className="flex-1 py-2 bg-tertiary text-on-tertiary-container rounded-xl text-xs font-bold"
+                          >
+                            一键修复
+                          </button>
+                          <button
+                            onClick={async () => {
+                              showToast('已忽略此异常', 'info');
+                            }}
+                            className="px-3 py-2 bg-surface-container-low rounded-xl text-xs font-bold"
+                          >
+                            <MaterialIcon icon="close" className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 快速操作 */}
+              <div className="bg-surface-container-lowest rounded-[2.5rem] p-8">
+                <h4 className="text-lg font-display font-black text-on-surface mb-4">快速操作</h4>
+                <div className="space-y-3">
+                  <button
+                    onClick={async () => {
+                      showToast('正在重新校准所有级别...', 'info');
+                      await handleAction('难度校准完成', 'success');
+                    }}
+                    className="w-full py-3 bg-primary text-on-primary rounded-2xl text-sm font-bold flex items-center justify-center gap-2"
+                  >
+                    <MaterialIcon icon="refresh" className="w-4 h-4" />
+                    全部重新校准
+                  </button>
+                  <button
+                    onClick={async () => {
+                      showToast('导出校准报告...', 'info');
+                      await handleAction('报告已导出', 'success');
+                    }}
+                    className="w-full py-3 bg-surface-container-low text-on-surface rounded-2xl text-sm font-bold flex items-center justify-center gap-2"
+                  >
+                    <MaterialIcon icon="download" className="w-4 h-4" />
+                    导出校准报告
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         );
       case 'quality':
-        return (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-             {[
-               { title: '无限解检测', status: 'Healthy', icon: FlaskConical, desc: '检测方程模板是否可能产生 0=0 的情况' },
-               { title: '冗余题剔除', status: '⚠ Issues', icon: Trash2, desc: '检测语义重复度 > 0.9 的自动生成题' },
-               { title: '符号冲突', status: 'Healthy', icon: Bug, desc: '检查分数与分母符号的显示冲突' },
-             ].map(card => (
-               <div key={card.title} className="bg-surface-container-lowest rounded-[2rem] p-8 ambient-shadow border border-outline-variant/5">
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                       <card.icon className="w-6 h-6" />
-                    </div>
-                    <span className={cn(
-                      "text-[10px] font-black uppercase px-3 py-1 rounded-full",
-                      card.status === 'Healthy' ? "bg-primary/10 text-primary" : "bg-error/10 text-error"
-                    )}>{card.status}</span>
-                  </div>
-                  <h4 className="font-display font-black text-on-surface mb-2">{card.title}</h4>
-                  <p className="text-xs text-on-surface-variant leading-relaxed opacity-60 font-bold">{card.desc}</p>
-                  <button 
-                    onClick={() => handleAction(`[${card.title}] 诊断运行完毕，未发现致命冲突`)}
-                    className="mt-8 w-full py-3 bg-surface-container-low rounded-xl text-xs font-bold hover:bg-surface-container-high active:scale-95 transition-all"
-                  >
-                    运行诊断
-                  </button>
-               </div>
-             ))}
-          </div>
-        )
+        return <QualityAnalysis />;
       case 'config':
         return (
           <div className="space-y-8">
-             <div className="bg-surface-container-lowest rounded-[2.5rem] p-8 ambient-shadow relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-8">
-                   {totalScore === 100 ? (
-                     <div className="flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-xs font-black">
-                        <CheckCircle2 className="w-4 h-4" />
-                        分值已平衡 (100 pts)
-                     </div>
-                   ) : (
-                     <div className="flex items-center gap-2 bg-error/10 text-error px-4 py-2 rounded-full text-xs font-black animate-pulse">
-                        <AlertCircle className="w-4 h-4" />
-                        分值不平衡 ({totalScore} / 100)
-                     </div>
-                   )}
-                </div>
-                <h3 className="text-xl font-display font-black text-on-surface mb-2">分数地图 / Score Balance</h3>
-                <p className="text-xs text-on-surface-variant font-bold opacity-60 max-w-md">所有参与测评的知识点权重总和必须严格等于 100。当前权重直接决定主流程题目的分布比例。</p>
-             </div>
-
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {knowledgePoints.filter(k => k.inAssess).map(k => (
-                  <div key={k.id} className="bg-surface-container-low rounded-3xl p-6 border border-outline-variant/5">
-                     <p className="text-[10px] font-black text-on-surface-variant/40 mb-1">{k.id}</p>
-                     <p className="font-bold text-on-surface mb-4">{k.name}</p>
-                     <div className="flex items-end justify-between">
-                        <div className="text-3xl font-display font-black text-primary">{k.weight}</div>
-                        <div className="text-[10px] font-black opacity-30">WEIGHT</div>
-                     </div>
+            <div className="bg-surface-container-lowest rounded-[2.5rem] p-8">
+              <div className="absolute top-8 right-8">
+                {weightValid ? (
+                  <div className="flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-xs font-black">
+                    <MaterialIcon icon="check_circle" className="w-4 h-4" />
+                    分值已平衡 ({weightTotal} pts)
                   </div>
-                ))}
-             </div>
+                ) : (
+                  <div className="flex items-center gap-2 bg-error/10 text-error px-4 py-2 rounded-full text-xs font-black">
+                    <MaterialIcon icon="warning" className="w-4 h-4" />
+                    分值不平衡 ({weightTotal} / 100)
+                  </div>
+                )}
+              </div>
+              <h3 className="text-xl font-display font-black text-on-surface mb-2">分数地图</h3>
+              <p className="text-xs text-on-surface-variant font-bold opacity-60 max-w-md">所有参与测评的知识点权重总和必须等于100</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {knowledgePoints.filter((k: any) => k.inAssess).map((k: any) => (
+                <div key={k.id} className="bg-surface-container-low rounded-3xl p-6">
+                  <p className="font-bold text-on-surface mb-4">{k.name}</p>
+                  <div className="flex items-end justify-between">
+                    <div className="text-3xl font-display font-black text-primary">{k.weight}</div>
+                    <div className="text-[10px] font-black opacity-30">WEIGHT</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case 'dashboard':
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-surface-container-lowest rounded-[2.5rem] p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-primary-container flex items-center justify-center">
+                  <MaterialIcon icon="storage" className="w-6 h-6 text-on-primary-container" />
+                </div>
+                <div>
+                  <p className="text-2xl font-display font-black text-on-surface">{kpTotal}</p>
+                  <p className="text-xs text-on-surface-variant">知识点总数</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-surface-container-lowest rounded-[2.5rem] p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-secondary-container flex items-center justify-center">
+                  <MaterialIcon icon="edit_note" className="w-6 h-6 text-on-secondary-container" />
+                </div>
+                <div>
+                  <p className="text-2xl font-display font-black text-on-surface">{templates.length}</p>
+                  <p className="text-xs text-on-surface-variant">题库模板</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-surface-container-lowest rounded-[2.5rem] p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-tertiary-container flex items-center justify-center">
+                  <MaterialIcon icon="trending_up" className="w-6 h-6 text-on-tertiary-container" />
+                </div>
+                <div>
+                  <p className="text-2xl font-display font-black text-on-surface">{levels.length}</p>
+                  <p className="text-xs text-on-surface-variant">难度级别</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-surface-container-lowest rounded-[2.5rem] p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${weightValid ? 'bg-primary-container' : 'bg-error-container'}`}>
+                  <MaterialIcon icon="check_circle" className={`w-6 h-6 ${weightValid ? 'text-on-primary-container' : 'text-on-error'}`} />
+                </div>
+                <div>
+                  <p className="text-2xl font-display font-black text-on-surface">{weightTotal}</p>
+                  <p className="text-xs text-on-surface-variant">权重总和</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      default:
+        return (
+          <div className="flex items-center justify-center h-64">
+            <p className="text-on-surface-variant">此功能开发中...</p>
           </div>
         );
     }
-  }
+  };
 
   return (
-    <div className="flex h-screen bg-surface overflow-hidden relative">
-      {/* Toast Notification */}
+    <div className="flex h-screen bg-surface overflow-hidden">
       <AnimatePresence>
         {toast && (
-          <motion.div 
+          <motion.div
             initial={{ y: -100, opacity: 0 }}
             animate={{ y: 24, opacity: 1 }}
             exit={{ y: -100, opacity: 0 }}
             className="fixed top-0 left-1/2 -translate-x-1/2 z-[100] bg-on-surface text-surface px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 font-bold border border-white/10"
           >
-             <CheckCircle2 className="w-5 h-5 text-primary" />
-             {toast.msg}
+            <MaterialIcon icon="check_circle" className="w-5 h-5 text-primary" />
+            {toast.msg}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Processing Overlay */}
       <AnimatePresence>
         {isProcessing && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[90] bg-surface/50 backdrop-blur-sm flex items-center justify-center pointer-events-auto"
+            className="fixed inset-0 z-[90] bg-surface/50 backdrop-blur-sm flex items-center justify-center"
           >
-             <motion.div 
-               animate={{ rotate: 360 }}
-               transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-               className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full"
-             />
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+              className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full"
+            />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Sidebar */}
-      <aside className="w-72 bg-[#bffee7] flex flex-col p-6 gap-6 z-50 border-r border-outline-variant/10 shadow-2xl shadow-primary/10">
+      <aside className="w-72 bg-surface-container flex flex-col p-6 gap-6 border-r border-outline-variant/10">
         <div className="px-4 flex items-center gap-4">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-container flex items-center justify-center shadow-lg shadow-primary/20">
-             <Rocket className="w-6 h-6 text-on-primary fill-on-primary" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-container flex items-center justify-center">
+            <MaterialIcon icon="rocket_launch" className="w-6 h-6 text-on-primary" />
           </div>
           <div>
-            <h1 className="text-display font-black text-primary text-xl leading-none">Engine</h1>
-            <p className="text-[10px] font-bold text-on-surface-variant/40 mt-1 uppercase tracking-widest leading-none">Educational Core</p>
+            <h1 className="font-black text-primary text-xl">Engine</h1>
+            <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest">Admin Console</p>
           </div>
         </div>
 
-        <button 
-          onClick={() => handleAction('配置已成功部署至分布式 Edge 节点')}
-          className="w-full bg-on-surface text-surface font-bold py-3 rounded-full shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 mt-4"
-        >
-           <Send className="w-4 h-4" />
-           部署当前配置
-        </button>
-
-        <nav className="flex-1 space-y-2 no-scrollbar overflow-y-auto px-1 mt-6">
+        <nav className="flex-1 space-y-2 overflow-y-auto">
           {menuItems.map((item) => {
             const isActive = activeTab === item.id;
             return (
@@ -573,111 +615,169 @@ const ConsolePage: React.FC<ConsolePageProps> = ({ onExit }) => {
                 key={item.id}
                 onClick={() => setActiveTab(item.id as Tab)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 rounded-full transition-all duration-300",
-                  isActive 
-                    ? "bg-surface-container-lowest text-primary shadow-sm ambient-shadow font-black scale-[1.02]" 
-                    : "text-on-surface-variant/60 hover:text-on-surface-variant hover:bg-surface-container-lowest/30"
+                  "w-full flex items-center gap-3 px-4 py-3 rounded-full transition-all",
+                  isActive
+                    ? "bg-primary text-on-primary font-black scale-[1.02]"
+                    : "text-on-surface-variant/60 hover:text-on-surface-variant hover:bg-surface-container-lowest"
                 )}
               >
-                <item.icon className={cn("w-5 h-5", isActive && "fill-primary")} />
+                <MaterialIcon icon={item.icon} className="w-5 h-5" />
                 <span className="text-sm font-bold">{item.label}</span>
               </button>
             );
           })}
         </nav>
 
-        <div className="pt-6 border-t border-outline-variant/10 space-y-2">
-           <button className="w-full flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 hover:text-primary transition-colors text-sm font-bold">
-              <Settings className="w-5 h-5" />
-              Settings
-           </button>
-           <button 
-             onClick={onExit}
-             className="w-full flex items-center gap-3 px-4 py-3 text-error/60 hover:text-error transition-colors text-sm font-bold"
-           >
-              <LogOut className="w-5 h-5" />
-              Exit Console
-           </button>
-        </div>
+        <button
+          onClick={onExit}
+          className="w-full flex items-center gap-3 px-4 py-3 text-error/60 hover:text-error transition-colors text-sm font-bold"
+        >
+          <MaterialIcon icon="logout" className="w-5 h-5" />
+          Exit Console
+        </button>
       </aside>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-surface">
-        {/* Top Navbar */}
-        <header className="h-20 px-10 flex items-center justify-between border-b border-outline-variant/10 glass-panel z-40 bg-surface/80">
-           <div className="flex items-center gap-4">
-              <div className="bg-primary/10 text-primary p-2 rounded-xl">
-                 <Pulse className="w-5 h-5" />
-              </div>
-              <div>
-                 <h2 className="text-xl font-display font-black text-on-surface tracking-tight">内容引擎控制台</h2>
-                 <p className="text-[10px] text-on-surface-variant/40 font-black uppercase tracking-widest">{activeTab} system / active</p>
-              </div>
-           </div>
-           
-           <div className="flex items-center gap-8">
-              <div className="flex items-center gap-3 bg-surface-container-low p-1 rounded-full border border-outline-variant/10">
-                 <button className="px-4 py-1.5 rounded-full text-[10px] font-black uppercase bg-primary text-on-primary shadow-sm transition-all">Prod</button>
-                 <button className="px-4 py-1.5 rounded-full text-[10px] font-black uppercase text-on-surface-variant opacity-40 hover:opacity-100 transition-all">Staging</button>
-                 <button className="px-4 py-1.5 rounded-full text-[10px] font-black uppercase text-on-surface-variant opacity-40 hover:opacity-100 transition-all">Beta</button>
-              </div>
-              <div className="flex items-center gap-4 border-l border-outline-variant/20 pl-8">
-                <button className="relative w-10 h-10 rounded-full hover:bg-surface-high transition-colors flex items-center justify-center">
-                   <Bell className="w-5 h-5 text-on-surface-variant" />
-                   <span className="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
-                </button>
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-tertiary to-tertiary-container flex items-center justify-center text-on-tertiary font-black shadow-lg shadow-tertiary/10 border border-white/20">
-                   A
-                </div>
-              </div>
-           </div>
+        <header className="h-20 px-10 flex items-center justify-between border-b border-outline-variant/10 bg-surface/80">
+          <div className="flex items-center gap-4">
+            <div className="bg-primary/10 text-primary p-2 rounded-xl">
+              <MaterialIcon icon="show_chart" className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-display font-black text-on-surface">内容引擎控制台</h2>
+              <p className="text-[10px] text-on-surface-variant/40 font-black uppercase">{activeTab} system</p>
+            </div>
+          </div>
         </header>
 
-        {/* Workspace Content */}
-        <main className="flex-1 overflow-y-auto no-scrollbar p-10 relative">
-           <AnimatePresence mode="wait">
-             <motion.div
-               key={activeTab}
-               initial={{ opacity: 0, y: 15 }}
-               animate={{ opacity: 1, y: 0 }}
-               exit={{ opacity: 0, y: -15 }}
-               className="space-y-10"
-             >
-                <div className="flex justify-between items-end mb-12">
-                   <div>
-                      <h3 className="text-5xl font-display font-black text-on-surface tracking-tighter mb-4">
-                         {menuItems.find(i => i.id === activeTab)?.label}
-                      </h3>
-                      <p className="text-sm text-on-surface-variant max-w-2xl font-bold opacity-60 leading-relaxed italic">
-                         {activeTab === 'template' ? '通过参数化语言流式定义题目的解构步骤与逻辑分支。' : 
-                          activeTab === 'difficulty' ? '根据百万级真实反馈数据，动态调整学习路径的梯度。' :
-                          activeTab === 'data' ? '管理跨级衔接的知识点索引，确保学力跃迁路径的连续性。' : 
-                          '系统核心全局参数配置与监控。'}
-                      </p>
-                   </div>
-                   <div className="flex items-center gap-3">
-                      <button 
-                        onClick={() => handleAction('工作区缓存已清除', 'info')}
-                        className="px-8 py-4 rounded-full bg-surface-container-lowest text-on-surface-variant font-black text-xs shadow-sm flex items-center gap-2 border border-outline-variant/10 hover:shadow-md active:scale-95 transition-all"
-                      >
-                        <RefreshCw className="w-4 h-4" />
-                        重置状态
-                      </button>
-                      <button 
-                        onClick={() => handleAction('变更已提交，同步进度：100%')}
-                        className="px-10 py-4 rounded-full bg-primary text-on-primary font-black text-xs shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 border-2 border-white/20"
-                      >
-                        <Save className="w-4 h-4 fill-on-primary" />
-                        保存并同步
-                      </button>
-                   </div>
+        <main className="flex-1 overflow-y-auto p-10">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              className="space-y-10"
+            >
+              <div className="flex justify-between items-end mb-12">
+                <div>
+                  <h3 className="text-5xl font-display font-black text-on-surface mb-4">
+                    {menuItems.find(i => i.id === activeTab)?.label}
+                  </h3>
                 </div>
+              </div>
 
-                {renderContent()}
-             </motion.div>
-           </AnimatePresence>
+              {renderContent()}
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
+
+      {/* Edit Modal */}
+      <AnimatePresence>
+        {editingItem !== null && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[95] bg-black/50 flex items-center justify-center p-4"
+            onClick={() => { setEditingItem(null); setEditForm({}); }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-surface rounded-[2rem] p-8 w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-2xl font-display font-black text-on-surface mb-6">
+                {editingItem?.id ? '编辑知识点' : '新建知识点'}
+              </h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-bold text-on-surface-variant">名称</label>
+                  <input
+                    type="text"
+                    className="w-full bg-surface-container-low rounded-xl px-4 py-3 mt-1"
+                    value={editForm.name || ''}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-bold text-on-surface-variant">学科</label>
+                  <select
+                    className="w-full bg-surface-container-low rounded-xl px-4 py-3 mt-1"
+                    value={editForm.subject || '初中'}
+                    onChange={(e) => setEditForm({ ...editForm, subject: e.target.value })}
+                  >
+                    <option value="初中">初中</option>
+                    <option value="高中">高中</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-bold text-on-surface-variant">分类</label>
+                  <select
+                    className="w-full bg-surface-container-low rounded-xl px-4 py-3 mt-1"
+                    value={editForm.category || '代数'}
+                    onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                  >
+                    <option value="代数">代数</option>
+                    <option value="几何">几何</option>
+                    <option value="统计">统计</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-bold text-on-surface-variant">权重 (1-100)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    className="w-full bg-surface-container-low rounded-xl px-4 py-3 mt-1"
+                    value={editForm.weight || 10}
+                    onChange={(e) => setEditForm({ ...editForm, weight: parseInt(e.target.value) })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-bold text-on-surface-variant">参与测评</label>
+                  <button
+                    onClick={() => setEditForm({ ...editForm, inAssess: !editForm.inAssess })}
+                    className={cn(
+                      "w-12 h-6 rounded-full transition-all relative",
+                      editForm.inAssess ? "bg-primary" : "bg-surface-variant"
+                    )}
+                  >
+                    <motion.div
+                      animate={{ x: editForm.inAssess ? 24 : 4 }}
+                      className="absolute top-1 w-4 h-4 rounded-full bg-surface"
+                    />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-4 mt-8">
+                <button
+                  onClick={() => { setEditingItem(null); setEditForm({}); }}
+                  className="flex-1 py-3 rounded-full bg-surface-container-low text-on-surface-variant font-bold"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSaveKnowledge}
+                  disabled={isProcessing}
+                  className="flex-1 py-3 rounded-full bg-primary text-on-primary font-bold disabled:opacity-50"
+                >
+                  {isProcessing ? '保存中...' : '保存'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

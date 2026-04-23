@@ -18,11 +18,12 @@ export async function GET(req: NextRequest) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    // 获取时间范围内的练习记录
+    // 获取时间范围内的练习记录（只计算有效完成记录）
     const attempts = await prisma.attempt.findMany({
       where: {
         userId,
         completedAt: { gte: startDate },
+        score: { gt: 0 },  // 只计算有分数的记录
       },
       include: {
         steps: {
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
       dailyStats.set(dateStr, existing);
     });
 
-    // 转换为数组并按日期排序
+    // 转换为数组并按日期排序，只返回有练习的天
     const timeline = Array.from(dailyStats.entries())
       .map(([date, stats]) => ({
         date,
@@ -73,6 +74,7 @@ export async function GET(req: NextRequest) {
         totalMinutes: Math.round(stats.totalDuration / 60),
         accuracy: Math.round((stats.correctSteps / stats.totalSteps) * 100),
       }))
+      .filter(item => item.count > 0)  // 只返回有练习的天
       .sort((a, b) => a.date.localeCompare(b.date));
 
     // 计算整体趋势

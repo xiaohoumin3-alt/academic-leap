@@ -1,14 +1,14 @@
 """
-测评相关API
+测评相关API（V2.0 - 稳健估分版）
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import User, Assessment, KnowledgePoint
+from app.models import User, Assessment, KnowledgePoint, UserAbility
 from app.engines.question_generator import question_generator
-from app.schemas import StartAssessmentResponse, QuestionInAssessment
+from app.engines.score_estimator import score_estimator
+from app.schemas import StartAssessmentResponse, QuestionInAssessment, UserCreate
 import uuid
-import random
 
 router = APIRouter()
 
@@ -51,9 +51,9 @@ async def start_assessment(user_id: uuid.UUID, db: Session = Depends(get_db)):
             "knowledge_id": kp.id,
             "knowledge_name": kp.name,
             "level": level,
-            "content": q_data["content"],
-            "answer": q_data["answer"],
-            "input_type": q_data["input_type"]
+            "content": q_data.content,
+            "answer": q_data.answer,
+            "input_type": q_data.input_type
         })
 
     # 保存题目到generated_questions
@@ -88,7 +88,9 @@ async def start_assessment(user_id: uuid.UUID, db: Session = Depends(get_db)):
 
 @router.get("/history/{user_id}")
 async def get_assessment_history(user_id: uuid.UUID, db: Session = Depends(get_db)):
-    """获取用户测评历史"""
+    """
+    获取用户测评历史（V2.0 - 包含稳定等级）
+    """
     assessments = db.query(Assessment).filter(
         Assessment.user_id == user_id
     ).order_by(Assessment.created_at.desc()).limit(10).all()
@@ -97,16 +99,50 @@ async def get_assessment_history(user_id: uuid.UUID, db: Session = Depends(get_d
         "id": str(a.id),
         "score_estimate": a.score_estimate,
         "score_range": a.score_range,
+        "stability_level": a.stability_level,
         "created_at": a.created_at.isoformat()
     } for a in assessments]
 
 
+@router.post("/finish/{assessment_id}")
+async def finish_assessment(assessment_id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    完成测评，计算最终估分（V2.0 - 稳健版）
+
+    保存估分结果到assessments表
+    """
+    assessment = db.query(Assessment).filter(
+        Assessment.id == assessment_id
+    ).first()
+
+    if not assessment:
+        raise HTTPException(status_code=404, detail="测评记录不存在")
+
+    # 使用稳健估分引擎
+    estimate = score_estimator.estimate(db, str(assessment.user_id))
+
+    # 更新测评记录
+    assessment.score_estimate = estimate.score
+    assessment.score_range = estimate.range
+    assessment.stability_level = estimate.stability
+    db.commit()
+
+    return {
+        "assessment_id": str(assessment_id),
+        "score": estimate.score,
+        "range": estimate.range,
+        "stability": estimate.stability,
+        "confidence": estimate.confidence
+    }
+
+
 @router.post("/users", status_code=201)
-async def create_user(name: str, grade: int = None, db: Session = Depends(get_db)):
+async def create_user(request: UserCreate, db: Session = Depends(get_db)):
     """创建新用户"""
     from app.models import User
+    from app.schemas import UserCreate
 
-    user = User(name=name, grade=grade)
+    user = User(name=request.name, grade=request.grade)
     db.add(user)
     db.commit()
     db.refresh(user)

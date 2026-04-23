@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { AlertCircle, RefreshCw, Home } from 'lucide-react';
 import Link from 'next/link';
+import MaterialIcon from '../components/MaterialIcon';
 
 export default function Error({
   error,
@@ -19,7 +19,7 @@ export default function Error({
     <div className="min-h-screen flex items-center justify-center bg-surface p-6">
       <div className="max-w-md w-full bg-surface-container-lowest rounded-[2rem] p-8 shadow-xl">
         <div className="w-16 h-16 rounded-full bg-error-container/20 flex items-center justify-center mx-auto mb-6">
-          <AlertCircle className="w-8 h-8 text-error" />
+          <MaterialIcon icon="error" className="text-error" style={{ fontSize: '32px' }} />
         </div>
 
         <h1 className="text-2xl font-display font-black text-on-surface text-center mb-4">
@@ -35,7 +35,7 @@ export default function Error({
             onClick={reset}
             className="w-full py-4 rounded-full bg-primary text-on-primary font-display font-bold text-lg flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all"
           >
-            <RefreshCw className="w-5 h-5" />
+            <MaterialIcon icon="refresh" className="" style={{ fontSize: '20px' }} />
             重试
           </button>
 
@@ -43,7 +43,7 @@ export default function Error({
             href="/"
             className="w-full py-4 rounded-full bg-surface-container-highest text-on-surface font-display font-bold text-lg flex items-center justify-center gap-2 hover:bg-surface-container-highest/80 active:scale-95 transition-all"
           >
-            <Home className="w-5 h-5" />
+            <MaterialIcon icon="home" className="" style={{ fontSize: '20px' }} />
             返回首页
           </Link>
         </div>
