@@ -170,15 +170,27 @@ export async function GET(req: NextRequest) {
     }
 
     // 获取全部答题统计（所有练习的所有 steps）- 用于"我的"页显示
+    // 先获取已完成的 attempt IDs
+    const completedAttemptIds = await prisma.attempt.findMany({
+      where: {
+        userId,
+        completedAt: { not: null },
+      },
+      select: { id: true },
+    });
+
+    const attemptIds = completedAttemptIds.map((a) => a.id);
+
+    // 使用 attemptId 过滤，避免嵌套关系查询
     const allStepsCount = await prisma.attemptStep.count({
       where: {
-        attempt: { userId, completedAt: { not: null } },
+        attemptId: { in: attemptIds },
       },
     });
 
     const correctStepsCount = await prisma.attemptStep.count({
       where: {
-        attempt: { userId, completedAt: { not: null } },
+        attemptId: { in: attemptIds },
         isCorrect: true,
       },
     });
