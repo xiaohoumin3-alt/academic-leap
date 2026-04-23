@@ -1,15 +1,15 @@
-# 知识点树形筛选系统实施计划
+# 知识点树形筛选系统实施计划 v2
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 
-**目标:** 实现基于年级+科目+教材版本的知识点筛选系统，支持用户勾选知识点和智能推荐
+**目标:** 实现年级+科目+教材版本的知识点筛选系统，概念+实例双层架构
 
 **架构:**
 - 新增 TextbookVersion 和 Chapter 表存储教材章节结构
+- 新增 KnowledgeConcept 表存储概念层（双层架构）
 - 新增 UserEnabledKnowledge 表存储用户勾选状态
 - User 表扩展添加年级/科目/教材/进度字段
-- API 层提供设置和知识点树接口
-- UI 层实现首次引导和设置页面
+- 混合权重：概念默认权重，实例可覆盖
 
 **技术栈:** Prisma, Next.js 15 App Router, React, TypeScript, SQLite
 
@@ -17,36 +17,38 @@
 
 ## 阶段1: 数据层
 
-### Task 1: 更新 Prisma Schema - 添加新表
+### Task 1: 更新 Prisma Schema
 
 **文件:** `prisma/schema.prisma`
 
-- [ ] **Step 1: 在 User 模型中添加新字段**
+- [ ] **Step 1: 添加 KnowledgeConcept 模型**
 
-在 `User` 模型的 `assessments Assessment[]` 后添加：
+在 `model User {` 前添加：
 
 ```prisma
-  // 新增：年级科目教材设置
-  selectedGrade      Int?                  // 选择的年级 (7-12)
-  selectedSubject    String?               // 选择的科目 (数学/物理/化学)
-  selectedTextbookId String?               // 选择的教材版本ID
-  studyProgress      Int       @default(0) // 学习进度百分比 0-100
+model KnowledgeConcept {
+  id          String    @id @default(cuid())
+  name        String    // "勾股定理"
+  category    String?   // "几何"、"代数"
+  weight      Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  enabledKnowledge   UserEnabledKnowledge[]
+  instances   KnowledgePoint[]
+}
 ```
 
-- [ ] **Step 2: 在 UserKnowledge 模型后添加新模型**
+- [ ] **Step 2: 添加 TextbookVersion 模型**
 
 ```prisma
-// 教材版本
 model TextbookVersion {
   id          String   @id @default(cuid())
-  name        String   // "人教版", "北师大版"
-  publisher   String?  // "人民教育出版社"
-  grade       Int      // 7-12
-  subject     String   // "数学", "物理", "化学"
-  year        String?  // "2024版"
-  status      String   @default("active") // active, archived
+  name        String
+  publisher   String?
+  grade       Int
+  subject     String
+  year        String?
+  status      String   @default("active")
   chapters    Chapter[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -54,140 +56,193 @@ model TextbookVersion {
   @@unique([grade, subject, name])
   @@index([grade, subject, status])
 }
+```
 
-// 教材章节
+- [ ] **Step 3: 添加 Chapter 模型**
+
+```prisma
 model Chapter {
   id              String           @id @default(cuid())
-  textbookId      String           // 关联教材版本
-  chapterNumber   Int              // 第几章
-  chapterName     String           // "有理数"
-  sectionNumber   Int?             // 第几节（可选）
-  sectionName     String?          // 小节名称
-  parentId        String?          // 父章节ID（用于小节）
+  textbookId      String
+  chapterNumber   Int
+  chapterName     String
+  sectionNumber   Int?
+  sectionName     String?
+  parentId        String?
   sort            Int              @default(0)
 
   textbook        TextbookVersion  @relation(fields: [textbookId], references: [id])
   parent          Chapter?         @relation("ChapterHierarchy", fields: [parentId], references: [id])
   children        Chapter[]        @relation("ChapterHierarchy")
   knowledgePoints KnowledgePoint[]
-  enabledBy       UserEnabledKnowledge[]
 
   @@index([textbookId, parentId])
 }
+```
 
-// 用户勾选的知识点/章节
+- [ ] **Step 4: 添加 UserEnabledKnowledge 模型**
+
+```prisma
 model UserEnabledKnowledge {
   id        String   @id @default(cuid())
   userId    String
-  nodeId    String   // 章节ID或知识点ID
-  nodeType  String   // "chapter" 或 "point"
+  nodeId    String
+  nodeType  String
   createdAt DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  chapter   Chapter? @relation(fields: [nodeId], references: [id], onDelete: Cascade)
 
   @@unique([userId, nodeId])
   @@index([userId, nodeType])
 }
 ```
 
-- [ ] **Step 3: 修改 KnowledgePoint 模型**
+- [ ] **Step 5: 在 User 模型中添加字段**
 
-将 `KnowledgePoint` 模型修改为：
+在 `assessments Assessment[]` 后添加：
 
 ```prisma
-// 知识点
+  // 年级科目教材设置
+  selectedGrade      Int?
+  selectedSubject    String?
+  selectedTextbookId String?
+  studyProgress      Int       @default(0)
+
+  enabledKnowledge   UserEnabledKnowledge[]
+```
+
+- [ ] **Step 6: 修改 KnowledgePoint 模型**
+
+替换现有 KnowledgePoint 模型：
+
+```prisma
 model KnowledgePoint {
   id          String    @id @default(cuid())
-  chapterId   String    // 关联章节（新增）
-  name        String    // 知识点名称
-  weight      Int       @default(0) // 分值权重 1-100
-  inAssess    Boolean   @default(true) // 参与测评
-  status      String    @default("active") // active/draft/archived
+  chapterId   String
+  conceptId   String
+  name        String
+  weight      Int       @default(0) // 0=使用概念权重，>0=覆盖
+  inAssess    Boolean   @default(true)
+  status      String    @default("active")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  chapter     Chapter                @relation(fields: [chapterId], references: [id])
+  chapter     Chapter           @relation(fields: [chapterId], references: [id])
+  concept     KnowledgeConcept  @relation(fields: [conceptId], references: [id])
   histories   KnowledgePointHistory[]
   templates   Template[]
-  enabledBy   UserEnabledKnowledge[]
 }
 ```
 
-**注意:** 移除了原有的 `subject` 和 `category` 字段，现在通过章节的教材获取。
-
-- [ ] **Step 4: 生成并运行迁移**
+- [ ] **Step 7: 运行迁移**
 
 ```bash
-cd /Users/seanxx/academic-leap/academic-leap
-npx prisma migrate dev --name add_knowledge_tree
-```
-
-预期输出: 成功创建迁移文件并应用
-
-- [ ] **Step 5: 重新生成 Prisma Client**
-
-```bash
+npx prisma migrate dev --name add_knowledge_tree_v3
 npx prisma generate
 ```
 
-预期输出: 成功生成客户端
+预期输出: 成功创建迁移文件
 
-- [ ] **Step 6: 提交**
+- [ ] **Step 8: 提交**
 
 ```bash
 git add prisma/schema.prisma prisma/migrations
-git commit -m "feat: add textbook version and chapter models"
+git commit -m "feat: add knowledge concept and textbook models"
 ```
 
 ---
 
-### Task 2: 创建教材版本种子数据
+### Task 2: 创建种子数据和迁移脚本
 
-**文件:** `prisma/seed-textbooks.ts` (新建)
+**文件:** `prisma/seed-v3.ts` (新建)
 
-- [ ] **Step 1: 创建种子数据文件**
+- [ ] **Step 1: 创建种子脚本**
 
 ```typescript
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const textbooks = [
-  // 初中数学
-  { grade: 7, subject: '数学', name: '人教版', publisher: '人民教育出版社', year: '2024' },
-  { grade: 7, subject: '数学', name: '北师大版', publisher: '北京师范大学出版社', year: '2024' },
-  { grade: 7, subject: '数学', name: '苏教版', publisher: '江苏凤凰教育出版社', year: '2024' },
-  { grade: 8, subject: '数学', name: '人教版', publisher: '人民教育出版社', year: '2024' },
-  { grade: 8, subject: '数学', name: '北师大版', publisher: '北京师范大学出版社', year: '2024' },
-  { grade: 9, subject: '数学', name: '人教版', publisher: '人民教育出版社', year: '2024' },
-
-  // 高中数学
-  { grade: 10, subject: '数学', name: '人教A版', publisher: '人民教育出版社', year: '2024' },
-  { grade: 10, subject: '数学', name: '人教B版', publisher: '人民教育出版社', year: '2024' },
-  { grade: 11, subject: '数学', name: '人教A版', publisher: '人民教育出版社', year: '2024' },
-  { grade: 12, subject: '数学', name: '人教A版', publisher: '人民教育出版社', year: '2024' },
-];
-
 async function main() {
-  console.log('开始创建教材版本数据...');
-
-  for (const textbook of textbooks) {
-    await prisma.textbookVersion.upsert({
-      where: {
-        grade_subject_name: {
-          grade: textbook.grade,
-          subject: textbook.subject,
-          name: textbook.name,
-        },
+  // 1. 创建8年级数学教材
+  const textbook = await prisma.textbookVersion.upsert({
+    where: {
+      grade_subject_name: {
+        grade: 8,
+        subject: '数学',
+        name: '人教版',
       },
-      update: {},
-      create: textbook,
-    });
+    },
+    update: {},
+    create: {
+      grade: 8,
+      subject: '数学',
+      name: '人教版',
+      year: '2024',
+      status: 'active',
+    },
+  });
+  console.log(`教材: ${textbook.name} ${textbook.grade}年级`);
+
+  // 2. 创建默认章节
+  const chapter = await prisma.chapter.create({
+    data: {
+      textbookId: textbook.id,
+      chapterNumber: 0,
+      chapterName: '未分类（迁移数据）',
+      sort: 999,
+    },
+  });
+  console.log(`章节: ${chapter.chapterName}`);
+
+  // 3. 获取现有知识点并分组创建概念
+  const existingPoints = await prisma.knowledgePoint.findMany({
+    where: { deletedAt: null },
+  });
+
+  const groupedByName = new Map<string, typeof existingPoints>();
+  for (const point of existingPoints) {
+    if (!groupedByName.has(point.name)) {
+      groupedByName.set(point.name, []);
+    }
+    groupedByName.get(point.name)!.push(point);
   }
 
-  console.log(`✓ 创建了 ${textbooks.length} 个教材版本`);
+  console.log(`找到 ${existingPoints.length} 个知识点，${groupedByName.size} 个唯一概念`);
+
+  // 4. 创建概念并更新知识点
+  let conceptCount = 0;
+  let pointCount = 0;
+
+  for (const [name, points] of groupedByName) {
+    const firstPoint = points[0];
+
+    // 创建概念
+    const concept = await prisma.knowledgeConcept.create({
+      data: {
+        name,
+        category: firstPoint.category,
+        weight: firstPoint.weight || 0,
+      },
+    });
+    conceptCount++;
+
+    // 更新知识点实例
+    for (const point of points) {
+      await prisma.knowledgePoint.update({
+        where: { id: point.id },
+        data: {
+          chapterId: chapter.id,
+          conceptId: concept.id,
+          weight: 0, // 使用概念权重
+        },
+      });
+      pointCount++;
+    }
+  }
+
+  console.log(`迁移完成: ${conceptCount} 个概念，${pointCount} 个实例`);
 }
 
 main()
@@ -200,239 +255,108 @@ main()
   });
 ```
 
-- [ ] **Step 2: 在 package.json 添加 seed 脚本**
-
-在 `package.json` 的 `scripts` 中添加：
-
-```json
-"seed:textbooks": "tsx prisma/seed-textbooks.ts"
-```
-
-- [ ] **Step 3: 运行种子数据脚本**
+- [ ] **Step 2: 运行迁移脚本**
 
 ```bash
-npm run seed:textbooks
+npx tsx prisma/seed-v3.ts
 ```
 
-预期输出: `✓ 创建了 11 个教材版本`
+预期输出: `迁移完成: X 个概念，Y 个实例`
 
-- [ ] **Step 4: 提交**
+- [ ] **Step 3: 提交**
 
 ```bash
-git add prisma/seed-textbooks.ts package.json
-git commit -m "feat: add textbook seed data"
+git add prisma/seed-v3.ts
+git commit -m "feat: add v3 seed and migration script"
 ```
 
 ---
 
-### Task 3: 创建数据迁移脚本
+## 阶段2: API层
 
-**文件:** `scripts/migrate-knowledge-points.ts` (新建)
+### Task 3: 教材管理 API
 
-- [ ] **Step 1: 创建迁移脚本**
+**文件:** `app/api/admin/textbooks/route.ts` (新建)
 
-```typescript
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
-
-async function migrateKnowledgePoints() {
-  console.log('开始迁移现有知识点...');
-
-  // 1. 获取所有现有知识点
-  const existingPoints = await prisma.knowledgePoint.findMany({
-    where: { deletedAt: null },
-  });
-
-  console.log(`找到 ${existingPoints.length} 个现有知识点`);
-
-  // 2. 为每个年级+科目组合创建一个"未分类"章节
-  const combinations = new Map<string, string>(); // "7-数学" -> chapterId
-
-  for (const point of existingPoints) {
-    const key = `${point.subject === '初中' ? '7' : '10'}-数学`;
-    
-    if (!combinations.has(key)) {
-      // 创建教材版本（如果不存在）
-      const grade = point.subject === '初中' ? 7 : 10;
-      const textbook = await prisma.textbookVersion.upsert({
-        where: {
-          grade_subject_name: {
-            grade,
-            subject: '数学',
-            name: '人教版',
-          },
-        },
-        update: {},
-        create: {
-          grade,
-          subject: '数学',
-          name: '人教版',
-          year: '2024',
-        },
-      });
-
-      // 创建未分类章节
-      const chapter = await prisma.chapter.create({
-        data: {
-          textbookId: textbook.id,
-          chapterNumber: 0,
-          chapterName: '未分类（迁移数据）',
-          sort: 999,
-        },
-      });
-
-      combinations.set(key, chapter.id);
-      console.log(`创建章节: ${key}`);
-    }
-
-    // 3. 更新知识点，关联到章节
-    const chapterId = combinations.get(key)!;
-    await prisma.knowledgePoint.update({
-      where: { id: point.id },
-      data: { chapterId },
-    });
-  }
-
-  console.log('✓ 知识点迁移完成');
-}
-
-migrateKnowledgePoints()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
-```
-
-- [ ] **Step 2: 创建 scripts 目录（如果不存在）**
-
-```bash
-mkdir -p /Users/seanxx/academic-leap/academic-leap/scripts
-```
-
-- [ ] **Step 3: 运行迁移脚本**
-
-```bash
-npx tsx scripts/migrate-knowledge-points.ts
-```
-
-预期输出: `✓ 知识点迁移完成`
-
-- [ ] **Step 4: 提交**
-
-```bash
-git add scripts/migrate-knowledge-points.ts
-git commit -m "feat: add knowledge point migration script"
-```
-
----
-
-## 阶段2: API 层
-
-### Task 4: 用户设置 API
-
-**文件:** `app/api/user/settings/route.ts` (新建)
-
-- [ ] **Step 1: 创建 GET 处理函数**
+- [ ] **Step 1: 创建教材 CRUD API**
 
 ```typescript
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { requireAdmin } from '@/lib/admin-auth';
 
-// GET /api/user/settings - 获取用户设置
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        selectedGrade: true,
-        selectedSubject: true,
-        selectedTextbookId: true,
-        studyProgress: true,
-      },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: '用户不存在' }, { status: 404 });
-    }
-
-    // 获取教材名称
-    let textbookName = null;
-    if (user.selectedTextbookId) {
-      const textbook = await prisma.textbookVersion.findUnique({
-        where: { id: user.selectedTextbookId },
-        select: { name: true, year: true },
-      });
-      if (textbook) {
-        textbookName = `${textbook.name}${textbook.year ? ' ' + textbook.year : ''}`;
+    await requireAdmin();
+    const textbooks = await prisma.textbookVersion.findMany({
+      orderBy: [{ grade: 'asc' }, { name: 'asc' }],
+      include: {
+        _count: { select: { chapters: true } }
       }
+    });
+    return NextResponse.json({ success: true, data: textbooks });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const admin = await requireAdmin();
+    const body = await req.json();
+    const { name, publisher, grade, subject, year } = body;
+
+    if (!name || !grade || !subject) {
+      return NextResponse.json({ error: '缺少必填字段' }, { status: 400 });
     }
 
-    return NextResponse.json({
-      grade: user.selectedGrade,
-      subject: user.selectedSubject,
-      textbookId: user.selectedTextbookId,
-      textbookName,
-      progress: user.studyProgress,
+    const textbook = await prisma.textbookVersion.create({
+      data: { name, publisher, grade, subject, year }
     });
-  } catch (error) {
-    console.error('获取用户设置失败:', error);
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 });
+
+    await prisma.auditLog.create({
+      data: { userId: admin.userId, action: 'create', entity: 'textbook', entityId: textbook.id, changes: { before: null, after: textbook } }
+    });
+
+    return NextResponse.json({ success: true, data: textbook });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 ```
 
-- [ ] **Step 2: 添加 PUT 处理函数**
+**文件:** `app/api/admin/textbooks/[id]/route.ts` (新建)
 
-在同一文件中添加：
+- [ ] **Step 2: 创建教材更新/删除 API**
 
 ```typescript
-// PUT /api/user/settings - 更新用户设置
-export async function PUT(req: NextRequest) {
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { requireAdmin } from '@/lib/admin-auth';
+
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 });
-    }
-
+    await requireAdmin();
     const body = await req.json();
-    const { grade, subject, textbookId } = body;
-
-    // 验证教材是否存在
-    if (textbookId) {
-      const textbook = await prisma.textbookVersion.findUnique({
-        where: { id: textbookId },
-      });
-      if (!textbook) {
-        return NextResponse.json({ error: '教材不存在' }, { status: 400 });
-      }
-    }
-
-    // 更新用户设置
-    const updated = await prisma.user.update({
-      where: { id: session.user.id },
-      data: {
-        selectedGrade: grade,
-        selectedSubject: subject,
-        selectedTextbookId: textbookId,
-      },
+    const textbook = await prisma.textbookVersion.update({
+      where: { id },
+      data: body
     });
+    return NextResponse.json({ success: true, data: textbook });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
 
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  try {
+    await requireAdmin();
+    await prisma.textbookVersion.delete({ where: { id } });
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('更新用户设置失败:', error);
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 ```
@@ -440,525 +364,360 @@ export async function PUT(req: NextRequest) {
 - [ ] **Step 3: 提交**
 
 ```bash
-git add app/api/user/settings/route.ts
-git commit -m "feat: add user settings API"
+git add app/api/admin/textbooks/
+git commit -m "feat: add textbook CRUD API"
 ```
 
 ---
 
-**文件:** `app/api/user/settings/progress/route.ts` (新建)
+### Task 4: 章节管理 API
 
-- [ ] **Step 4: 创建进度更新 API**
+**文件:** `app/api/admin/chapters/route.ts` (新建)
 
-```typescript
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-
-// PUT /api/user/settings/progress - 更新学习进度
-export async function PUT(req: NextRequest) {
-  try {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 });
-    }
-
-    const body = await req.json();
-    const { progress } = body;
-
-    if (typeof progress !== 'number' || progress < 0 || progress > 100) {
-      return NextResponse.json({ error: '进度值无效' }, { status: 400 });
-    }
-
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: { studyProgress: progress },
-    });
-
-    return NextResponse.json({ success: true, progress });
-  } catch (error) {
-    console.error('更新学习进度失败:', error);
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 });
-  }
-}
-```
-
-- [ ] **Step 5: 提交**
-
-```bash
-git add app/api/user/settings/progress/route.ts
-git commit -m "feat: add progress update API"
-```
-
----
-
-### Task 5: 教材列表 API
-
-**文件:** `app/api/textbooks/route.ts` (新建)
-
-- [ ] **Step 1: 创建教材列表 API**
+- [ ] **Step 1: 创建章节 CRUD API**
 
 ```typescript
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { requireAdmin } from '@/lib/admin-auth';
 
-// GET /api/textbooks - 获取教材列表
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 });
-    }
-
-    const { searchParams } = new URL(req.url);
-    const grade = searchParams.get('grade');
-    const subject = searchParams.get('subject');
-
-    const where: any = { status: 'active' };
-    if (grade) where.grade = parseInt(grade);
-    if (subject) where.subject = subject;
-
-    const textbooks = await prisma.textbookVersion.findMany({
-      where,
-      orderBy: [{ grade: 'asc' }, { name: 'asc' }],
-      select: {
-        id: true,
-        name: true,
-        publisher: true,
-        year: true,
-      },
-    });
-
-    return NextResponse.json({ textbooks });
-  } catch (error) {
-    console.error('获取教材列表失败:', error);
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 });
-  }
-}
-```
-
-- [ ] **Step 2: 提交**
-
-```bash
-git add app/api/textbooks/route.ts
-git commit -m "feat: add textbooks list API"
-```
-
----
-
-### Task 6: 知识点树 API
-
-**文件:** `app/api/knowledge/tree/route.ts` (新建)
-
-- [ ] **Step 1: 创建知识点树 API**
-
-```typescript
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-
-interface TreeNode {
-  id: string;
-  type: 'chapter' | 'point';
-  name: string;
-  number: string;
-  enabled: boolean;
-  children?: TreeNode[];
-}
-
-// 构建树形结构
-function buildTree(
-  chapters: any[],
-  userEnabled: Set<string>
-): TreeNode[] {
-  const chapterMap = new Map<string, any[]>();
-  const rootChapters: any[] = [];
-
-  // 分组：父章节
-  for (const chapter of chapters) {
-    if (chapter.parentId) {
-      if (!chapterMap.has(chapter.parentId)) {
-        chapterMap.set(chapter.parentId, []);
-      }
-      chapterMap.get(chapter.parentId).push(chapter);
-    } else {
-      rootChapters.push(chapter);
-    }
-  }
-
-  // 递归构建树
-  function buildNode(chapter: any): TreeNode {
-    const node: TreeNode = {
-      id: chapter.id,
-      type: 'chapter',
-      name: chapter.sectionName 
-        ? `${chapter.chapterNumber}.${chapter.sectionNumber} ${chapter.sectionName}`
-        : `${chapter.chapterNumber} ${chapter.chapterName}`,
-      number: chapter.sectionNumber 
-        ? `${chapter.chapterNumber}.${chapter.sectionNumber}`
-        : String(chapter.chapterNumber),
-      enabled: userEnabled.has(chapter.id),
-    };
-
-    // 添加子章节
-    const children = chapterMap.get(chapter.id);
-    if (children && children.length > 0) {
-      node.children = children.map(buildNode);
-    }
-
-    // 添加知识点
-    if (chapter.knowledgePoints && chapter.knowledgePoints.length > 0) {
-      if (!node.children) node.children = [];
-      for (const point of chapter.knowledgePoints) {
-        node.children.push({
-          id: point.id,
-          type: 'point' as const,
-          name: point.name,
-          number: '',
-          enabled: userEnabled.has(point.id),
-        });
-      }
-    }
-
-    return node;
-  }
-
-  return rootChapters.map(buildNode);
-}
-
-// GET /api/knowledge/tree - 获取知识点树
-export async function GET(req: NextRequest) {
-  try {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 });
-    }
-
-    const { searchParams } = new URL(req.url);
-    const textbookId = searchParams.get('textbookId');
+    await requireAdmin();
+    const textbookId = new URL(req.url).searchParams.get('textbookId');
 
     if (!textbookId) {
-      return NextResponse.json({ error: '缺少教材ID' }, { status: 400 });
+      return NextResponse.json({ error: '缺少 textbookId' }, { status: 400 });
     }
 
-    // 获取用户勾选的节点
-    const userEnabled = await prisma.userEnabledKnowledge.findMany({
-      where: {
-        userId: session.user.id,
-      },
-      select: {
-        nodeId: true,
-      },
-    });
-    const enabledSet = new Set(userEnabled.map((e) => e.nodeId));
-
-    // 获取章节和知识点
     const chapters = await prisma.chapter.findMany({
-      where: {
-        textbookId,
-      },
-      include: {
-        knowledgePoints: {
-          where: { status: 'active', deletedAt: null },
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
+      where: { textbookId },
       orderBy: [{ chapterNumber: 'asc' }, { sectionNumber: 'asc' }],
-    });
-
-    const tree = buildTree(chapters, enabledSet);
-
-    return NextResponse.json({ tree });
-  } catch (error) {
-    console.error('获取知识点树失败:', error);
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 });
-  }
-}
-```
-
-- [ ] **Step 2: 提交**
-
-```bash
-git add app/api/knowledge/tree/route.ts
-git commit -m "feat: add knowledge tree API"
-```
-
----
-
-### Task 7: 知识点勾选 API
-
-**文件:** `app/api/knowledge/enable/route.ts` (新建)
-
-- [ ] **Step 1: 创建勾选/取消勾选 API**
-
-```typescript
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-
-// 递归获取所有子节点ID
-async function getAllChildNodeIds(chapterId: string): Promise<string[]> {
-  const ids: string[] = [chapterId];
-
-  // 获取子章节
-  const children = await prisma.chapter.findMany({
-    where: { parentId: chapterId },
-    select: { id: true },
-  });
-
-  for (const child of children) {
-    ids.push(...await getAllChildNodeIds(child.id));
-  }
-
-  // 获取知识点
-  const points = await prisma.knowledgePoint.findMany({
-    where: {
-      chapterId,
-      status: 'active',
-      deletedAt: null,
-    },
-    select: { id: true },
-  });
-
-  ids.push(...points.map((p) => p.id));
-
-  return ids;
-}
-
-// PUT /api/knowledge/enable - 勾选/取消勾选节点
-export async function PUT(req: NextRequest) {
-  try {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 });
-    }
-
-    const body = await req.json();
-    const { nodeId, nodeType, enabled } = body;
-
-    if (!nodeId || !nodeType || typeof enabled !== 'boolean') {
-      return NextResponse.json({ error: '参数错误' }, { status: 400 });
-    }
-
-    const userId = session.user.id;
-    const affectedIds: string[] = [];
-
-    if (nodeType === 'chapter') {
-      // 获取所有子节点
-      const childIds = await getAllChildNodeIds(nodeId);
-      affectedIds.push(...childIds);
-
-      // 批量操作
-      if (enabled) {
-        // 勾选：创建所有子节点记录
-        for (const id of childIds) {
-          await prisma.userEnabledKnowledge.upsert({
-            where: {
-              userId_nodeId: {
-                userId,
-                nodeId: id,
-              },
-            },
-            update: {},
-            create: {
-              userId,
-              nodeId: id,
-              nodeType: id === nodeId ? 'chapter' : 'point',
-            },
-          });
-        }
-      } else {
-        // 取消勾选：删除所有子节点记录
-        await prisma.userEnabledKnowledge.deleteMany({
-          where: {
-            userId,
-            nodeId: { in: childIds },
-          },
-        });
+      include: {
+        _count: { select: { knowledgePoints: true } }
       }
-    } else {
-      // 知识点：直接操作
-      affectedIds.push(nodeId);
-
-      if (enabled) {
-        await prisma.userEnabledKnowledge.upsert({
-          where: {
-            userId_nodeId: {
-              userId,
-              nodeId,
-            },
-          },
-          update: {},
-          create: {
-            userId,
-            nodeId,
-            nodeType: 'point',
-          },
-        });
-      } else {
-        await prisma.userEnabledKnowledge.deleteMany({
-          where: { userId, nodeId },
-        });
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      affected: affectedIds,
     });
-  } catch (error) {
-    console.error('更新勾选状态失败:', error);
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 });
+
+    return NextResponse.json({ success: true, data: chapters });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
-```
 
-- [ ] **Step 2: 提交**
-
-```bash
-git add app/api/knowledge/enable/route.ts
-git commit -m "feat: add knowledge enable/disable API"
-```
-
----
-
-### Task 8: 智能推荐 API
-
-**文件:** `app/api/knowledge/smart-enable/route.ts` (新建)
-
-- [ ] **Step 1: 创建智能推荐 API**
-
-```typescript
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-
-// 获取顶层章节
-async function getTopLevelChapters(textbookId: string) {
-  return prisma.chapter.findMany({
-    where: {
-      textbookId,
-      parentId: null,
-    },
-    orderBy: { chapterNumber: 'asc' },
-    select: {
-      id: true,
-      chapterNumber: true,
-    },
-  });
-}
-
-// 递归展平章节树
-async function flattenChapterTree(chapterIds: string[]): Promise<string[]> {
-  const result: string[] = [];
-
-  for (const chapterId of chapterIds) {
-    result.push(chapterId);
-
-    // 子章节
-    const children = await prisma.chapter.findMany({
-      where: { parentId: chapterId },
-      select: { id: true },
-    });
-    if (children.length > 0) {
-      const childIds = children.map((c) => c.id);
-      result.push(...await flattenChapterTree(childIds));
-    }
-
-    // 知识点
-    const points = await prisma.knowledgePoint.findMany({
-      where: {
-        chapterId,
-        status: 'active',
-        deletedAt: null,
-      },
-      select: { id: true },
-    });
-    result.push(...points.map((p) => p.id));
-  }
-
-  return result;
-}
-
-// POST /api/knowledge/smart-enable - 智能推荐
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 });
-    }
-
+    const admin = await requireAdmin();
     const body = await req.json();
-    const { progress } = body;
+    const { textbookId, chapterNumber, chapterName, sectionNumber, sectionName, parentId } = body;
 
-    if (typeof progress !== 'number' || progress < 0 || progress > 100) {
-      return NextResponse.json({ error: '进度值无效' }, { status: 400 });
-    }
-
-    const userId = session.user.id;
-
-    // 获取用户当前选择的教材
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { selectedTextbookId: true },
+    const chapter = await prisma.chapter.create({
+      data: { textbookId, chapterNumber, chapterName, sectionNumber, sectionName, parentId }
     });
 
-    if (!user?.selectedTextbookId) {
-      return NextResponse.json({ error: '请先选择教材' }, { status: 400 });
-    }
-
-    // 获取顶层章节数量
-    const chapters = await getTopLevelChapters(user.selectedTextbookId);
-    const totalChapters = chapters.length;
-
-    // 计算应推荐的章节数
-    const targetChapterCount = Math.max(1, Math.floor(totalChapters * progress / 100));
-    const targetChapters = chapters.slice(0, targetChapterCount);
-
-    // 展平章节树
-    const allNodeIds = await flattenChapterTree(targetChapters.map((c) => c.id));
-
-    // 批量勾选
-    for (const nodeId of allNodeIds) {
-      await prisma.userEnabledKnowledge.upsert({
-        where: {
-          userId_nodeId: {
-            userId,
-            nodeId,
-          },
-        },
-        update: {},
-        create: {
-          userId,
-          nodeId,
-          nodeType: 'point',
-        },
-      });
-    }
-
-    // 更新用户进度
-    await prisma.user.update({
-      where: { id: userId },
-      data: { studyProgress: progress },
+    await prisma.auditLog.create({
+      data: { userId: admin.userId, action: 'create', entity: 'chapter', entityId: chapter.id, changes: { before: null, after: chapter } }
     });
+
+    return NextResponse.json({ success: true, data: chapter });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+```
+
+**文件:** `app/api/admin/chapters/[id]/route.ts` (新建)
+
+- [ ] **Step 2: 创建章节更新/删除 API**
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { requireAdmin } from '@/lib/admin-auth';
+
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  try {
+    await requireAdmin();
+    const body = await req.json();
+    const chapter = await prisma.chapter.update({
+      where: { id },
+      data: body
+    });
+    return NextResponse.json({ success: true, data: chapter });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  try {
+    await requireAdmin();
+    await prisma.chapter.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+```
+
+- [ ] **Step 3: 提交**
+
+```bash
+git add app/api/admin/chapters/
+git commit -m "feat: add chapter CRUD API"
+```
+
+---
+
+### Task 5: 概念管理 API
+
+**文件:** `app/api/admin/concepts/route.ts` (新建)
+
+- [ ] **Step 1: 创建概念 CRUD API**
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { requireAdmin } from '@/lib/admin-auth';
+
+export async function GET() {
+  try {
+    await requireAdmin();
+    const concepts = await prisma.knowledgeConcept.findMany({
+      orderBy: { name: 'asc' },
+      include: {
+        _count: { select: { instances: true } }
+      }
+    });
+    return NextResponse.json({ success: true, data: concepts });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const admin = await requireAdmin();
+    const body = await req.json();
+    const { name, category, weight } = body;
+
+    if (!name) {
+      return NextResponse.json({ error: '缺少必填字段: name' }, { status: 400 });
+    }
+
+    const concept = await prisma.knowledgeConcept.create({
+      data: { name, category, weight: weight || 0 }
+    });
+
+    await prisma.auditLog.create({
+      data: { userId: admin.userId, action: 'create', entity: 'concept', entityId: concept.id, changes: { before: null, after: concept } }
+    });
+
+    return NextResponse.json({ success: true, data: concept });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+```
+
+**文件:** `app/api/admin/concepts/[id]/route.ts` (新建)
+
+- [ ] **Step 2: 创建概念更新/删除 API**
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { requireAdmin } from '@/lib/admin-auth';
+
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  try {
+    await requireAdmin();
+    const body = await req.json();
+    const concept = await prisma.knowledgeConcept.update({
+      where: { id },
+      data: body
+    });
+    return NextResponse.json({ success: true, data: concept });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  try {
+    await requireAdmin();
+    await prisma.knowledgeConcept.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+```
+
+- [ ] **Step 3: 提交**
+
+```bash
+git add app/api/admin/concepts/
+git commit -m "feat: add concept CRUD API"
+```
+
+---
+
+### Task 6: 知识点实例 API
+
+**文件:** `app/api/admin/knowledge-points/route.ts` (新建)
+
+- [ ] **Step 1: 创建知识点实例 CRUD API**
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { requireAdmin } from '@/lib/admin-auth';
+
+export async function GET(req: NextRequest) {
+  try {
+    await requireAdmin();
+    const textbookId = new URL(req.url).searchParams.get('textbookId');
+    const chapterId = new URL(req.url).searchParams.get('chapterId');
+
+    const where: any = { deletedAt: null };
+    if (chapterId) where.chapterId = chapterId;
+    if (textbookId) {
+      where.chapter = { textbookId };
+    }
+
+    const points = await prisma.knowledgePoint.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        chapter: { include: { textbook: true } },
+        concept: true
+      }
+    });
+
+    return NextResponse.json({ success: true, data: points });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const admin = await requireAdmin();
+    const body = await req.json();
+    const { name, chapterId, conceptId, weight = 0, inAssess = true, status = 'active' } = body;
+
+    if (!name || !chapterId || !conceptId) {
+      return NextResponse.json({ error: '缺少必填字段: name, chapterId, conceptId' }, { status: 400 });
+    }
+
+    const point = await prisma.knowledgePoint.create({
+      data: { name, chapterId, conceptId, weight, inAssess, status }
+    });
+
+    await prisma.auditLog.create({
+      data: { userId: admin.userId, action: 'create', entity: 'knowledge', entityId: point.id, changes: { before: null, after: point } }
+    });
+
+    return NextResponse.json({ success: true, data: point });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+```
+
+**文件:** `app/api/admin/knowledge-points/[id]/route.ts` (新建)
+
+- [ ] **Step 2: 创建知识点实例更新/删除 API**
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { requireAdmin } from '@/lib/admin-auth';
+
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  try {
+    await requireAdmin();
+    const body = await req.json();
+    const point = await prisma.knowledgePoint.update({
+      where: { id },
+      data: body
+    });
+    return NextResponse.json({ success: true, data: point });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  try {
+    await requireAdmin();
+    // 软删除
+    await prisma.knowledgePoint.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+```
+
+- [ ] **Step 3: 提交**
+
+```bash
+git add app/api/admin/knowledge-points/
+git commit -m "feat: add knowledge-point CRUD API"
+```
+
+---
+
+### Task 7: 更新权重验证 API
+
+**文件:** `app/api/admin/knowledge/weight-validate/route.ts`
+
+- [ ] **Step 1: 更新权重验证逻辑**
+
+替换现有 `POST` 函数：
+
+```typescript
+export async function POST(req: NextRequest) {
+  try {
+    await requireAdmin();
+
+    const points = await prisma.knowledgePoint.findMany({
+      where: { deletedAt: null, inAssess: true },
+      select: {
+        weight: true,
+        concept: { select: { weight: true } }
+      }
+    });
+
+    // 混合权重计算：实例权重 > 0 用实例，否则用概念
+    const totalWeight = points.reduce((sum, p) => {
+      return sum + (p.weight > 0 ? p.weight : p.concept.weight);
+    }, 0);
+
+    const conceptIds = [...new Set(points.map(p => p.conceptId))];
 
     return NextResponse.json({
       success: true,
-      enabled: allNodeIds,
-      message: `已推荐前 ${targetChapterCount} 章内容`,
+      data: {
+        isValid: totalWeight === 100,
+        total: totalWeight,
+        expected: 100,
+        conceptCount: conceptIds.length,
+        pointCount: points.length
+      }
     });
-  } catch (error) {
-    console.error('智能推荐失败:', error);
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 ```
@@ -966,801 +725,243 @@ export async function POST(req: NextRequest) {
 - [ ] **Step 2: 提交**
 
 ```bash
-git add app/api/knowledge/smart-enable/route.ts
-git commit -m "feat: add smart recommend API"
+git add app/api/admin/knowledge/weight-validate/route.ts
+git commit -m "feat: update weight validation to use concept weights"
 ```
 
 ---
 
-### Task 9: 修改题目 API 支持筛选
+## 阶段3: 后台管理 UI
 
-**文件:** `app/api/questions/route.ts`
+### Task 8: 创建 DataManagementTab 组件
 
-- [ ] **Step 1: 修改查询逻辑**
+**目录:** `components/admin/` (新建)
 
-找到现有的题目查询逻辑，添加筛选条件。在 `where` 条件中添加：
-
-```typescript
-// 根据用户设置筛选知识点
-const session = await auth();
-let enabledKnowledgeIds: string[] = [];
-
-if (session?.user?.id) {
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: {
-      selectedGrade: true,
-      selectedSubject: true,
-      selectedTextbookId: true,
-      enabledKnowledge: {
-        select: { nodeId: true },
-      },
-    },
-  });
-
-  if (user?.enabledKnowledge) {
-    enabledKnowledgeIds = user.enabledKnowledge.map((e) => e.nodeId);
-  }
-}
-
-// 在题目查询中添加筛选
-const where: any = {};
-
-if (enabledKnowledgeIds.length > 0) {
-  // 通过知识点章节筛选
-  const questionsInScope = await prisma.knowledgePoint.findMany({
-    where: {
-      id: { in: enabledKnowledgeIds },
-      status: 'active',
-      deletedAt: null,
-    },
-    select: { id: true },
-  });
-
-  const knowledgeIds = questionsInScope.map((k) => k.id);
-  if (knowledgeIds.length > 0) {
-    where.knowledgePoints = {
-      array_contains: JSON.stringify(knowledgeIds),
-    };
-  }
-}
-```
-
-- [ ] **Step 2: 提交**
+- [ ] **Step 1: 创建目录和主容器组件**
 
 ```bash
-git add app/api/questions/route.ts
-git commit -m "feat: add knowledge filter to questions API"
+mkdir -p components/admin
 ```
 
----
-
-## 阶段3: UI 组件
-
-### Task 10: 创建知识点树组件
-
-**文件:** `components/KnowledgeTree.tsx` (新建)
-
-- [ ] **Step 1: 创建知识点树组件**
+**文件:** `components/admin/DataManagementTab.tsx`
 
 ```typescript
 'use client';
 
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import MaterialIcon from './MaterialIcon';
-import { cn } from '@/lib/utils';
+import { useState } from 'react';
+import TextbookList from './TextbookList';
+import ChapterTreeEditor from './ChapterTreeEditor';
+import KnowledgePointList from './KnowledgePointList';
 
-export interface TreeNode {
-  id: string;
-  type: 'chapter' | 'point';
-  name: string;
-  number: string;
-  enabled: boolean;
-  children?: TreeNode[];
+type DataSubTab = 'textbooks' | 'chapters' | 'points';
+
+interface DataManagementTabProps {
+  canEdit: boolean;
+  canDelete: boolean;
 }
 
-interface KnowledgeTreeProps {
-  tree: TreeNode[];
-  onToggle: (nodeId: string, enabled: boolean, nodeType: string) => void;
-  searchQuery?: string;
-}
-
-export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
-  tree,
-  onToggle,
-  searchQuery = '',
-}) => {
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [indeterminateIds, setIndeterminateIds] = useState<Set<string>>(new Set());
-
-  const toggleExpand = (id: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const handleToggle = (node: TreeNode, enabled: boolean) => {
-    onToggle(node.id, enabled, node.type);
-  };
-
-  // 过滤树节点
-  const filterTree = (nodes: TreeNode[]): TreeNode[] => {
-    if (!searchQuery) return nodes;
-
-    return nodes.reduce((acc: TreeNode[], node) => {
-      const matchesSearch = node.name.toLowerCase().includes(searchQuery.toLowerCase());
-      const filteredChildren = node.children ? filterTree(node.children) : [];
-
-      if (matchesSearch || filteredChildren.length > 0) {
-        acc.push({
-          ...node,
-          children: filteredChildren.length > 0 ? filteredChildren : node.children,
-        });
-      }
-
-      return acc;
-    }, []);
-  };
-
-  const filteredTree = filterTree(tree);
-
-  const renderNode = (node: TreeNode, level: number = 0): React.ReactNode => {
-    const hasChildren = node.children && node.children.length > 0;
-    const isExpanded = expandedIds.has(node.id);
-    const isChapter = node.type === 'chapter';
-
-    return (
-      <div key={node.id} className={cn(level > 0 && 'ml-4')}>
-        <div
-          className={cn(
-            'flex items-center gap-2 py-2 px-3 rounded-xl',
-            'hover:bg-surface-container-high cursor-pointer',
-            'transition-colors'
-          )}
-        >
-          {hasChildren && (
-            <button
-              onClick={() => toggleExpand(node.id)}
-              className="p-1 hover:bg-surface-variant rounded-lg"
-            >
-              <MaterialIcon
-                icon={isExpanded ? 'expand_more' : 'chevron_right'}
-                className="text-on-surface-variant"
-                style={{ fontSize: '20px' }}
-              />
-            </button>
-          )}
-          {!hasChildren && <div className="w-8" />}
-          
-          <button
-            onClick={() => handleToggle(node, !node.enabled)}
-            className={cn(
-              'w-6 h-6 rounded-md border-2 flex items-center justify-center',
-              'transition-all',
-              node.enabled
-                ? 'bg-primary border-primary text-on-primary'
-                : 'border-outline-variant'
-            )}
-          >
-            {node.enabled && (
-              <MaterialIcon icon="check" style={{ fontSize: '16px' }} />
-            )}
-          </button>
-
-          <span className={cn(
-            'flex-1 text-sm font-medium',
-            node.enabled ? 'text-on-surface' : 'text-on-surface-variant'
-          )}>
-            {node.name}
-          </span>
-        </div>
-
-        <AnimatePresence>
-          {isExpanded && hasChildren && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              {node.children?.map((child) => renderNode(child, level + 1))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    );
-  };
-
-  if (filteredTree.length === 0) {
-    return (
-      <div className="text-center py-8 text-on-surface-variant">
-        <MaterialIcon icon="search_off" className="text-4xl mb-2" />
-        <p>没有找到匹配的知识点</p>
-      </div>
-    );
-  }
+export default function DataManagementTab({ canEdit, canDelete }: DataManagementTabProps) {
+  const [activeSubTab, setActiveSubTab] = useState<DataSubTab>('textbooks');
+  const [selectedTextbook, setSelectedTextbook] = useState<string | null>(null);
+  const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
 
   return (
-    <div className="space-y-1">
-      {filteredTree.map((node) => renderNode(node))}
+    <div className="space-y-6">
+      {/* 子标签导航 */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => { setActiveSubTab('textbooks'); setSelectedChapter(null); }}
+          className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
+            activeSubTab === 'textbooks'
+              ? 'bg-primary text-on-primary'
+              : 'bg-surface-container text-on-surface-variant'
+          }`}
+        >
+          教材管理
+        </button>
+        <button
+          onClick={() => setActiveSubTab('chapters')}
+          disabled={!selectedTextbook}
+          className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
+            activeSubTab === 'chapters'
+              ? 'bg-primary text-on-primary'
+              : 'bg-surface-container text-on-surface-variant'
+          } disabled:opacity-50`}
+        >
+          章节管理
+        </button>
+        <button
+          onClick={() => setActiveSubTab('points')}
+          disabled={!selectedChapter}
+          className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
+            activeSubTab === 'points'
+              ? 'bg-primary text-on-primary'
+              : 'bg-surface-container text-on-surface-variant'
+          } disabled:opacity-50`}
+        >
+          知识点管理
+        </button>
+      </div>
+
+      {/* 子页面 */}
+      {activeSubTab === 'textbooks' && (
+        <TextbookList onSelect={setSelectedTextbook} canEdit={canEdit} />
+      )}
+      {activeSubTab === 'chapters' && selectedTextbook && (
+        <ChapterTreeEditor
+          textbookId={selectedTextbook}
+          onSelect={setSelectedChapter}
+          canEdit={canEdit}
+        />
+      )}
+      {activeSubTab === 'points' && selectedChapter && (
+        <KnowledgePointList chapterId={selectedChapter} canEdit={canEdit} canDelete={canDelete} />
+      )}
     </div>
   );
-};
-
-export default KnowledgeTree;
+}
 ```
 
 - [ ] **Step 2: 提交**
 
 ```bash
-git add components/KnowledgeTree.tsx
-git commit -m "feat: add KnowledgeTree component"
+git add components/admin/DataManagementTab.tsx
+git commit -m "feat: add DataManagementTab container component"
 ```
 
 ---
 
-### Task 11: 创建首次引导组件
+### Task 9: 创建 TextbookList 组件
 
-**文件:** `components/OnboardingWizard.tsx` (新建)
+**文件:** `components/admin/TextbookList.tsx`
 
-- [ ] **Step 1: 创建首次引导组件**
+- [ ] **Step 1: 创建教材列表组件**
 
 ```typescript
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { useSession } from 'next-auth/react';
-import MaterialIcon from './MaterialIcon';
-import { cn } from '@/lib/utils';
+import { useState, useEffect } from 'react';
+import MaterialIcon from '../MaterialIcon';
 
-interface OnboardingWizardProps {
-  onComplete: () => void;
+interface Textbook {
+  id: string;
+  name: string;
+  publisher: string;
+  grade: number;
+  subject: string;
+  year: string;
+  status: string;
+  _count: { chapters: number };
 }
 
-type Step = 'welcome' | 'grade' | 'subject' | 'textbook' | 'progress' | 'complete';
+interface TextbookListProps {
+  onSelect: (id: string | null) => void;
+  canEdit: boolean;
+}
 
-const GRADES = [
-  { value: 7, label: '初一' },
-  { value: 8, label: '初二' },
-  { value: 9, label: '初三' },
-  { value: 10, label: '高一' },
-  { value: 11, label: '高二' },
-  { value: 12, label: '高三' },
-];
+export default function TextbookList({ onSelect, canEdit }: TextbookListProps) {
+  const [textbooks, setTextbooks] = useState<Textbook[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ name: '', publisher: '', grade: 8, subject: '数学', year: '2024' });
 
-const SUBJECTS = [
-  { value: '数学', label: '数学' },
-  { value: '物理', label: '物理' },
-  { value: '化学', label: '化学' },
-];
-
-export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
-  onComplete,
-}) => {
-  const { data: session } = useSession();
-  const [step, setStep] = useState<Step>('welcome');
-  const [selectedGrade, setSelectedGrade] = useState<number>(7);
-  const [selectedSubject, setSelectedSubject] = useState<string>('数学');
-  const [selectedTextbook, setSelectedTextbook] = useState<string>('');
-  const [progress, setProgress] = useState<number>(40);
-  const [textbooks, setTextbooks] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  // 加载教材列表
   useEffect(() => {
-    if (step === 'textbook') {
-      fetch(`/api/textbooks?grade=${selectedGrade}&subject=${selectedSubject}`)
-        .then((res) => res.json())
-        .then((data) => {
-          setTextbooks(data.textbooks || []);
-          if (data.textbooks?.length > 0) {
-            setSelectedTextbook(data.textbooks[0].id);
-          }
-        });
-    }
-  }, [step, selectedGrade, selectedSubject]);
-
-  // 计算默认进度
-  useEffect(() => {
-    const now = new Date();
-    const yearStart = new Date(now.getFullYear(), 8, 1); // 9月1日
-    const yearEnd = new Date(now.getFullYear() + 1, 0, 31); // 1月底
-    const total = yearEnd.getTime() - yearStart.getTime();
-    const elapsed = now.getTime() - Math.min(yearStart.getTime(), now.getTime());
-    const defaultProgress = Math.min(100, Math.max(0, Math.floor((elapsed / total) * 100)));
-    setProgress(defaultProgress);
+    fetch('/api/admin/textbooks')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setTextbooks(data.data);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  const handleNext = async () => {
-    if (step === 'complete') {
-      await handleSubmit();
-    } else {
-      const steps: Step[] = ['welcome', 'grade', 'subject', 'textbook', 'progress', 'complete'];
-      const currentIndex = steps.indexOf(step);
-      setStep(steps[currentIndex + 1]);
-    }
-  };
-
-  const handleSubmit = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/user/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          grade: selectedGrade,
-          subject: selectedSubject,
-          textbookId: selectedTextbook,
-        }),
-      });
-
-      if (res.ok) {
-        // 调用智能推荐
-        await fetch('/api/knowledge/smart-enable', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ progress }),
-        });
-        onComplete();
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const renderWelcome = () => (
-    <div className="text-center space-y-6">
-      <div className="w-24 h-24 bg-primary-container rounded-full flex items-center justify-center mx-auto">
-        <MaterialIcon icon="school" className="text-4xl text-on-primary-container" />
-      </div>
-      <div>
-        <h2 className="text-2xl font-display font-black text-on-surface mb-2">
-          欢迎使用学力跃迁
-        </h2>
-        <p className="text-on-surface-variant">
-          为了提供更精准的练习内容，请先设置您的学习信息
-        </p>
-      </div>
-    </div>
-  );
-
-  const renderGrade = () => (
-    <div className="space-y-4">
-      <h3 className="text-xl font-display font-black text-on-surface text-center">
-        选择您的年级
-      </h3>
-      <div className="grid grid-cols-3 gap-3">
-        {GRADES.map((grade) => (
-          <button
-            key={grade.value}
-            onClick={() => setSelectedGrade(grade.value)}
-            className={cn(
-              'py-4 px-6 rounded-2xl font-display font-black text-lg',
-              'transition-all active:scale-95',
-              selectedGrade === grade.value
-                ? 'bg-primary text-on-primary'
-                : 'bg-surface-container text-on-surface-variant'
-            )}
-          >
-            {grade.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-
-  const renderSubject = () => (
-    <div className="space-y-4">
-      <h3 className="text-xl font-display font-black text-on-surface text-center">
-        选择科目
-      </h3>
-      <div className="space-y-3">
-        {SUBJECTS.map((subject) => (
-          <button
-            key={subject.value}
-            onClick={() => setSelectedSubject(subject.value)}
-            className={cn(
-              'w-full py-4 px-6 rounded-2xl font-display font-black text-lg',
-              'transition-all active:scale-95',
-              selectedSubject === subject.value
-                ? 'bg-primary text-on-primary'
-                : 'bg-surface-container text-on-surface-variant'
-            )}
-          >
-            {subject.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-
-  const renderTextbook = () => (
-    <div className="space-y-4">
-      <h3 className="text-xl font-display font-black text-on-surface text-center">
-        选择教材版本
-      </h3>
-      <div className="space-y-3 max-h-60 overflow-y-auto">
-        {textbooks.map((textbook) => (
-          <button
-            key={textbook.id}
-            onClick={() => setSelectedTextbook(textbook.id)}
-            className={cn(
-              'w-full py-4 px-6 rounded-2xl font-display font-bold text-left',
-              'transition-all active:scale-95',
-              selectedTextbook === textbook.id
-                ? 'bg-primary text-on-primary'
-                : 'bg-surface-container text-on-surface-variant'
-            )}
-          >
-            {textbook.name}
-            {textbook.year && <span className="text-sm opacity-70"> · {textbook.year}</span>}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-
-  const renderProgress = () => (
-    <div className="space-y-6">
-      <h3 className="text-xl font-display font-black text-on-surface text-center">
-        设置学习进度
-      </h3>
-      <div className="text-center">
-        <span className="text-5xl font-display font-black text-primary">{progress}%</span>
-        <p className="text-on-surface-variant mt-2">
-          即将推荐前 {Math.floor(progress)}% 的章节内容
-        </p>
-      </div>
-      <input
-        type="range"
-        min="0"
-        max="100"
-        value={progress}
-        onChange={(e) => setProgress(parseInt(e.target.value))}
-        className="w-full h-3 bg-surface-container-high rounded-full appearance-none cursor-pointer"
-        style={{
-          background: `linear-gradient(to right, var(--color-primary) ${progress}%, var(--color-surface-container-high) ${progress}%)`,
-        }}
-      />
-    </div>
-  );
-
-  const renderComplete = () => (
-    <div className="text-center space-y-6">
-      <div className="w-24 h-24 bg-success rounded-full flex items-center justify-center mx-auto">
-        <MaterialIcon icon="check" className="text-4xl text-on-success" />
-      </div>
-      <div>
-        <h2 className="text-2xl font-display font-black text-on-surface mb-2">
-          设置完成！
-        </h2>
-        <p className="text-on-surface-variant">
-          系统已根据您的设置智能推荐知识点
-        </p>
-      </div>
-    </div>
-  );
-
-  const getStepTitle = () => {
-    switch (step) {
-      case 'welcome': return '欢迎';
-      case 'grade': return '年级';
-      case 'subject': return '科目';
-      case 'textbook': return '教材';
-      case 'progress': return '进度';
-      case 'complete': return '完成';
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-surface z-50 flex items-center justify-center p-6">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-md bg-surface-container-lowest rounded-3xl p-8 shadow-2xl"
-      >
-        {/* 进度指示 */}
-        <div className="flex items-center justify-between mb-8">
-          <span className="text-sm font-bold text-on-surface-variant">步骤</span>
-          <div className="flex gap-2">
-            {['welcome', 'grade', 'subject', 'textbook', 'progress', 'complete'].map((s, i) => (
-              <div
-                key={s}
-                className={cn(
-                  'w-2 h-2 rounded-full',
-                  step === s
-                    ? 'bg-primary'
-                    : ['welcome', 'grade', 'subject', 'textbook', 'progress', 'complete'].indexOf(step) > i
-                    ? 'bg-primary/30'
-                    : 'bg-surface-variant'
-                )}
-              />
-            ))}
-          </div>
-          <span className="text-sm font-bold text-on-surface-variant">{getStepTitle()}</span>
-        </div>
-
-        {/* 内容 */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={step}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2 }}
-          >
-            {step === 'welcome' && renderWelcome()}
-            {step === 'grade' && renderGrade()}
-            {step === 'subject' && renderSubject()}
-            {step === 'textbook' && renderTextbook()}
-            {step === 'progress' && renderProgress()}
-            {step === 'complete' && renderComplete()}
-          </motion.div>
-        </AnimatePresence>
-
-        {/* 按钮 */}
-        <div className="mt-8 flex gap-3">
-          {step !== 'welcome' && step !== 'complete' && (
-            <button
-              onClick={() => {
-                const steps: Step[] = ['welcome', 'grade', 'subject', 'textbook', 'progress', 'complete'];
-                const currentIndex = steps.indexOf(step);
-                setStep(steps[currentIndex - 1]);
-              }}
-              className="flex-1 py-4 rounded-full bg-surface-container font-display font-bold text-on-surface active:scale-95 transition-all"
-            >
-              上一步
-            </button>
-          )}
-          <button
-            onClick={handleNext}
-            disabled={loading}
-            className="flex-1 py-4 rounded-full bg-primary text-on-primary font-display font-black active:scale-95 transition-all disabled:opacity-50"
-          >
-            {loading ? '保存中...' : step === 'complete' ? '开始学习' : '下一步'}
-          </button>
-        </div>
-      </motion.div>
-    </div>
-  );
-};
-
-export default OnboardingWizard;
-```
-
-- [ ] **Step 2: 提交**
-
-```bash
-git add components/OnboardingWizard.tsx
-git commit -m "feat: add OnboardingWizard component"
-```
-
----
-
-### Task 12: 创建设置页面
-
-**文件:** `app/settings/page.tsx` (新建)
-
-- [ ] **Step 1: 创建设置页面**
-
-```typescript
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { motion } from 'motion/react';
-import { useSession } from 'next-auth/react';
-import MaterialIcon from '@/components/MaterialIcon';
-import { KnowledgeTree, TreeNode } from '@/components/KnowledgeTree';
-import { cn } from '@/lib/utils';
-
-export default function SettingsPage() {
-  const router = useRouter();
-  const { data: session } = useSession();
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  
-  // 用户设置
-  const [grade, setGrade] = useState<number>(7);
-  const [subject, setSubject] = useState<string>('数学');
-  const [textbookId, setTextbookId] = useState<string>('');
-  const [progress, setProgress] = useState<number>(0);
-  const [textbookName, setTextbookName] = useState<string>('');
-  
-  // 知识点树
-  const [tree, setTree] = useState<TreeNode[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // 加载设置
-  useEffect(() => {
-    if (session?.user) {
-      loadSettings();
-    }
-  }, [session]);
-
-  const loadSettings = async () => {
-    setLoading(true);
-    try {
-      const [settingsRes, treeRes] = await Promise.all([
-        fetch('/api/user/settings'),
-        fetch(`/api/knowledge/tree?textbookId=${textbookId || 'default'}`),
-      ]);
-
-      if (settingsRes.ok) {
-        const data = await settingsRes.json();
-        setGrade(data.grade || 7);
-        setSubject(data.subject || '数学');
-        setTextbookId(data.textbookId || '');
-        setProgress(data.progress || 0);
-        setTextbookName(data.textbookName || '');
-      }
-
-      if (treeRes.ok && textbookId) {
-        const data = await treeRes.json();
-        setTree(data.tree || []);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await fetch('/api/user/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grade, subject, textbookId }),
-      });
-      alert('设置已保存');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleToggle = async (nodeId: string, enabled: boolean, nodeType: string) => {
-    await fetch('/api/knowledge/enable', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nodeId, nodeType, enabled }),
-    });
-    
-    // 更新本地状态
-    const updateTree = (nodes: TreeNode[]): TreeNode[] => {
-      return nodes.map((node) => {
-        if (node.id === nodeId) {
-          return { ...node, enabled };
-        }
-        if (node.children) {
-          return { ...node, children: updateTree(node.children) };
-        }
-        return node;
-      });
-    };
-    
-    setTree(updateTree(tree));
-  };
-
-  const handleSmartRecommend = async () => {
-    const res = await fetch('/api/knowledge/smart-enable', {
+  const handleCreate = async () => {
+    const res = await fetch('/api/admin/textbooks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ progress }),
+      body: JSON.stringify(form)
     });
-    
     if (res.ok) {
-      loadSettings();
-      alert('智能推荐已应用');
+      const data = await res.json();
+      setTextbooks([...textbooks, data.data]);
+      setShowModal(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return <div>加载中...</div>;
 
   return (
-    <div className="min-h-screen bg-surface pb-32">
-      {/* Header */}
-      <div className="bg-surface-container-lowest px-6 py-4 flex items-center gap-4">
-        <button onClick={() => router.back()} className="p-2">
-          <MaterialIcon icon="arrow_back" className="text-on-surface" />
-        </button>
-        <h1 className="text-xl font-display font-black text-on-surface">设置</h1>
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-bold">教材库</h3>
+        {canEdit && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="px-4 py-2 bg-primary text-on-primary rounded-full text-sm font-bold"
+          >
+            新建教材
+          </button>
+        )}
       </div>
 
-      <div className="p-6 space-y-6">
-        {/* 学习设置 */}
-        <section className="bg-surface-container-low rounded-3xl p-6">
-          <h2 className="text-lg font-display font-black text-on-surface mb-4">学习设置</h2>
-          
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-on-surface-variant">年级</span>
-              <span className="font-bold text-on-surface">{grade}年级</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-on-surface-variant">科目</span>
-              <span className="font-bold text-on-surface">{subject}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-on-surface-variant">教材</span>
-              <span className="font-bold text-on-surface">{textbookName || '未选择'}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-on-surface-variant">进度</span>
-              <span className="font-bold text-primary">{progress}%</span>
+      <div className="grid gap-4">
+        {textbooks.map(t => (
+          <div
+            key={t.id}
+            className="bg-surface-container rounded-2xl p-4 cursor-pointer hover:bg-surface-container-high"
+            onClick={() => onSelect(t.id)}
+          >
+            <div className="flex justify-between">
+              <div>
+                <p className="font-bold">{t.name}</p>
+                <p className="text-sm text-on-surface-variant">{t.grade}年级 · {t.subject}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-on-surface-variant">{t._count.chapters} 章节</p>
+              </div>
             </div>
           </div>
-        </section>
-
-        {/* 知识点选择 */}
-        <section className="bg-surface-container-low rounded-3xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-display font-black text-on-surface">知识点选择</h2>
-          </div>
-
-          {/* 搜索 */}
-          <div className="relative mb-4">
-            <MaterialIcon icon="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-            <input
-              type="text"
-              placeholder="搜索知识点..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-surface-container rounded-xl text-on-surface placeholder:text-on-surface-variant"
-            />
-          </div>
-
-          {/* 操作按钮 */}
-          <div className="flex gap-2 mb-4">
-            <button
-              onClick={handleSmartRecommend}
-              className="flex-1 py-3 px-4 bg-primary-container text-on-primary-container rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all"
-            >
-              <MaterialIcon icon="auto_awesome" />
-              智能推荐
-            </button>
-            <button
-              onClick={() => {/* 全选 */}}
-              className="py-3 px-4 bg-surface-container rounded-xl font-bold active:scale-95 transition-all"
-            >
-              全选
-            </button>
-            <button
-              onClick={() => {/* 清空 */}}
-              className="py-3 px-4 bg-surface-container rounded-xl font-bold active:scale-95 transition-all"
-            >
-              清空
-            </button>
-          </div>
-
-          {/* 知识点树 */}
-          <div className="max-h-96 overflow-y-auto">
-            <KnowledgeTree tree={tree} onToggle={handleToggle} searchQuery={searchQuery} />
-          </div>
-        </section>
-
-        {/* 保存按钮 */}
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full py-4 rounded-full bg-primary text-on-primary font-display font-black text-lg active:scale-95 transition-all disabled:opacity-50"
-        >
-          {saving ? '保存中...' : '保存设置'}
-        </button>
+        ))}
       </div>
+
+      {/* 创建弹窗 */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-surface-container-lowest rounded-2xl p-6 w-96">
+            <h4 className="font-bold mb-4">新建教材</h4>
+            <div className="space-y-3">
+              <input
+                placeholder="教材名称"
+                value={form.name}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                className="w-full p-2 rounded-lg bg-surface-container"
+              />
+              <input
+                placeholder="出版社"
+                value={form.publisher}
+                onChange={e => setForm({ ...form, publisher: e.target.value })}
+                className="w-full p-2 rounded-lg bg-surface-container"
+              />
+              <input
+                type="number"
+                placeholder="年级"
+                value={form.grade}
+                onChange={e => setForm({ ...form, grade: parseInt(e.target.value) })}
+                className="w-full p-2 rounded-lg bg-surface-container"
+              />
+              <input
+                placeholder="年份"
+                value={form.year}
+                onChange={e => setForm({ ...form, year: e.target.value })}
+                className="w-full p-2 rounded-lg bg-surface-container"
+              />
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowModal(false)} className="flex-1 py-2 rounded-full bg-surface-container">取消</button>
+              <button onClick={handleCreate} className="flex-1 py-2 rounded-full bg-primary text-on-primary">创建</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1769,115 +970,365 @@ export default function SettingsPage() {
 - [ ] **Step 2: 提交**
 
 ```bash
-git add app/settings/page.tsx
-git commit -m "feat: add settings page"
+git add components/admin/TextbookList.tsx
+git commit -m "feat: add TextbookList component"
 ```
 
 ---
 
-## 阶段4: 集成
+### Task 10: 创建 ChapterTreeEditor 组件
 
-### Task 13: 首页集成首次引导
+**文件:** `components/admin/ChapterTreeEditor.tsx`
 
-**文件:** `app/page.tsx`
-
-- [ ] **Step 1: 添加首次引导检测**
-
-在首页组件中添加：
+- [ ] **Step 1: 创建章节树形编辑器组件**
 
 ```typescript
-import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
-import OnboardingWizard from '@/components/OnboardingWizard';
+'use client';
 
-// 在组件内
-const { data: session, status } = useSession();
-const [showOnboarding, setShowOnboarding] = useState(false);
+import { useState, useEffect } from 'react';
 
-useEffect(() => {
-  if (status === 'authenticated' && session?.user) {
-    // 检查是否需要首次引导
-    fetch('/api/user/settings')
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.grade || !data.subject || !data.textbookId) {
-          setShowOnboarding(true);
-        }
-      });
-  }
-}, [status, session]);
+interface Chapter {
+  id: string;
+  chapterNumber: number;
+  chapterName: string;
+  sectionNumber: number | null;
+  sectionName: string | null;
+  sort: number;
+  _count: { knowledgePoints: number };
+  children?: Chapter[];
+}
 
-// 在返回的 JSX 中添加
-{showOnboarding && (
-  <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
-)}
+interface ChapterTreeEditorProps {
+  textbookId: string;
+  onSelect: (id: string | null) => void;
+  canEdit: boolean;
+}
+
+export default function ChapterTreeEditor({ textbookId, onSelect, canEdit }: ChapterTreeEditorProps) {
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ chapterNumber: 1, chapterName: '' });
+
+  useEffect(() => {
+    fetch(`/api/admin/chapters?textbookId=${textbookId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setChapters(data.data);
+      })
+      .finally(() => setLoading(false));
+  }, [textbookId]);
+
+  const handleCreate = async () => {
+    const res = await fetch('/api/admin/chapters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...form, textbookId })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setChapters([...chapters, data.data]);
+      setShowModal(false);
+    }
+  };
+
+  if (loading) return <div>加载中...</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-bold">章节管理</h3>
+        {canEdit && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="px-4 py-2 bg-primary text-on-primary rounded-full text-sm font-bold"
+          >
+            新建章节
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        {chapters.map(ch => (
+          <div
+            key={ch.id}
+            className="bg-surface-container rounded-xl p-4 cursor-pointer hover:bg-surface-container-high"
+            onClick={() => onSelect(ch.id)}
+          >
+            <div className="flex justify-between">
+              <p className="font-bold">第{ch.chapterNumber}章 {ch.chapterName}</p>
+              <span className="text-sm text-on-surface-variant">{ch._count.knowledgePoints} 知识点</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 创建弹窗 */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-surface-container-lowest rounded-2xl p-6 w-96">
+            <h4 className="font-bold mb-4">新建章节</h4>
+            <div className="space-y-3">
+              <input
+                type="number"
+                placeholder="章节号"
+                value={form.chapterNumber}
+                onChange={e => setForm({ ...form, chapterNumber: parseInt(e.target.value) })}
+                className="w-full p-2 rounded-lg bg-surface-container"
+              />
+              <input
+                placeholder="章节名称"
+                value={form.chapterName}
+                onChange={e => setForm({ ...form, chapterName: e.target.value })}
+                className="w-full p-2 rounded-lg bg-surface-container"
+              />
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowModal(false)} className="flex-1 py-2 rounded-full bg-surface-container">取消</button>
+              <button onClick={handleCreate} className="flex-1 py-2 rounded-full bg-primary text-on-primary">创建</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 ```
 
 - [ ] **Step 2: 提交**
 
 ```bash
-git add app/page.tsx
-git commit -m "feat: integrate onboarding wizard to homepage"
+git add components/admin/ChapterTreeEditor.tsx
+git commit -m "feat: add ChapterTreeEditor component"
 ```
 
 ---
 
-### Task 14: 底部导航添加设置入口
+### Task 11: 创建 KnowledgePointList 组件
 
-**文件:** `components/BottomNavigation.tsx`
+**文件:** `components/admin/KnowledgePointList.tsx`
 
-- [ ] **Step 1: 添加设置按钮**
-
-在导航项中添加设置入口：
+- [ ] **Step 1: 创建知识点列表组件（包含概念选择器）**
 
 ```typescript
-// 在导航项数组中添加
-{
-  icon: 'settings',
-  label: '设置',
-  href: '/settings',
-},
+'use client';
+
+import { useState, useEffect } from 'react';
+
+interface KnowledgePoint {
+  id: string;
+  name: string;
+  weight: number;
+  inAssess: boolean;
+  status: string;
+  concept: { id: string; name: string; weight: number };
+}
+
+interface Concept {
+  id: string;
+  name: string;
+  category: string | null;
+  weight: number;
+}
+
+interface KnowledgePointListProps {
+  chapterId: string;
+  canEdit: boolean;
+  canDelete: boolean;
+}
+
+export default function KnowledgePointList({ chapterId, canEdit, canDelete }: KnowledgePointListProps) {
+  const [points, setPoints] = useState<KnowledgePoint[]>([]);
+  const [concepts, setConcepts] = useState<Concept[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ name: '', conceptId: '', weight: 0 });
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`/api/admin/knowledge-points?chapterId=${chapterId}`).then(r => r.json()),
+      fetch('/api/admin/concepts').then(r => r.json())
+    ]).then(([pointsData, conceptsData]) => {
+      if (pointsData.success) setPoints(pointsData.data);
+      if (conceptsData.success) setConcepts(conceptsData.data);
+    }).finally(() => setLoading(false));
+  }, [chapterId]);
+
+  const handleCreate = async () => {
+    const res = await fetch('/api/admin/knowledge-points', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...form, chapterId, inAssess: true, status: 'active' })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setPoints([...points, data.data]);
+      setShowModal(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('确定删除?')) return;
+    await fetch(`/api/admin/knowledge-points/${id}`, { method: 'DELETE' });
+    setPoints(points.filter(p => p.id !== id));
+  };
+
+  if (loading) return <div>加载中...</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-bold">知识点管理</h3>
+        {canEdit && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="px-4 py-2 bg-primary text-on-primary rounded-full text-sm font-bold"
+          >
+            新建知识点
+          </button>
+        )}
+      </div>
+
+      <div className="bg-surface-container rounded-2xl overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="text-xs text-on-surface-variant uppercase">
+              <th className="p-4 text-left">名称</th>
+              <th className="p-4 text-left">概念</th>
+              <th className="p-4 text-left">权重</th>
+              <th className="p-4 text-left">状态</th>
+              {canDelete && <th className="p-4 text-right">操作</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {points.map(p => (
+              <tr key={p.id} className="border-t border-outline-variant/10">
+                <td className="p-4 font-bold">{p.name}</td>
+                <td className="p-4 text-on-surface-variant">{p.concept.name}</td>
+                <td className="p-4">
+                  <span className="text-primary">{p.weight > 0 ? p.weight : p.concept.weight}</span>
+                </td>
+                <td className="p-4">
+                  <span className={`px-2 py-1 rounded-full text-xs ${p.status === 'active' ? 'bg-primary/10 text-primary' : 'bg-surface text-on-surface-variant'}`}>
+                    {p.status}
+                  </span>
+                </td>
+                {canDelete && (
+                  <td className="p-4 text-right">
+                    <button onClick={() => handleDelete(p.id)} className="text-error">删除</button>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 创建弹窗 */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-surface-container-lowest rounded-2xl p-6 w-96">
+            <h4 className="font-bold mb-4">新建知识点</h4>
+            <div className="space-y-3">
+              <input
+                placeholder="知识点名称"
+                value={form.name}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                className="w-full p-2 rounded-lg bg-surface-container"
+              />
+              <select
+                value={form.conceptId}
+                onChange={e => setForm({ ...form, conceptId: e.target.value })}
+                className="w-full p-2 rounded-lg bg-surface-container"
+              >
+                <option value="">选择概念...</option>
+                {concepts.map(c => (
+                  <option key={c.id} value={c.id}>{c.name} (权重: {c.weight})</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                placeholder="权重 (0=使用概念权重)"
+                value={form.weight}
+                onChange={e => setForm({ ...form, weight: parseInt(e.target.value) || 0 })}
+                className="w-full p-2 rounded-lg bg-surface-container"
+              />
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowModal(false)} className="flex-1 py-2 rounded-full bg-surface-container">取消</button>
+              <button onClick={handleCreate} className="flex-1 py-2 rounded-full bg-primary text-on-primary" disabled={!form.name || !form.conceptId}>创建</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 ```
 
 - [ ] **Step 2: 提交**
 
 ```bash
-git add components/BottomNavigation.tsx
-git commit -m "feat: add settings to bottom navigation"
+git add components/admin/KnowledgePointList.tsx
+git commit -m "feat: add KnowledgePointList component"
+```
+
+---
+
+### Task 12: 集成到 ConsolePage
+
+**文件:** `components/ConsolePage.tsx`
+
+- [ ] **Step 1: 更新 data 标签页**
+
+找到 `case 'data':` 部分（约 line 122-229），替换为：
+
+```typescript
+case 'data':
+  return (
+    <DataManagementTab canEdit={canEdit} canDelete={canDelete} />
+  );
+```
+
+并在文件顶部添加导入：
+
+```typescript
+import DataManagementTab from './admin/DataManagementTab';
+```
+
+- [ ] **Step 2: 提交**
+
+```bash
+git add components/ConsolePage.tsx
+git commit -m "feat: integrate DataManagementTab to ConsolePage"
 ```
 
 ---
 
 ## 验证
 
-### Task 15: 端到端测试
+### Task 13: 端到端验证
 
-- [ ] **Step 1: 测试首次引导流程**
+- [ ] **Step 1: 验证后台管理**
 
-1. 清空用户设置（或使用新用户注册）
-2. 访问首页，应显示首次引导
-3. 依次完成：选择年级 → 选择科目 → 选择教材 → 设置进度
-4. 完成后应自动跳转首页，智能推荐已应用
+1. 访问 /console
+2. 进入"知识点管理"标签页
+3. 创建教材 → 创建章节 → 创建知识点（选择概念）
+4. 验证权重计算正确
 
-- [ ] **Step 2: 测试设置页面**
+- [ ] **Step 2: 验证数据迁移**
 
-1. 点击底部导航"设置"
-2. 验证年级、科目、教材、进度显示正确
-3. 搜索知识点功能正常
-4. 勾选/取消勾选知识点正常
-5. 智能推荐功能正常
+```bash
+npx tsx prisma/seed-v3.ts
+```
 
-- [ ] **Step 3: 测试题目筛选**
+预期输出应显示迁移的概念和实例数量。
 
-1. 设置不同的知识点勾选状态
-2. 进入练习页面
-3. 验证只出现勾选知识点相关的题目
-
-- [ ] **Step 4: 提交验证通过**
+- [ ] **Step 3: 提交验证**
 
 ```bash
 git add .
-git commit -m "test: verify knowledge tree filter system E2E"
+git commit -m "test: verify knowledge tree filter E2E"
 ```
 
 ---
@@ -1885,29 +1336,21 @@ git commit -m "test: verify knowledge tree filter system E2E"
 ## 完成检查清单
 
 - [ ] 数据库迁移成功应用
-- [ ] 种子数据已创建
-- [ ] 现有知识点已迁移
-- [ ] 所有 API 端点正常工作
-- [ ] 首次引导流程完整
-- [ ] 设置页面功能正常
-- [ ] 知识点树组件正常渲染
-- [ ] 题目筛选正确应用
-- [ ] 底部导航包含设置入口
+- [ ] 种子数据和迁移脚本运行成功
+- [ ] 所有 CRUD API 正常工作
+- [ ] 权重验证正确使用混合模式
+- [ ] DataManagementTab 组件正常工作
+- [ ] 子标签切换和选择流程正常
+- [ ] ConsolePage 集成成功
 
 ---
 
 ## 回滚计划
-
-如需回滚：
 
 ```bash
 # 回滚数据库迁移
 npx prisma migrate resolve --rolled-back [migration_name]
 
 # 恢复代码
-git revert [commit_range]
-
-# 清理缓存
-rm -rf .next
-npm run dev
+git revert [commit]
 ```
