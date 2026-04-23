@@ -6,39 +6,29 @@ export async function POST(req: NextRequest) {
   try {
     await requireAdmin();
 
-    const where: any = { deletedAt: null };
-
-    let excludeId: string | undefined;
-    try {
-      const body = await req.json();
-      excludeId = body.excludeId;
-    } catch {
-      // Empty body is OK
-    }
-
-    if (excludeId) {
-      where.id = { not: excludeId };
-    }
-
     const points = await prisma.knowledgePoint.findMany({
-      where,
-      select: { id: true, name: true, weight: true, inAssess: true }
+      where: { deletedAt: null, inAssess: true },
+      select: {
+        weight: true,
+        concept: { select: { weight: true } }
+      }
     });
 
-    const activeTotal = points
-      .filter(p => p.inAssess)
-      .reduce((sum, p) => sum + p.weight, 0);
+    // Hybrid weight calculation: instance weight > 0 uses instance, otherwise concept
+    const totalWeight = points.reduce((sum, p) => {
+      return sum + (p.weight > 0 ? p.weight : p.concept.weight);
+    }, 0);
 
-    const isValid = activeTotal === 100;
+    const conceptIds = [...new Set(points.map(p => p.conceptId))];
 
     return NextResponse.json({
       success: true,
       data: {
-        isValid,
-        total: activeTotal,
+        isValid: totalWeight === 100,
+        total: totalWeight,
         expected: 100,
-        difference: 100 - activeTotal,
-        points
+        conceptCount: conceptIds.length,
+        pointCount: points.length
       }
     });
   } catch (error: any) {
