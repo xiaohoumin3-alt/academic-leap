@@ -23,6 +23,7 @@ export default function TextbookList({ onSelect, canEdit }: TextbookListProps) {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', publisher: '', grade: 8, subject: '数学', year: '2024' });
+  const subjects = ['数学', '语文', '英语', '物理', '化学', '生物', '历史', '地理', '政治'];
 
   useEffect(() => {
     fetch('/api/admin/textbooks')
@@ -115,6 +116,15 @@ export default function TextbookList({ onSelect, canEdit }: TextbookListProps) {
                 onChange={e => setForm({ ...form, grade: parseInt(e.target.value) })}
                 className="w-full p-2 rounded-lg bg-surface-container text-on-surface"
               />
+              <select
+                value={form.subject}
+                onChange={e => setForm({ ...form, subject: e.target.value })}
+                className="w-full p-2 rounded-lg bg-surface-container text-on-surface"
+              >
+                {subjects.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
               <input
                 placeholder="年份"
                 value={form.year}

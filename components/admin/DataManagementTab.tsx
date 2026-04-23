@@ -22,7 +22,7 @@ export default function DataManagementTab({ canEdit, canDelete }: DataManagement
       {/* 子标签导航 */}
       <div className="flex gap-2">
         <button
-          onClick={() => { setActiveSubTab('textbooks'); setSelectedChapter(null); }}
+          onClick={() => { setActiveSubTab('textbooks'); setSelectedChapter(null); setSelectedTextbook(null); }}
           className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
             activeSubTab === 'textbooks'
               ? 'bg-primary text-on-primary'

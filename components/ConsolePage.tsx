@@ -394,7 +394,7 @@ const ConsolePage: React.FC<ConsolePageProps> = ({ onExit }) => {
                 <div key={k.id} className="bg-surface-container-low rounded-3xl p-6">
                   <p className="font-bold text-on-surface mb-4">{k.name}</p>
                   <div className="flex items-end justify-between">
-                    <div className="text-3xl font-display font-black text-primary">{k.weight}</div>
+                    <div className="text-3xl font-display font-black text-primary">{k.weight > 0 ? k.weight : k.concept?.weight}</div>
                     <div className="text-[10px] font-black opacity-30">WEIGHT</div>
                   </div>
                 </div>
