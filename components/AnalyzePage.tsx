@@ -31,12 +31,37 @@ interface KnowledgeData {
   status?: 'high' | 'medium' | 'low';
 }
 
+interface OverviewInner {
+  totalAttempts: number;
+  completedAttempts: number;
+  averageScore: number;
+  lowestScore: number;
+  totalMinutes: number;
+  completionRate: number;
+  dataReliability: 'high' | 'medium' | 'low';
+  volatilityRange: number;
+  initialAssessmentCompleted: boolean;
+  initialAssessmentScore: number;
+  // Calibration fields
+  needsCalibration: boolean;
+  calibratedStartingScore: number | null;
+  startingScoreCalibrated: boolean;
+}
+
+interface OverviewData {
+  overview: OverviewInner;
+  dailyData: Array<{ date: string; count: number; avgScore: number }>;
+  topKnowledge: Array<{ knowledgePoint: string; mastery: number }>;
+  success?: boolean;
+  error?: string;
+}
+
 const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6'];
 
 const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
   const { data: session, status } = useSession();
   const [loading, setLoading] = useState(true);
-  const [overview, setOverview] = useState<any>(null);
+  const [overview, setOverview] = useState<OverviewData | null>(null);
   const [knowledgeData, setKnowledgeData] = useState<KnowledgeData[]>([]);
   const [timeline, setTimeline] = useState<any[]>([]);
   const [recommendations, setRecommendations] = useState<any>(null);
@@ -62,7 +87,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
         analyticsApi.getRecommendations(),
       ]);
 
-      setOverview(overviewRes);
+      setOverview(overviewRes as OverviewData);
       setTimeline(timelineRes.timeline || []);
 
       // 转换知识点数据

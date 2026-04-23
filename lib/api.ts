@@ -185,7 +185,22 @@ export const analyticsApi = {
   async getOverview() {
     const res = await fetch(`${API_BASE}/analytics/overview`);
     return res.json() as Promise<ApiResponse<{
-      overview: { totalAttempts: number; completedAttempts: number; averageScore: number; totalMinutes: number; completionRate: number };
+      overview: {
+        totalAttempts: number;
+        completedAttempts: number;
+        averageScore: number;
+        lowestScore: number;
+        totalMinutes: number;
+        completionRate: number;
+        dataReliability: 'high' | 'medium' | 'low';
+        volatilityRange: number;
+        initialAssessmentCompleted?: boolean;
+        initialAssessmentScore?: number;
+        // Calibration fields
+        needsCalibration: boolean;
+        calibratedStartingScore: number | null;
+        startingScoreCalibrated: boolean;
+      };
       dailyData: Array<{ date: string; count: number; avgScore: number }>;
       topKnowledge: Array<{ knowledgePoint: string; mastery: number }>;
     }>>;
