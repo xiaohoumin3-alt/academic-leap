@@ -17,7 +17,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await req.json();
-    const { name, subject, category, weight, inAssess, status } = body;
+    const { name, chapterId, conceptId, weight, inAssess, status } = body;
 
     const existing = await prisma.knowledgePoint.findUnique({ where: { id } });
     if (!existing) {
@@ -28,19 +28,19 @@ export async function PUT(
     }
 
     const changes: Record<string, { from: any; to: any }> = {};
-    if (name !== existing.name) changes.name = { from: existing.name, to: name };
-    if (subject !== existing.subject) changes.subject = { from: existing.subject, to: subject };
-    if (category !== existing.category) changes.category = { from: existing.category, to: category };
-    if (weight !== existing.weight) changes.weight = { from: existing.weight, to: weight };
-    if (inAssess !== existing.inAssess) changes.inAssess = { from: existing.inAssess, to: inAssess };
-    if (status !== existing.status) changes.status = { from: existing.status, to: status };
+    if (name !== undefined && name !== existing.name) changes.name = { from: existing.name, to: name };
+    if (chapterId !== undefined && chapterId !== existing.chapterId) changes.chapterId = { from: existing.chapterId, to: chapterId };
+    if (conceptId !== undefined && conceptId !== existing.conceptId) changes.conceptId = { from: existing.conceptId, to: conceptId };
+    if (weight !== undefined && weight !== existing.weight) changes.weight = { from: existing.weight, to: weight };
+    if (inAssess !== undefined && inAssess !== existing.inAssess) changes.inAssess = { from: existing.inAssess, to: inAssess };
+    if (status !== undefined && status !== existing.status) changes.status = { from: existing.status, to: status };
 
     const updated = await prisma.knowledgePoint.update({
       where: { id },
       data: {
         ...(name !== undefined && { name }),
-        ...(subject !== undefined && { subject }),
-        ...(category !== undefined && { category }),
+        ...(chapterId !== undefined && { chapterId }),
+        ...(conceptId !== undefined && { conceptId }),
         ...(weight !== undefined && { weight }),
         ...(inAssess !== undefined && { inAssess }),
         ...(status !== undefined && { status })

@@ -9,6 +9,7 @@ export async function POST(req: NextRequest) {
     const points = await prisma.knowledgePoint.findMany({
       where: { deletedAt: null, inAssess: true },
       select: {
+        conceptId: true,
         weight: true,
         concept: { select: { weight: true } }
       }

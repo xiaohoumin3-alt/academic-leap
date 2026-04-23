@@ -66,11 +66,11 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, subject, category, weight = 0, inAssess = true, status = 'active' } = body;
+    const { name, chapterId, conceptId, weight = 0, inAssess = true, status = 'active' } = body;
 
-    if (!name || !subject || !category) {
+    if (!name || !chapterId || !conceptId) {
       return NextResponse.json(
-        { success: false, error: '缺少必填字段', code: 'VALIDATION_ERROR' },
+        { success: false, error: '缺少必填字段: name, chapterId, conceptId', code: 'VALIDATION_ERROR' },
         { status: 400 }
       );
     }
@@ -78,8 +78,8 @@ export async function POST(req: NextRequest) {
     const knowledge = await prisma.knowledgePoint.create({
       data: {
         name,
-        subject,
-        category,
+        chapterId,
+        conceptId,
         weight,
         inAssess,
         status

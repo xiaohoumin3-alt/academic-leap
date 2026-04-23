@@ -56,14 +56,14 @@ async function main() {
   let pointCount = 0;
 
   for (const [name, points] of groupedByName) {
-    const firstPoint = points[0];
+    const firstPoint = points[0] as any;
 
     // 创建概念
     const concept = await prisma.knowledgeConcept.create({
       data: {
         name,
-        category: firstPoint.category || null,
-        weight: firstPoint.weight || 0,
+        category: (firstPoint.category as string) || null,
+        weight: (firstPoint.weight as number) || 0,
       },
     });
     conceptCount++;

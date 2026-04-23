@@ -36,26 +36,37 @@ async function main() {
   });
   console.log('Created admin:', admin.id);
 
-  // Create sample knowledge points
-  const kp1 = await prisma.knowledgePoint.create({
-    data: { name: '一元一次方程', subject: '初中', category: '代数', weight: 25, inAssess: true, status: 'active' }
+  // Create sample textbook, chapter, and concepts
+  const textbook = await prisma.textbookVersion.upsert({
+    where: { grade_subject_name: { grade: 8, subject: '数学', name: '人教版' } },
+    update: {},
+    create: { grade: 8, subject: '数学', name: '人教版', year: '2024', status: 'active' }
   });
-  console.log('Created KP:', kp1.name);
+  console.log('Created textbook:', textbook.name);
 
-  const kp2 = await prisma.knowledgePoint.create({
-    data: { name: '勾股定理', subject: '初中', category: '几何', weight: 20, inAssess: true, status: 'active' }
+  const chapter = await prisma.chapter.create({
+    data: { textbookId: textbook.id, chapterNumber: 1, chapterName: '代数基础', sort: 0 }
   });
-  console.log('Created KP:', kp2.name);
+  console.log('Created chapter:', chapter.chapterName);
 
-  const kp3 = await prisma.knowledgePoint.create({
-    data: { name: '二次函数', subject: '初中', category: '代数', weight: 30, inAssess: true, status: 'active' }
-  });
-  console.log('Created KP:', kp3.name);
+  // Create concepts
+  const concepts = await Promise.all([
+    prisma.knowledgeConcept.create({ data: { name: '一元一次方程', category: '代数', weight: 25 } }),
+    prisma.knowledgeConcept.create({ data: { name: '勾股定理', category: '几何', weight: 20 } }),
+    prisma.knowledgeConcept.create({ data: { name: '二次函数', category: '代数', weight: 30 } }),
+    prisma.knowledgeConcept.create({ data: { name: '概率统计', category: '统计', weight: 25 } }),
+  ]);
+  console.log('Created concepts:', concepts.length);
 
-  const kp4 = await prisma.knowledgePoint.create({
-    data: { name: '概率统计', subject: '初中', category: '统计', weight: 25, inAssess: true, status: 'active' }
-  });
-  console.log('Created KP:', kp4.name);
+  // Create knowledge points
+  const kps = await Promise.all(
+    concepts.map(c =>
+      prisma.knowledgePoint.create({
+        data: { name: c.name, chapterId: chapter.id, conceptId: c.id, weight: 0, inAssess: true, status: 'active' }
+      })
+    )
+  );
+  console.log('Created knowledge points:', kps.length);
 
   console.log('Initialization complete!');
   console.log('Login credentials:');

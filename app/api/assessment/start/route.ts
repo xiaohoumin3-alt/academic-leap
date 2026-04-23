@@ -74,12 +74,12 @@ export async function POST(req: NextRequest) {
       where: {
         inAssess: true,
         status: 'active',
+        deletedAt: null,
       },
       select: {
         id: true,
         name: true,
-        subject: true,
-        category: true,
+        conceptId: true,
         weight: true,
       },
     });
