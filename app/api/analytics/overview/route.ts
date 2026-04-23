@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 // GET /api/analytics/overview - 学习概览数据
 export async function GET(req: NextRequest) {
@@ -8,36 +8,41 @@ export async function GET(req: NextRequest) {
     const session = await auth();
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 });
+      return NextResponse.json({ error: "未登录" }, { status: 401 });
     }
 
     const userId = session.user.id;
 
-    // 获取总练习次数
+    // 获取已完成练习次数（不管得分是多少，只要是完成的练习就算一次）
     const totalAttempts = await prisma.attempt.count({
-      where: { userId },
+      where: { userId, completedAt: { not: null } },
     });
 
-    // 获取已完成练习次数
+    // 获取有效练习次数（已完成且有分数的，用于计算平均分）
     const completedAttempts = await prisma.attempt.count({
       where: {
         userId,
         completedAt: { not: null },
+        score: { gt: 0 },
       },
     });
 
-    // 获取平均分数
+    // 获取平均分数（只计算有效完成记录，score > 0）
     const attempts = await prisma.attempt.findMany({
       where: {
         userId,
         completedAt: { not: null },
+        score: { gt: 0 }, // 只计算有分数的记录，过滤无效数据
       },
       select: { score: true },
     });
 
     const averageScore =
       attempts.length > 0
-        ? attempts.reduce((sum: number, a: { score: number }) => sum + a.score, 0) / attempts.length
+        ? attempts.reduce(
+            (sum: number, a: { score: number }) => sum + a.score,
+            0,
+          ) / attempts.length
         : 0;
 
     // 获取总练习时长（分钟）
@@ -59,6 +64,7 @@ export async function GET(req: NextRequest) {
       where: {
         userId,
         completedAt: { gte: sevenDaysAgo },
+        score: { gt: 0 },
       },
       select: {
         id: true,
@@ -66,17 +72,45 @@ export async function GET(req: NextRequest) {
         duration: true,
         completedAt: true,
       },
-      orderBy: { completedAt: 'desc' },
+      orderBy: { completedAt: "desc" },
     });
+
+    // 计算数据可信度（根据有效练习次数）
+    const dataReliability =
+      totalAttempts >= 10 ? "high" : totalAttempts >= 5 ? "medium" : "low";
+
+    // 计算历史最低分作为起始分
+    const allScores = attempts.map((a: { score: number }) => a.score);
+    const lowestScore =
+      allScores.length > 1 ? Math.min(...allScores) : averageScore;
+
+    // 计算波动范围（最近5次成绩的标准差）
+    const recent5Scores = recentAttempts
+      .slice(0, 5)
+      .map((a: { score: number }) => a.score);
+    let volatilityRange = 0;
+    if (recent5Scores.length > 1) {
+      const mean =
+        recent5Scores.reduce((a: number, b: number) => a + b, 0) /
+        recent5Scores.length;
+      volatilityRange = Math.round(
+        Math.sqrt(
+          recent5Scores.reduce(
+            (sum: number, s: number) => sum + Math.pow(s - mean, 2),
+            0,
+          ) / recent5Scores.length,
+        ),
+      );
+    }
 
     // 计算每日练习数据
     const dailyData = Array.from({ length: 7 }, (_: unknown, i: number) => {
       const date = new Date();
       date.setDate(date.getDate() - (6 - i));
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = date.toISOString().split("T")[0];
 
       const dayAttempts = recentAttempts.filter(
-        (a) => a.completedAt?.toISOString().split('T')[0] === dateStr
+        (a) => a.completedAt?.toISOString().split("T")[0] === dateStr,
       );
 
       return {
@@ -84,7 +118,10 @@ export async function GET(req: NextRequest) {
         count: dayAttempts.length,
         avgScore:
           dayAttempts.length > 0
-            ? dayAttempts.reduce((sum: number, a: { score: number }) => sum + a.score, 0) / dayAttempts.length
+            ? dayAttempts.reduce(
+                (sum: number, a: { score: number }) => sum + a.score,
+                0,
+              ) / dayAttempts.length
             : 0,
       };
     });
@@ -92,29 +129,76 @@ export async function GET(req: NextRequest) {
     // 获取知识点掌握度
     const knowledge = await prisma.userKnowledge.findMany({
       where: { userId },
-      orderBy: { mastery: 'desc' },
+      orderBy: { mastery: "desc" },
       take: 5,
     });
+
+    // 获取用户初始测评状态
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        initialAssessmentCompleted: true,
+        initialAssessmentScore: true,
+        startingScoreCalibrated: true,
+        calibratedStartingScore: true,
+      },
+    });
+
+    // 检测是否需要校准
+    let needsCalibration = false;
+    let calibratedStartingScore: number | null = null;
+
+    // 条件：最低分 < 平均分 - 50，且记录数 >= 5
+    if (totalAttempts >= 5 && lowestScore < averageScore - 50) {
+      needsCalibration = !user?.startingScoreCalibrated;
+
+      // 计算校准后的起始分（去掉最低分后的最小值）
+      if (needsCalibration) {
+        const scoresCopy = [...allScores];
+        const lowestIndex = scoresCopy.indexOf(lowestScore);
+        if (lowestIndex !== -1) {
+          scoresCopy.splice(lowestIndex, 1);
+        }
+        calibratedStartingScore =
+          scoresCopy.length > 0 ? Math.min(...scoresCopy) : lowestScore;
+      }
+    }
+
+    // 如果已校准，使用存储的值
+    if (user?.startingScoreCalibrated && user?.calibratedStartingScore) {
+      calibratedStartingScore = user.calibratedStartingScore;
+    }
 
     return NextResponse.json({
       overview: {
         totalAttempts,
         completedAttempts,
         averageScore: Math.round(averageScore),
+        lowestScore: Math.round(lowestScore),
         totalMinutes,
         completionRate:
           totalAttempts > 0
             ? Math.round((completedAttempts / totalAttempts) * 100)
             : 0,
+        dataReliability,
+        volatilityRange,
+        initialAssessmentCompleted: user?.initialAssessmentCompleted ?? false,
+        initialAssessmentScore: user?.initialAssessmentScore ?? 0,
+        // 新增字段
+        needsCalibration,
+        calibratedStartingScore,
+        startingScoreCalibrated: user?.startingScoreCalibrated ?? false,
       },
       dailyData,
-      topKnowledge: knowledge.map((k: { knowledgePoint: string; mastery: number }) => ({
-        knowledgePoint: k.knowledgePoint,
-        mastery: Math.round(k.mastery * 100),
-      })),
+      topKnowledge: knowledge.map(
+        (k: { knowledgePoint: string; mastery: number }) => ({
+          knowledgePoint: k.knowledgePoint,
+          mastery: Math.round(k.mastery * 100),
+        }),
+      ),
     });
   } catch (error) {
-    console.error('获取概览数据错误:', error);
-    return NextResponse.json({ error: '获取失败' }, { status: 500 });
+    console.error("获取概览数据错误:", error);
+    return NextResponse.json({ error: "获取失败" }, { status: 500 });
   }
 }
