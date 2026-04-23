@@ -8,6 +8,7 @@ import { cn } from '../lib/utils';
 import { useKnowledgePoints, useTemplates, useDifficultyMatrix, useWeightValidation, useAdminUser } from '@/lib/hooks/useAdminData';
 import TemplateEditor from './TemplateEditor';
 import QualityAnalysis from './QualityAnalysis';
+import DataManagementTab from './admin/DataManagementTab';
 
 interface ConsolePageProps {
   onExit: () => void;
@@ -121,111 +122,7 @@ const ConsolePage: React.FC<ConsolePageProps> = ({ onExit }) => {
     switch (activeTab) {
       case 'data':
         return (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-4">
-                <input
-                  type="text"
-                  placeholder="搜索知识点..."
-                  className="bg-surface-container-low border border-outline-variant/10 rounded-full py-2 px-4 text-sm"
-                  value={filters.search || ''}
-                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                />
-                <select
-                  className="bg-surface-container-low border border-outline-variant/10 rounded-full py-2 px-4 text-sm"
-                  value={filters.subject || ''}
-                  onChange={(e) => setFilters({ ...filters, subject: e.target.value || undefined })}
-                >
-                  <option value="">全部学科</option>
-                  <option value="初中">初中</option>
-                  <option value="高中">高中</option>
-                </select>
-                <span className="text-xs font-bold text-primary">共 {kpTotal} 条</span>
-              </div>
-              {canEdit && (
-                <button
-                  onClick={() => { setEditingItem({}); setEditForm({ name: '', subject: '初中', category: '代数', weight: 10, inAssess: true, status: 'active' }); }}
-                  className="px-4 py-2 bg-primary text-on-primary rounded-full text-sm font-bold hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
-                >
-                  <MaterialIcon icon="add" className="w-4 h-4" />
-                  新建知识点
-                </button>
-              )}
-            </div>
-
-            {kpLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : (
-              <div className="bg-surface-container-lowest rounded-[2rem] overflow-hidden border border-outline-variant/5">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-surface-container-low/50 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/60">
-                      <th className="px-8 py-4">名称</th>
-                      <th className="px-6 py-4">学科</th>
-                      <th className="px-6 py-4">分类</th>
-                      <th className="px-6 py-4">权重</th>
-                      <th className="px-6 py-4">参与测评</th>
-                      <th className="px-6 py-4">状态</th>
-                      <th className="px-6 py-4 text-right pr-12">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-sm font-bold">
-                    {knowledgePoints.map((item: any) => (
-                      <tr key={item.id} className="border-t border-outline-variant/5 hover:bg-surface-container-low/30 transition-colors">
-                        <td className="px-8 py-5">
-                          <span className="text-on-surface">{item.name}</span>
-                        </td>
-                        <td className="px-6 py-5 text-on-surface-variant">{item.subject}</td>
-                        <td className="px-6 py-5 text-on-surface-variant">{item.category}</td>
-                        <td className="px-6 py-5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-primary">{item.weight}</span>
-                            <span className="text-[10px] opacity-30">pts</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-5">
-                          <button
-                            onClick={() => handleToggleAssess(item)}
-                            className={cn(
-                              "w-12 h-6 rounded-full transition-all relative overflow-hidden",
-                              item.inAssess ? "bg-primary shadow-[0_0_8px_rgba(0,106,40,0.4)]" : "bg-surface-variant"
-                            )}
-                          >
-                            <motion.div
-                              animate={{ x: item.inAssess ? 24 : 4 }}
-                              className="absolute top-1 w-4 h-4 rounded-full bg-surface"
-                            />
-                          </button>
-                        </td>
-                        <td className="px-6 py-5">
-                          <span className={cn(
-                            "px-2 py-1 rounded-full text-[10px] font-black uppercase",
-                            item.status === 'active' ? "bg-primary/10 text-primary" : "bg-surface-variant text-on-surface-variant"
-                          )}>{item.status}</span>
-                        </td>
-                        <td className="px-6 py-5 text-right pr-12">
-                          <button
-                            onClick={() => { setEditingItem(item); setEditForm(item); }}
-                            className="p-2 hover:bg-surface-container-high rounded-full transition-colors mr-1"
-                          >
-                            <MaterialIcon icon="edit" className="w-4 h-4 text-outline-variant" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteKnowledge(item.id, item.name)}
-                            className="p-2 hover:bg-error-container rounded-full transition-colors"
-                          >
-                            <MaterialIcon icon="delete" className="w-4 h-4 text-error" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          <DataManagementTab canEdit={canEdit} canDelete={canDelete} />
         );
       case 'template':
         return editingTemplate ? (
