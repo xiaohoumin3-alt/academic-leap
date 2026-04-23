@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 // POST /api/analytics/recalibrate - 执行起始分校准
 export async function POST(req: NextRequest) {
@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 });
+      return NextResponse.json({ error: "未登录" }, { status: 401 });
     }
 
     const userId = session.user.id;

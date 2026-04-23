@@ -118,14 +118,21 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
       const response = await fetch('/api/analytics/recalibrate', {
         method: 'POST',
       });
+
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || '校准失败');
+      }
 
       if (data.success) {
         // 重新加载数据
-        loadAnalytics();
+        await loadAnalytics();
       }
     } catch (error) {
       console.error('校准失败:', error);
+      // 可以在这里添加用户提示
+      alert('校准失败: ' + (error instanceof Error ? error.message : '未知错误'));
     }
   };
 
