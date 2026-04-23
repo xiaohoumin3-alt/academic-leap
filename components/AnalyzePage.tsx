@@ -41,7 +41,6 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
   const [timeline, setTimeline] = useState<any[]>([]);
   const [recommendations, setRecommendations] = useState<any>(null);
   const [selectedModule, setSelectedModule] = useState<KnowledgeData | null>(null);
-  const [isCalibrating, setIsCalibrating] = useState(false);
 
   useEffect(() => {
     if (status === 'loading') return;
