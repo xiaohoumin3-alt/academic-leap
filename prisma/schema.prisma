@@ -31,14 +31,21 @@ model User {
   startingScoreCalibrated    Boolean   @default(false) // 是否已完成起始分校准
   calibratedStartingScore    Int?                      // 校准后的起始分数
 
+  // 年级科目教材设置
+  selectedGrade      Int?      // 选择的年级 (7-12)
+  selectedSubject    String?   // 选择的科目 (数学)
+  selectedTextbookId String?   // 选择的教材版本ID
+  studyProgress      Int       @default(0) // 学习进度百分比 0-100
+
   // 关联
-  attempts      Attempt[]
-  knowledge     UserKnowledge[]
-  ocrTasks      OCRTask[]
-  accounts      Account[]
-  sessions      Session[]
-  admin         Admin?
-  assessments   Assessment[]
+  attempts            Attempt[]
+  knowledge           UserKnowledge[]
+  ocrTasks            OCRTask[]
+  accounts            Account[]
+  sessions            Session[]
+  admin               Admin?
+  assessments         Assessment[]
+  enabledKnowledge    UserEnabledKnowledge[]
 }
 
 // 题目模型
@@ -185,19 +192,83 @@ model Admin {
   templates Template[]
 }
 
-// 知识点
+// 知识点概念（双层架构）
+model KnowledgeConcept {
+  id          String    @id @default(cuid())
+  name        String    // "勾股定理"
+  category    String?   // "几何"、"代数"
+  weight      Int       @default(0) // 默认权重
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  instances   KnowledgePoint[]
+}
+
+// 教材版本
+model TextbookVersion {
+  id          String   @id @default(cuid())
+  name        String   // "人教版", "北师大版"
+  publisher   String?  // "人民教育出版社"
+  grade       Int      // 7-12
+  subject     String   // "数学"
+  year        String?  // "2024版"
+  status      String   @default("active")
+  chapters    Chapter[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([grade, subject, name])
+  @@index([grade, subject, status])
+}
+
+// 教材章节
+model Chapter {
+  id              String           @id @default(cuid())
+  textbookId      String           // 关联教材版本
+  chapterNumber   Int              // 第几章
+  chapterName     String           // "有理数"
+  sectionNumber   Int?             // 第几节（可选）
+  sectionName     String?          // 小节名称
+  parentId        String?          // 父章节ID（用于小节）
+  sort            Int              @default(0)
+
+  textbook        TextbookVersion  @relation(fields: [textbookId], references: [id])
+  parent          Chapter?         @relation("ChapterHierarchy", fields: [parentId], references: [id])
+  children        Chapter[]        @relation("ChapterHierarchy")
+  knowledgePoints KnowledgePoint[]
+
+  @@index([textbookId, parentId])
+}
+
+// 用户勾选的知识点/章节
+model UserEnabledKnowledge {
+  id        String   @id @default(cuid())
+  userId    String
+  nodeId    String   // 章节ID或知识点ID
+  nodeType  String   // "chapter" 或 "point"
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, nodeId])
+  @@index([userId, nodeType])
+}
+
+// 知识点（实例层）
 model KnowledgePoint {
   id          String    @id @default(cuid())
-  name        String
-  subject     String    // 初中/高中
-  category    String    // 代数/几何/统计
-  weight      Int       @default(0) // 分值权重 1-100
+  chapterId   String    // 关联章节
+  conceptId   String    // 关联概念
+  name        String    // 实例名称（可覆盖概念名）
+  weight      Int       @default(0) // 权重：0=使用概念权重，>0=覆盖
   inAssess    Boolean   @default(true) // 参与测评
   status      String    @default("active") // active/draft/archived
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
+  chapter     Chapter              @relation(fields: [chapterId], references: [id])
+  concept     KnowledgeConcept     @relation(fields: [conceptId], references: [id])
   histories   KnowledgePointHistory[]
   templates   Template[]
 }
