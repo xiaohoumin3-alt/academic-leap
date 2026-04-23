@@ -169,6 +169,22 @@ export async function GET(req: NextRequest) {
       calibratedStartingScore = user.calibratedStartingScore;
     }
 
+    // 获取全部答题统计（所有练习的所有 steps）- 用于"我的"页显示
+    const allStepsCount = await prisma.attemptStep.count({
+      where: {
+        attempt: { userId, completedAt: { not: null } },
+      },
+    });
+
+    const correctStepsCount = await prisma.attemptStep.count({
+      where: {
+        attempt: { userId, completedAt: { not: null } },
+        isCorrect: true,
+      },
+    });
+
+    const correctRate = allStepsCount > 0 ? Math.round((correctStepsCount / allStepsCount) * 100) : 0;
+
     return NextResponse.json({
       overview: {
         totalAttempts,
@@ -188,6 +204,9 @@ export async function GET(req: NextRequest) {
         needsCalibration,
         calibratedStartingScore,
         startingScoreCalibrated: user?.startingScoreCalibrated ?? false,
+        // 用于"我的"页的统计
+        totalQuestions: allStepsCount,
+        correctRate,
       },
       dailyData,
       topKnowledge: knowledge.map(
