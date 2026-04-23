@@ -59,6 +59,18 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params;
   try {
     const admin = await requireAdmin();
+
+    // Check if there are knowledge points referencing this concept
+    const knowledgePointCount = await prisma.knowledgePoint.count({
+      where: { conceptId: id }
+    });
+    if (knowledgePointCount > 0) {
+      return NextResponse.json(
+        { success: false, error: `无法删除：存在 ${knowledgePointCount} 个关联的知识点` },
+        { status: 409 }
+      );
+    }
+
     await prisma.knowledgeConcept.delete({ where: { id } });
     await prisma.auditLog.create({
       data: {

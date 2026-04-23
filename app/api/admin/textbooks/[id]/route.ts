@@ -55,6 +55,18 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params;
   try {
     const admin = await requireAdmin();
+
+    // Check if there are chapters in this textbook
+    const chapterCount = await prisma.chapter.count({
+      where: { textbookId: id }
+    });
+    if (chapterCount > 0) {
+      return NextResponse.json(
+        { success: false, error: `无法删除：教材包含 ${chapterCount} 个章节` },
+        { status: 409 }
+      );
+    }
+
     await prisma.textbookVersion.delete({ where: { id } });
     await prisma.auditLog.create({
       data: {
