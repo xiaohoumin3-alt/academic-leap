@@ -145,24 +145,33 @@ export default function MePage() {
           )}
 
           {settings ? (
-            <div className="bg-surface rounded-2xl p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm text-on-surface-variant">
-                  <MaterialIcon icon="school" style={{ fontSize: '18px' }} />
-                  <span>
-                    {settings.grade}年级 · {settings.selectedSubject || '未设置'}
-                    {settings.selectedTextbookId && ' | 目标 ' + (settings.targetScore || DEFAULT_TARGET_SCORE) + '分'}
-                  </span>
+            <>
+              <div className="bg-surface rounded-2xl p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm text-on-surface-variant">
+                    <MaterialIcon icon="school" style={{ fontSize: '18px' }} />
+                    <span>
+                      {settings.grade}年级 · {settings.selectedSubject || '未设置'}
+                      {settings.selectedTextbookId && ' | 目标 ' + (settings.targetScore || DEFAULT_TARGET_SCORE) + '分'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setSettingsExpanded(!settingsExpanded)}
+                    className="px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors flex items-center gap-1"
+                  >
+                    {settingsExpanded ? '收起' : '展开'}
+                    <MaterialIcon icon={settingsExpanded ? 'expand_less' : 'expand_more'} style={{ fontSize: '18px' }} />
+                  </button>
                 </div>
-                <button
-                  onClick={() => setSettingsExpanded(!settingsExpanded)}
-                  className="px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors flex items-center gap-1"
-                >
-                  {settingsExpanded ? '收起' : '展开'}
-                  <MaterialIcon icon={settingsExpanded ? 'expand_less' : 'expand_more'} style={{ fontSize: '18px' }} />
-                </button>
               </div>
-            </div>
+
+              {/* 内联学习设置 */}
+              {settingsExpanded && (
+                <div className="mt-4 -mx-2 -mb-2">
+                  <LearningSettings onRefresh={refreshSettings} embedded={true} />
+                </div>
+              )}
+            </>
           ) : (
             <button
               onClick={() => setSettingsExpanded(true)}
@@ -179,13 +188,6 @@ export default function MePage() {
             onShowWeeklyReport={() => setShowWeeklyReport(true)}
           />
         </div>
-
-        {/* 学习设置 - 折叠式 */}
-        {settingsExpanded && (
-          <div className="mb-6">
-            <LearningSettings onRefresh={refreshSettings} />
-          </div>
-        )}
 
         {/* 功能列表 */}
         <div className="space-y-3">

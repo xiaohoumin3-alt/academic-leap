@@ -9,6 +9,7 @@ import { userApi } from '@/lib/api';
 
 interface LearningSettingsProps {
   onRefresh?: () => void;
+  embedded?: boolean;  // 内联模式，去掉外层容器样式
 }
 
 interface Textbook {
@@ -21,7 +22,7 @@ interface Textbook {
   _count: { chapters: number };
 }
 
-export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
+export default function LearningSettings({ onRefresh, embedded = false }: LearningSettingsProps) {
   const [settings, setSettings] = useState<any>(null);
   const [progress, setProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState<string>('');
@@ -264,7 +265,7 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
 
   if (loading) {
     return (
-      <div className="bg-surface-container-low rounded-[2rem] p-6">
+      <div className={embedded ? '' : 'bg-surface-container-low rounded-[2rem] p-6'}>
         <div className="flex items-center justify-center py-12">
           <div className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
         </div>
@@ -275,7 +276,7 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
   // 教材选择器
   if (showTextbookSelector || isEditing) {
     return (
-      <div className="bg-surface-container-low rounded-[2rem] p-6">
+      <div className={embedded ? 'pt-4' : 'bg-surface-container-low rounded-[2rem] p-6'}>
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -387,7 +388,7 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
 
   if (!settings) {
     return (
-      <div className="bg-surface-container-low rounded-[2rem] p-6">
+      <div className={embedded ? '' : 'bg-surface-container-low rounded-[2rem] p-6'}>
         <p className="text-center text-on-surface-variant">加载中...</p>
       </div>
     );
@@ -395,6 +396,22 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
 
   // 如果没有知识树数据，显示加载或错误状态
   if (!treeData) {
+    if (embedded) {
+      return (
+        <div className="text-center py-6">
+          <p className="text-on-surface-variant mb-4">无法加载知识树数据</p>
+          <button
+            onClick={() => {
+              setShowTextbookSelector(true);
+              loadTextbooks();
+            }}
+            className="bg-primary text-on-primary rounded-full py-3 px-6 font-medium text-sm"
+          >
+            重新选择教材
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="bg-surface-container-low rounded-[2rem] p-6">
         <div className="flex items-center gap-3 mb-6">
@@ -421,24 +438,26 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
 
   return (
     <>
-      <div className="bg-surface-container-low rounded-[2rem] p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-              <MaterialIcon icon="school" className="text-primary" style={{ fontSize: '22px' }} />
+      <div className={embedded ? 'pt-2' : 'bg-surface-container-low rounded-[2rem] p-6'}>
+        {!embedded && (
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <MaterialIcon icon="school" className="text-primary" style={{ fontSize: '22px' }} />
+              </div>
+              <h3 className="font-bold text-on-surface">学习设置</h3>
             </div>
-            <h3 className="font-bold text-on-surface">学习设置</h3>
+            {!isEditing && settings?.selectedTextbookId && (
+              <button
+                onClick={handleEnterEditMode}
+                className="w-10 h-10 rounded-full bg-surface hover:bg-surface-container-high flex items-center justify-center transition-colors"
+                aria-label="编辑设置"
+              >
+                <MaterialIcon icon="edit" className="text-on-surface-variant" style={{ fontSize: '20px' }} />
+              </button>
+            )}
           </div>
-          {!isEditing && settings?.selectedTextbookId && (
-            <button
-              onClick={handleEnterEditMode}
-              className="w-10 h-10 rounded-full bg-surface hover:bg-surface-container-high flex items-center justify-center transition-colors"
-              aria-label="编辑设置"
-            >
-              <MaterialIcon icon="edit" className="text-on-surface-variant" style={{ fontSize: '20px' }} />
-            </button>
-          )}
-        </div>
+        )}
 
         {/* 设置摘要 */}
         <div className="bg-surface rounded-2xl p-4 mb-4">
