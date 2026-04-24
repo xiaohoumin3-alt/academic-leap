@@ -176,6 +176,18 @@ export async function GET(req: NextRequest) {
       ? Math.round(trainingAttempts.reduce((sum: number, a: { score: number }) => sum + a.score, 0) / trainingAttempts.length)
       : 0;
 
+    // 获取练习模式 attempt IDs（用于统计练习专用数据）
+    const trainingAttemptIds = await prisma.attempt.findMany({
+      where: {
+        userId,
+        completedAt: { not: null },
+        mode: 'training',
+      },
+      select: { id: true },
+    });
+
+    const trainingAttemptIdList = trainingAttemptIds.map((a) => a.id);
+
     // 检测是否需要校准
     let needsCalibration = false;
     let calibratedStartingScore: number | null = null;
@@ -232,6 +244,37 @@ export async function GET(req: NextRequest) {
 
     const correctRate = allStepsCount > 0 ? Math.round((correctStepsCount / allStepsCount) * 100) : 0;
 
+    // 练习专用统计（只统计 training 模式）
+    const trainingQuestionsCount = trainingAttemptIdList.length > 0
+      ? await prisma.attemptStep.count({
+          where: { attemptId: { in: trainingAttemptIdList } },
+        })
+      : 0;
+
+    const trainingCorrectStepsCount = trainingAttemptIdList.length > 0
+      ? await prisma.attemptStep.count({
+          where: {
+            attemptId: { in: trainingAttemptIdList },
+            isCorrect: true,
+          },
+        })
+      : 0;
+
+    const trainingCorrectRate = trainingQuestionsCount > 0
+      ? Math.round((trainingCorrectStepsCount / trainingQuestionsCount) * 100)
+      : 0;
+
+    const trainingDuration = await prisma.attempt.aggregate({
+      where: {
+        userId,
+        completedAt: { not: null },
+        mode: 'training',
+      },
+      _sum: { duration: true },
+    });
+
+    const trainingMinutes = Math.floor((trainingDuration._sum.duration || 0) / 60);
+
     return NextResponse.json({
       overview: {
         totalAttempts,
@@ -264,6 +307,10 @@ export async function GET(req: NextRequest) {
         })),
         trainingAvgScore,
         trainingCount: trainingAttempts.length,
+        // 练习专用统计
+        trainingQuestions: trainingQuestionsCount,
+        trainingCorrectRate,
+        trainingMinutes,
       },
       dailyData,
       topKnowledge: knowledge.map(
