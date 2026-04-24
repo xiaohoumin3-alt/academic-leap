@@ -100,14 +100,13 @@ export async function POST(req: NextRequest) {
       const pointIds = knowledgePoints.map((kp) => kp.id);
 
       if (enabled) {
-        // 批量创建：使用 createMany with skipDuplicates
+        // 批量创建
         await prisma.userEnabledKnowledge.createMany({
           data: pointIds.map((id) => ({
             userId: session.user.id,
             nodeId: id,
             nodeType: 'point' as const,
           })),
-          skipDuplicates: true,
         });
         affectedCount = pointIds.length;
       } else {
