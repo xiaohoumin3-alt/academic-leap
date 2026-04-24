@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import MaterialIcon from '../../components/MaterialIcon';
 import { BottomNavigation } from '../../components/BottomNavigation';
 import LearningSettings from '@/components/LearningSettings';
+import LearningPathOverview from '@/components/LearningPathOverview';
+import WeeklyReportDialog from '@/components/WeeklyReportDialog';
 
 interface UserStats {
   currentScore: number;
@@ -64,6 +66,7 @@ export default function MePage() {
   const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
+  const [showWeeklyReport, setShowWeeklyReport] = useState(false);
 
   // 获取用户信息和统计数据 - 使用 analytics API 保持数据一致性
   useEffect(() => {
@@ -207,6 +210,13 @@ export default function MePage() {
           </div>
         </div>
 
+        {/* 学习路径概览 */}
+        <div className="mb-6">
+          <LearningPathOverview
+            onShowWeeklyReport={() => setShowWeeklyReport(true)}
+          />
+        </div>
+
         {/* 功能列表 */}
         <div className="space-y-3">
           <button onClick={() => router.push('/me/history')} className="w-full flex items-center gap-4 p-4 bg-surface-container-low rounded-2xl hover:bg-surface-container transition-colors">
@@ -262,6 +272,16 @@ export default function MePage() {
       </div>
 
       <BottomNavigation />
+
+      {/* 周报弹窗 */}
+      <WeeklyReportDialog
+        isOpen={showWeeklyReport}
+        onClose={() => setShowWeeklyReport(false)}
+        onConfirmRecalibrate={() => {
+          // 重组后刷新页面
+          router.refresh();
+        }}
+      />
     </div>
   );
 }
