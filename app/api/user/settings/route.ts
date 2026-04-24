@@ -50,8 +50,7 @@ export async function GET() {
         studyProgress: user.studyProgress ?? 0,
       }
     });
-  } catch (error: any) {
-    console.error('获取用户设置错误:', error);
+  } catch (error) {
     return NextResponse.json(
       { success: false, error: '获取失败' },
       { status: 500 }
@@ -89,17 +88,27 @@ export async function PUT(req: NextRequest) {
       },
     });
 
+    // 获取教材详情
+    let selectedTextbook = null;
+    if (user.selectedTextbookId) {
+      const textbook = await prisma.textbookVersion.findUnique({
+        where: { id: user.selectedTextbookId },
+        select: { id: true, name: true, year: true }
+      });
+      selectedTextbook = textbook;
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         selectedGrade: user.selectedGrade,
         selectedSubject: user.selectedSubject,
         selectedTextbookId: user.selectedTextbookId,
+        selectedTextbook,
         studyProgress: user.studyProgress ?? 0,
       }
     });
-  } catch (error: any) {
-    console.error('更新用户设置错误:', error);
+  } catch (error) {
     return NextResponse.json(
       { success: false, error: '更新失败' },
       { status: 500 }
