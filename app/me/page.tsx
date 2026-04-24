@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MaterialIcon from '../../components/MaterialIcon';
 import { BottomNavigation } from '../../components/BottomNavigation';
+import LearningSettings from '@/components/LearningSettings';
 
 interface UserStats {
   currentScore: number;
@@ -221,6 +222,13 @@ export default function MePage() {
             <span className="flex-1 text-left font-medium text-on-surface">设置</span>
             <MaterialIcon icon="chevron_right" className="text-on-surface-variant" style={{ fontSize: '20px' }} />
           </button>
+        </div>
+
+        {/* 学习设置 */}
+        <div className="mt-6">
+          <LearningSettings onRefresh={() => {
+            // 刷新统计数据
+          }} />
         </div>
 
         {/* 退出登录 */}
