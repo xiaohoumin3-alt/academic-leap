@@ -128,9 +128,10 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
   const getGrowthStoryData = (overview: OverviewData['overview']) => {
     const diagnosticAttempts = overview?.diagnosticAttempts || [];
 
-    // 首次测评分数
-    const firstScore = overview?.initialAssessmentScore ||
-      (diagnosticAttempts.length > 0 ? diagnosticAttempts[0].score : null);
+    // 首次测评分数：直接使用第一次诊断测评记录（不会被后续测试覆盖）
+    const firstScore = diagnosticAttempts.length > 0
+      ? diagnosticAttempts[0].score
+      : null;
 
     // 最近测评分数
     const latestScore = diagnosticAttempts.length > 0
@@ -274,7 +275,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
           return (
             <>
               <div className="flex items-center justify-between mb-4 relative z-10">
-                <h3 className="text-xl font-display font-black text-on-surface">测评成长轨迹</h3>
+                <h3 className="text-xl font-display font-black text-on-surface">成长轨迹</h3>
                 <span className="text-[10px] px-3 py-1 bg-warning-container text-on-warning-container rounded-full font-bold">
                   真实水平
                 </span>
