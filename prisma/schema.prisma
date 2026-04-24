@@ -32,7 +32,6 @@ model User {
   calibratedStartingScore    Int?                      // 校准后的起始分数
 
   // 年级科目教材设置
-  selectedGrade      Int?      // 选择的年级 (7-12)
   selectedSubject    String?   // 选择的科目 (数学)
   selectedTextbookId String?   // 选择的教材版本ID
   studyProgress      Int       @default(0) // 学习进度百分比 0-100
