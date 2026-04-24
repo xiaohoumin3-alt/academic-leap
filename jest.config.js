@@ -8,7 +8,7 @@ module.exports = {
     '!lib/**/*.d.ts',
     '!lib/**/*.test.ts'
   ],
-  roots: ['<rootDir>/lib', '<rootDir>/e2e'],
+  roots: ['<rootDir>/lib', '<rootDir>/e2e', '<rootDir>/app'],
   testPathIgnorePatterns: ['/node_modules/', '/.next/'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
