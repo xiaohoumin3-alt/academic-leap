@@ -118,7 +118,7 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
     setIsEditing(true);
     // 预填当前设置
     if (settings) {
-      setSelectedGrade(settings.selectedGrade ?? null);
+      setSelectedGrade(settings.grade ?? null);
       setSelectedSubject(settings.selectedSubject ?? null);
       setSelectedTextbookId(settings.selectedTextbookId ?? null);
     }
@@ -143,7 +143,7 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
     setSaving(true);
     try {
       const result = await userApi.updateSettings({
-        selectedGrade: selectedGrade ?? undefined,
+        grade: selectedGrade ?? undefined,
         selectedSubject: selectedSubject ?? undefined,
         selectedTextbookId,
       });
@@ -178,7 +178,7 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
     setSaving(true);
     try {
       const result = await userApi.updateSettings({
-        selectedGrade: selectedGrade ?? undefined,
+        grade: selectedGrade ?? undefined,
         selectedSubject: selectedSubject ?? undefined,
         selectedTextbookId: pendingTextbookId,
       });
@@ -422,7 +422,7 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
         <div className="bg-surface rounded-2xl p-4 mb-6">
           <div className="flex items-center justify-between">
             <span className="text-on-surface-variant">
-              {settings.selectedGrade}年级 · {settings.selectedSubject}
+              {settings.grade}年级 · {settings.selectedSubject}
             </span>
             <span className="text-sm text-on-surface-variant">
               {treeData.enabledCount}/{treeData.totalCount} 知识点
