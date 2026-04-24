@@ -14,12 +14,13 @@ import { generateGuidance, getTargetStrategy } from '@/lib/assessment-guidance';
  * 完成测评并计算等效分
  *
  * 功能：
- * 1. 计算各知识点掌握率
- * 2. 计算等效分：Σ(单知识点考试分值 × 掌握率) - 波动修正
- * 3. 生成波动区间（±3分）
- * 4. 生成分层指导
- * 5. 更新User表的initialAssessment字段
- * 6. 初始化UserKnowledge（记录初始掌握度）
+ * 1. 从数据库获取已提交的答题记录
+ * 2. 计算各知识点掌握率
+ * 3. 计算等效分：Σ(单知识点考试分值 × 掌握率) - 波动修正
+ * 4. 生成波动区间（±3分）
+ * 5. 生成分层指导
+ * 6. 更新User表的initialAssessment字段
+ * 7. 初始化UserKnowledge（记录初始掌握度）
  */
 export async function POST(req: NextRequest) {
   try {
@@ -29,10 +30,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '未登录' }, { status: 401 });
     }
 
-    const { attemptId, answers } = await req.json();
+    const { attemptId } = await req.json();
 
-    if (!attemptId || !Array.isArray(answers)) {
-      return NextResponse.json({ error: '参数错误' }, { status: 400 });
+    if (!attemptId) {
+      return NextResponse.json({ error: '参数错误：缺少 attemptId' }, { status: 400 });
     }
 
     // 获取测评记录
@@ -44,6 +45,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '测评记录不存在' }, { status: 404 });
     }
 
+    // 从数据库获取已提交的答题记录
+    const attemptSteps = await prisma.attemptStep.findMany({
+      where: { attemptId },
+      orderBy: { submittedAt: 'asc' },
+    });
+
+    // 获取步骤关联的题目信息
+    const stepIds = attemptSteps.map(s => s.questionStepId).filter(Boolean);
+    const questionSteps = await prisma.questionStep.findMany({
+      where: { id: { in: stepIds as string[] } },
+      include: {
+        question: {
+          select: { knowledgePoints: true },
+        },
+      },
+    });
+
+    const questionStepMap = new Map(questionSteps.map(s => [s.id, s]));
+
+    // 构建答题记录
+    const answerRecords = attemptSteps.map(step => {
+      const questionStep = step.questionStepId ? questionStepMap.get(step.questionStepId) : null;
+      let knowledgePoints: string[] = [];
+      try {
+        if (questionStep?.question?.knowledgePoints) {
+          knowledgePoints = JSON.parse(questionStep.question.knowledgePoints);
+        }
+      } catch (e) {}
+      return {
+        knowledgePoint: knowledgePoints[0] || '综合',
+        isCorrect: step.isCorrect,
+        duration: step.duration,
+      };
+    });
+
     // 获取用户信息用于分层指导
     const userInfo = await prisma.user.findUnique({
       where: { id: session.user.id },
@@ -53,24 +89,29 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // 获取参与测评的知识点
+    // 获取参与测评的知识点（按用户教材过滤）
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { selectedTextbookId: true },
+    });
+
+    const knowledgePointWhere: any = {
+      inAssess: true,
+      status: 'active',
+    };
+    if (user?.selectedTextbookId) {
+      knowledgePointWhere.chapter = {
+        textbookId: user.selectedTextbookId,
+      };
+    }
+
     const knowledgePoints = await prisma.knowledgePoint.findMany({
-      where: {
-        inAssess: true,
-        status: 'active',
-      },
+      where: knowledgePointWhere,
       select: {
         name: true,
         weight: true,
       },
     });
-
-    // 构建答题记录
-    const answerRecords = answers.map((a: any) => ({
-      knowledgePoint: a.knowledgePoint || '综合',
-      isCorrect: a.isCorrect,
-      duration: a.duration,
-    }));
 
     // 计算等效分
     const scoreResult = calculateEquivalentScore(answerRecords, knowledgePoints);
@@ -80,7 +121,7 @@ export async function POST(req: NextRequest) {
     const { difficultyMultiplier: recommendedDifficulty } = getRecommendedDifficulty(avgLevel);
 
     // 使用事务包裹所有数据库操作
-    await prisma.$transaction(async (tx) => {
+    const createdAssessmentId = await prisma.$transaction(async (tx) => {
       // 更新Attempt记录
       await tx.attempt.update({
         where: { id: attemptId },
@@ -91,7 +132,7 @@ export async function POST(req: NextRequest) {
       });
 
       // 创建Assessment记录
-      await tx.assessment.create({
+      const assessment = await tx.assessment.create({
         data: {
           userId: session.user.id,
           type: 'initial',
@@ -138,6 +179,9 @@ export async function POST(req: NextRequest) {
           },
         });
       }
+
+      // 返回 assessment ID
+      return assessment.id;
     });
 
     // 获取薄弱知识点
@@ -165,6 +209,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
+        assessmentId: createdAssessmentId,  // 返回 assessmentId 用于学习路径生成
+        attemptId,  // 也返回 attemptId 保持兼容
         score: scoreResult.score,
         range: `${scoreResult.range[0]}-${scoreResult.range[1]}`,
         rangeLow: scoreResult.range[0],

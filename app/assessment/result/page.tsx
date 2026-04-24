@@ -35,6 +35,8 @@ interface TargetStrategy {
 }
 
 interface AssessmentResultData {
+  assessmentId?: string;  // 用于学习路径生成
+  attemptId?: string;
   score: number;
   range?: string;
   rangeLow?: number;
@@ -126,14 +128,20 @@ const AssessmentResultContent: React.FC = () => {
       const res = await fetch('/api/learning-path/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assessmentId: attemptId || undefined })
+        body: JSON.stringify({ assessmentId: result?.assessmentId })
       });
       const data = await res.json();
+
       if (data.success) {
         setPathGenerated(true);
+      } else {
+        // 显示错误信息给用户
+        const errorMsg = data.error || data.details || '生成学习路径失败，请重试';
+        alert(errorMsg);
       }
     } catch (error) {
       console.error('生成学习路径失败:', error);
+      alert('网络错误，请检查网络连接后重试');
     } finally {
       setGeneratingPath(false);
     }
@@ -328,7 +336,10 @@ const AssessmentResultContent: React.FC = () => {
               系统已根据你的测评结果生成了个性化学习路径。
             </p>
             <button
-              onClick={() => router.push('/me')}
+              onClick={() => {
+                router.refresh(); // 刷新当前页数据
+                router.push('/me'); // 跳转到"我的"页
+              }}
               className="w-full py-3 rounded-xl font-medium bg-success text-on-success transition-colors flex items-center justify-center gap-2"
             >
               <MaterialIcon icon="route" style={{ fontSize: '20px' }} />

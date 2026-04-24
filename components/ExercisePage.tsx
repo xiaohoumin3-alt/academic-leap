@@ -82,6 +82,8 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
 
   // finish 延迟定时器，用于在用户点击"继续练习"时取消
   const finishTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // 防止 completePractice 重复调用
+  const isCompletingRef = useRef(false);
 
   // 难度级别 ref，确保 generateLocalQuestion 始终获取最新值
   const difficultyLevelRef = useRef(difficultyLevel);
@@ -97,6 +99,11 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
   const isLoadingQuestion = useRef(false);
   // 防止 checkAnswer 重复提交
   const isSubmitting = useRef(false);
+  // 保存当前题目的答题结果（用于 completePractice）
+  const questionResultsRef = useRef<{ correctResults: Record<number, 'correct' | 'error'>; totalSteps: number }>({
+    correctResults: {},
+    totalSteps: 3,
+  });
 
   // 初始化：获取题目
   useEffect(() => {
@@ -280,8 +287,9 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
         setHintRevealed(false);
         setStepRevealed(false);
       } else {
-        // API返回空，用本地题目
-        setCurrentQuestion(generateLocalQuestion(knowledgePoint));
+        // 没有可用题目，显示错误信息
+        console.error('生成题目失败: 没有可用的模板');
+        setFeedback('该知识点暂未配置题目模板，请选择其他知识点或联系管理员');
       }
     } catch (error) {
       console.error('loadQuestion 错误:', error);
@@ -470,6 +478,12 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
       setStepTags(prev => ({ ...prev, [activeStep]: behaviorTag }));
       setStepsResults(prev => ({ ...prev, [activeStep]: isCorrect ? 'correct' : 'error' }));
       setFeedback(feedback);
+
+      // 保存当前题目的答题结果到 ref（用于 completePractice）
+      questionResultsRef.current = {
+        correctResults: { [activeStep]: isCorrect ? 'correct' : 'error' },
+        totalSteps: currentQuestion?.steps?.length || 3,
+      };
 
       // 提交步骤记录
       if (attemptId) {
@@ -671,17 +685,25 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
 
   // 完成练习
   const completePractice = async (lastStepCorrect?: boolean) => {
-    // 计算分数 - 如果传入了最后一步的结果，直接使用；否则读取状态（状态可能有延迟）
-    const currentStepsResults = {
-      ...stepsResults,
-      [activeStep]: lastStepCorrect !== undefined
-        ? (lastStepCorrect ? 'correct' : 'error')
-        : stepsResults[activeStep]
-    };
-    const correctCount = Object.values(currentStepsResults).filter(r => r === 'correct').length;
-    const totalCount = Object.keys(currentStepsResults).length;
+    // 防重入保护 - 如果已经在完成中，跳过
+    if (isCompletingRef.current) {
+      console.log('completePractice 已执行中，跳过');
+      return;
+    }
+
+    // 标记开始
+    isCompletingRef.current = true;
+
+    // 重置帮助追踪状态
+    setAnyHintUsed(false);
+    setAnyStepUsed(false);
+
+    // 使用 ref 中保存的答题结果来计算分数
+    const { correctResults, totalSteps } = questionResultsRef.current;
+    const correctCount = Object.values(correctResults).filter(r => r === 'correct').length;
     // 如果没有答题记录，默认给一个最低分
-    const baseScore = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 60;
+    const baseScore = totalSteps > 0 ? Math.round((correctCount / totalSteps) * 100) : 60;
+    const totalCount = totalSteps;
 
     // 独立性评估：计算帮助强度得分
     const helpUsage: HelpUsage = {
@@ -704,7 +726,7 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
       independenceResult,
       finalScore,
       duration,
-      stepsResults: currentStepsResults,
+      correctResults,
       attemptId
     });
 
@@ -722,7 +744,7 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
         try {
           const questionStepIds = currentQuestion?.steps?.map((step, idx) => ({
             questionStepId: (step as any).id || `step-${idx}`,
-            isCorrect: currentStepsResults[idx] === 'correct'
+            isCorrect: correctResults[idx + 1] === 'correct'
           })) || [];
 
           await fetch('/api/learning-path/adjust', {
@@ -757,6 +779,7 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
         independenceResult,
         attemptId, // 传递 attemptId 用于获取完整测评分析
       });
+      // 注意：不在这里重置标志，由调用方负责清理
       return;
     }
 
@@ -779,6 +802,9 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
         independenceResult,
       });
     }, 3000);
+
+    // 重置防重入标志
+    isCompletingRef.current = false;
   };
 
   // 清空输入

@@ -299,6 +299,7 @@ model Template {
   id          String    @id @default(cuid())
   name        String
   type        String    // calculation/geometry/worded
+  templateKey String?   // 对应 TEMPLATE_REGISTRY 的 key（如 linear_equation, quadratic_vertex）
   structure   Json      // 方程结构定义
   params      Json      // 参数约束
   steps       Json      // 解题步骤

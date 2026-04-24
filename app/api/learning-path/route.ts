@@ -81,6 +81,7 @@ export async function GET(): Promise<NextResponse> {
     });
 
     const kpMap = new Map(knowledgePoints.map((kp) => [kp.id, kp.name]));
+    const nameToIdMap = new Map(knowledgePoints.map((kp) => [kp.name, kp.id]));
 
     // 5. Batch fetch all userKnowledge records to avoid N+1 query
     const allUserKnowledge = await prisma.userKnowledge.findMany({
@@ -91,11 +92,29 @@ export async function GET(): Promise<NextResponse> {
       },
     });
 
-    const masteryMap = new Map(
-      allUserKnowledge.map((uk) => [uk.knowledgePoint, uk.mastery])
-    );
+    // Build mastery map with both ID and name lookup for backward compatibility
+    // NOTE: userKnowledge.knowledgePoint may store either ID or name (legacy data)
+    const masteryMapById = new Map<string, number>();
+    const masteryMapByName = new Map<string, number>();
+
+    for (const uk of allUserKnowledge) {
+      // Check if knowledgePoint is an ID (looks like a cuid) or a name
+      const isId = uk.knowledgePoint.startsWith('c') && uk.knowledgePoint.length >= 20;
+
+      if (isId) {
+        masteryMapById.set(uk.knowledgePoint, uk.mastery);
+      } else {
+        masteryMapByName.set(uk.knowledgePoint, uk.mastery);
+        // Also map by ID if we can find the corresponding ID
+        const id = nameToIdMap.get(uk.knowledgePoint);
+        if (id) {
+          masteryMapById.set(id, uk.mastery);
+        }
+      }
+    }
 
     // Fallback: Fetch latest assessment once for any missing mastery data
+    // NOTE: assessment.knowledgeData stores { "knowledgePointName": level (0-4) }
     const latestAssessment = await prisma.assessment.findFirst({
       where: { userId },
       orderBy: { completedAt: 'desc' },
@@ -109,9 +128,21 @@ export async function GET(): Promise<NextResponse> {
     if (latestAssessment) {
       try {
         const knowledgeData = JSON.parse(latestAssessment.knowledgeData as string);
-        for (const [kpId, data] of Object.entries(knowledgeData)) {
-          if (data && typeof data === 'object' && 'mastery' in data) {
-            assessmentMasteryMap.set(kpId, (data as { mastery: number }).mastery);
+        // knowledgeData format: { "知识点名称": level (0-4) }
+        // Convert level to mastery
+        const levelToMastery = (level: number): number => {
+          if (level <= 0) return 0.3; // L0
+          if (level === 1) return 0.55; // L1
+          if (level === 2) return 0.8; // L2
+          if (level === 3) return 0.95; // L3
+          return 1.0; // L4
+        };
+
+        for (const [kpName, level] of Object.entries(knowledgeData)) {
+          const mastery = levelToMastery(typeof level === 'number' ? level : 0);
+          const kpId = nameToIdMap.get(kpName);
+          if (kpId) {
+            assessmentMasteryMap.set(kpId, mastery);
           }
         }
       } catch (error) {
@@ -123,6 +154,9 @@ export async function GET(): Promise<NextResponse> {
     }
 
     // 6. Build roadmap with mastery and status
+    // 使用与生成路径相同的阈值 (0.9)，确保一致性
+    const MASTERY_THRESHOLD = 0.9;
+
     const roadmap: Array<{
       nodeId: string;
       name: string;
@@ -131,20 +165,21 @@ export async function GET(): Promise<NextResponse> {
       priority: number;
     }> = [];
 
-    let currentIndex = 0;
+    let currentFound = false;
 
     for (let i = 0; i < knowledgeNodes.length; i++) {
       const node = knowledgeNodes[i];
-      // Use cached mastery data instead of querying in loop
-      let mastery = masteryMap.get(node.nodeId) ?? assessmentMasteryMap.get(node.nodeId) ?? 0;
+      // Try to get mastery from userKnowledge (by ID), then fallback to assessment data
+      let mastery = masteryMapById.get(node.nodeId) ?? assessmentMasteryMap.get(node.nodeId) ?? 0;
       const name = kpMap.get(node.nodeId) || '未知知识点';
 
       let status: 'completed' | 'current' | 'pending';
-      if (mastery >= 0.8) {
+      if (mastery >= MASTERY_THRESHOLD) {
         status = 'completed';
-      } else if (currentIndex === 0) {
+      } else if (!currentFound) {
+        // 第一个未完成的节点标记为 current
         status = 'current';
-        currentIndex = i;
+        currentFound = true;
       } else {
         status = 'pending';
       }
@@ -158,7 +193,7 @@ export async function GET(): Promise<NextResponse> {
       });
     }
 
-    // 6. Calculate weekly summary
+    // 7. Calculate weekly summary
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -177,25 +212,12 @@ export async function GET(): Promise<NextResponse> {
 
     const practicedCount = recentAttempts.length;
 
-    // Count mastered knowledge points (mastery >= 0.8) in last 7 days
-    const recentUserKnowledge = await prisma.userKnowledge.findMany({
-      where: {
-        userId,
-        lastPractice: {
-          gte: sevenDaysAgo,
-        },
-      },
-      select: {
-        mastery: true,
-        lastPractice: true,
-      },
-    });
-
-    const masteredCount = recentUserKnowledge.filter(
-      (uk) => uk.mastery >= 0.8
+    // 统计路径内已掌握的知识点（保持数据一致性）
+    const masteredCount = roadmap.filter(
+      (node) => node.status === 'completed'
     ).length;
 
-    // Count weak (pending + current) nodes - all non-completed nodes
+    // 统计路径内待加强的知识点（pending + current）
     const weakCount = roadmap.filter(
       (node) => node.status !== 'completed'
     ).length;
@@ -206,7 +228,18 @@ export async function GET(): Promise<NextResponse> {
       weakCount,
     };
 
-    // 7. Return response
+    // 8. Calculate currentIndex for path response
+    const currentIndexValue = roadmap.findIndex(item => item.status === 'current');
+
+    // Debug log
+    console.log('[learning-path] Response:', {
+      userId,
+      roadmapLength: roadmap.length,
+      completedCount: masteredCount,
+      roadmapItems: roadmap.map(r => ({ name: r.name, status: r.status, mastery: r.mastery }))
+    });
+
+    // 9. Return response with cache disabled
     return NextResponse.json({
       success: true,
       data: {
@@ -214,10 +247,16 @@ export async function GET(): Promise<NextResponse> {
           id: activePath.id,
           name: activePath.name,
           status: activePath.status,
-          currentIndex,
+          currentIndex: currentIndexValue >= 0 ? currentIndexValue : 0,
         },
         roadmap,
         weeklySummary,
+      },
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
     });
   } catch (error) {

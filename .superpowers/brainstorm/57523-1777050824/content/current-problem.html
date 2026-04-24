@@ -1,0 +1,50 @@
+<h2>当前问题：分数混淆</h2>
+<p class="subtitle">测评分数和练习分数不应该在同一个池子里比较</p>
+
+<div class="split" style="margin-top: 24px;">
+  <div class="mockup">
+    <div class="mockup-header">首页显示</div>
+    <div class="mockup-body">
+      <div style="text-align: center; padding: 32px;">
+        <p style="font-size: 10px; color: #888; margin-bottom: 8px;">初始测评分数</p>
+        <div style="font-size: 48px; font-weight: 900; color: #ef4444;">79</div>
+        <p style="font-size: 12px; color: #888;">分</p>
+      </div>
+    </div>
+  </div>
+  <div class="mockup">
+    <div class="mockup-header">分析页显示</div>
+    <div class="mockup-body">
+      <div style="text-align: center; padding: 32px;">
+        <p style="font-size: 10px; color: #888; margin-bottom: 8px;">平均分数（练习+测评）</p>
+        <div style="font-size: 48px; font-weight: 900; color: #3b82f6;">90</div>
+        <p style="font-size: 12px; color: #888;">分</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 32px; padding: 20px; background: #fef2f2; border-radius: 12px; border: 2px solid #ef4444;">
+  <p style="font-weight: 700; color: #dc2626; margin-bottom: 8px;">❌ 错误的"成长故事"</p>
+  <p style="color: #666;">分析页说"提升了 <span style="font-weight: 900; font-size: 24px; color: #16a34a;">+11分</span>"</p>
+  <p style="color: #888; font-size: 14px; margin-top: 8px;">但实际上是：测评79分 vs 练习平均90分</p>
+  <p style="color: #888; font-size: 14px;">这是两种不同类型的数据，不应该直接比较！</p>
+</div>
+
+<div style="margin-top: 32px;">
+  <h3>数据库里其实已经有区分</h3>
+  <p class="subtitle">Attempt.mode 字段：'diagnostic'=测评，'training'=练习</p>
+
+  <div style="display: flex; gap: 16px; margin-top: 16px;">
+    <div style="flex: 1; padding: 16px; background: #f0fdf4; border-radius: 12px;">
+      <p style="font-weight: 700; color: #16a34a;">诊断测评</p>
+      <p style="font-size: 12px; color: #666;">mode = 'diagnostic'</p>
+      <p style="font-size: 12px; color: #888; margin-top: 8px;">用于定位真实水平</p>
+    </div>
+    <div style="flex: 1; padding: 16px; background: #eff6ff; border-radius: 12px;">
+      <p style="font-weight: 700; color: #2563eb;">练习</p>
+      <p style="font-size: 12px; color: #666;">mode = 'training'</p>
+      <p style="font-size: 12px; color: #888; margin-top: 8px;">用于巩固提升</p>
+    </div>
+  </div>
+</div>

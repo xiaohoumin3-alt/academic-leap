@@ -141,8 +141,40 @@ export async function GET(req: NextRequest) {
         initialAssessmentScore: true,
         startingScoreCalibrated: true,
         calibratedStartingScore: true,
+        selectedTextbookId: true,  // 新增：用于判断是否需要 onboarding
       },
     });
+
+    // 获取诊断测评记录（按时间排序）
+    const diagnosticAttempts = await prisma.attempt.findMany({
+      where: {
+        userId,
+        completedAt: { not: null },
+        score: { gt: 0 },
+        mode: 'diagnostic',
+      },
+      select: {
+        id: true,
+        score: true,
+        completedAt: true,
+      },
+      orderBy: { completedAt: 'asc' },
+    });
+
+    // 获取练习记录统计（只统计 training 模式）
+    const trainingAttempts = await prisma.attempt.findMany({
+      where: {
+        userId,
+        completedAt: { not: null },
+        score: { gt: 0 },
+        mode: 'training',
+      },
+      select: { score: true },
+    });
+
+    const trainingAvgScore = trainingAttempts.length > 0
+      ? Math.round(trainingAttempts.reduce((sum: number, a: { score: number }) => sum + a.score, 0) / trainingAttempts.length)
+      : 0;
 
     // 检测是否需要校准
     let needsCalibration = false;
@@ -222,6 +254,16 @@ export async function GET(req: NextRequest) {
         // 用于"我的"页的统计
         totalQuestions: allStepsCount,
         correctRate,
+        // 用于判断是否需要 onboarding
+        selectedTextbookId: user?.selectedTextbookId ?? null,
+        // 新增字段
+        diagnosticAttempts: diagnosticAttempts.map((a) => ({
+          id: a.id,
+          score: a.score,
+          completedAt: a.completedAt?.toISOString(),
+        })),
+        trainingAvgScore,
+        trainingCount: trainingAttempts.length,
       },
       dailyData,
       topKnowledge: knowledge.map(

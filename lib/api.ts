@@ -184,7 +184,14 @@ export const questionsApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    return res.json() as Promise<ApiResponse<{ questions: Question[] }>>;
+    const response = await res.json() as ApiResponse<{ questions: Question[] }>;
+
+    // 如果API返回错误，不静默fallback，而是抛出错误让调用方处理
+    if (response.success === false) {
+      throw new Error(response.error || '生成题目失败');
+    }
+
+    return response;
   },
 
   /**
@@ -259,29 +266,7 @@ export const analyticsApi = {
    */
   async getOverview() {
     const res = await fetch(`${API_BASE}/analytics/overview`);
-    return res.json() as Promise<ApiResponse<{
-      overview: {
-        totalAttempts: number;
-        completedAttempts: number;
-        averageScore: number;
-        lowestScore: number;
-        totalMinutes: number;
-        completionRate: number;
-        dataReliability: 'high' | 'medium' | 'low';
-        volatilityRange: number;
-        initialAssessmentCompleted?: boolean;
-        initialAssessmentScore?: number;
-        // Calibration fields
-        needsCalibration: boolean;
-        calibratedStartingScore: number | null;
-        startingScoreCalibrated: boolean;
-        // Stats for "My" page
-        totalQuestions: number;
-        correctRate: number;
-      };
-      dailyData: Array<{ date: string; count: number; avgScore: number }>;
-      topKnowledge: Array<{ knowledgePoint: string; mastery: number }>;
-    }>>;
+    return res.json() as Promise<ApiResponse<OverviewResponse>>;
   },
 
   /**
@@ -408,4 +393,45 @@ export interface AttemptStep {
   isCorrect: boolean;
   duration: number;
   submittedAt: string;
+}
+
+/**
+ * 诊断测评记录
+ */
+export interface DiagnosticAttempt {
+  id: string;
+  score: number;
+  completedAt: string;
+}
+
+/**
+ * Overview API 响应类型
+ */
+export interface OverviewResponse {
+  overview: {
+    totalAttempts: number;
+    completedAttempts: number;
+    averageScore: number;
+    lowestScore: number;
+    totalMinutes: number;
+    completionRate: number;
+    dataReliability: 'high' | 'medium' | 'low';
+    volatilityRange: number;
+    initialAssessmentCompleted?: boolean;
+    initialAssessmentScore?: number;
+    // Calibration fields
+    needsCalibration: boolean;
+    calibratedStartingScore: number | null;
+    startingScoreCalibrated: boolean;
+    // Stats for "My" page
+    totalQuestions: number;
+    correctRate: number;
+    selectedTextbookId: string | null;
+    // 新增：诊断测评和练习统计
+    diagnosticAttempts: DiagnosticAttempt[];
+    trainingAvgScore: number;
+    trainingCount: number;
+  };
+  dailyData: Array<{ date: string; count: number; avgScore: number }>;
+  topKnowledge: Array<{ knowledgePoint: string; mastery: number }>;
 }

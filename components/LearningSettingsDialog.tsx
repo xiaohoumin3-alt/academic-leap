@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import MaterialIcon from './MaterialIcon';
 
+const DEFAULT_TARGET_SCORE = 90;
+
 interface LearningSettingsDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -34,12 +36,13 @@ export default function LearningSettingsDialog({
   const [grade, setGrade] = useState<number | null>(null);
   const [subject, setSubject] = useState<string | null>(null);
   const [textbookId, setTextbookId] = useState<string | null>(null);
-  const [targetScore, setTargetScore] = useState<number>(90);
+  const [targetScore, setTargetScore] = useState<number>(DEFAULT_TARGET_SCORE);
   const [textbooks, setTextbooks] = useState<Textbook[]>([]);
   const [grades, setGrades] = useState<number[]>([]);
   const [subjects, setSubjects] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // 初始化表单
   useEffect(() => {
@@ -47,7 +50,8 @@ export default function LearningSettingsDialog({
       setGrade(settings.grade ?? null);
       setSubject(settings.selectedSubject ?? null);
       setTextbookId(settings.selectedTextbookId ?? null);
-      setTargetScore(settings.targetScore ?? 90);
+      setTargetScore(settings.targetScore ?? DEFAULT_TARGET_SCORE);
+      setError(null);
     }
   }, [isOpen, settings]);
 
@@ -60,16 +64,22 @@ export default function LearningSettingsDialog({
 
   const loadTextbooks = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/user/textbooks');
+      if (!res.ok) {
+        throw new Error('加载教材列表失败');
+      }
       const data = await res.json();
       if (data.success) {
         setTextbooks(data.data.textbooks);
         setGrades(data.data.grades);
         setSubjects(data.data.subjects);
+      } else {
+        setError(data.error || '加载教材列表失败');
       }
-    } catch (error) {
-      console.error('加载教材列表失败:', error);
+    } catch {
+      setError('加载教材列表失败，请重试');
     } finally {
       setLoading(false);
     }
@@ -83,11 +93,17 @@ export default function LearningSettingsDialog({
 
   const handleSave = async () => {
     if (!grade || !subject || !textbookId) {
-      alert('请完整选择年级、科目和教材');
+      setError('请完整选择年级、科目和教材');
+      return;
+    }
+
+    if (targetScore < 0 || targetScore > 100) {
+      setError('目标分数必须在 0-100 之间');
       return;
     }
 
     setSaving(true);
+    setError(null);
     try {
       const res = await fetch('/api/user/settings', {
         method: 'POST',
@@ -100,16 +116,19 @@ export default function LearningSettingsDialog({
         }),
       });
 
+      if (!res.ok) {
+        throw new Error('保存失败');
+      }
+
       const data = await res.json();
       if (data.success) {
         onSave();
         onClose();
       } else {
-        alert(data.error || '保存失败');
+        setError(data.error || '保存失败');
       }
-    } catch (error) {
-      console.error('保存设置失败:', error);
-      alert('保存失败，请重试');
+    } catch {
+      setError('保存失败，请重试');
     } finally {
       setSaving(false);
     }
@@ -134,6 +153,12 @@ export default function LearningSettingsDialog({
             <MaterialIcon icon="close" className="text-on-surface-variant" style={{ fontSize: '20px' }} />
           </button>
         </div>
+
+        {error && (
+          <div className="bg-error-container/10 text-error text-sm p-3 rounded-xl">
+            {error}
+          </div>
+        )}
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -224,7 +249,10 @@ export default function LearningSettingsDialog({
                   min="0"
                   max="100"
                   value={targetScore}
-                  onChange={(e) => setTargetScore(parseInt(e.target.value) || 0)}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value);
+                    setTargetScore(isNaN(value) ? 0 : Math.max(0, Math.min(100, value)));
+                  }}
                   className="w-full px-4 py-3 rounded-xl bg-surface border-2 border-transparent focus:border-primary outline-none text-on-surface"
                 />
               </div>

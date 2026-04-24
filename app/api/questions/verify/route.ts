@@ -29,6 +29,14 @@ export async function POST(req: NextRequest) {
     });
 
     if (!question) {
+      // 如果是本地题目（ID 以 local_ 开头），返回友好错误而不是"不存在"
+      if (questionId?.startsWith('local_')) {
+        return NextResponse.json({
+          error: '本地题目不支持在线验证，请刷新页面重新生成题目',
+          success: false,
+          requiresRegenerate: true,
+        }, { status: 400 });
+      }
       return NextResponse.json({ error: '题目不存在', success: false }, { status: 404 });
     }
 

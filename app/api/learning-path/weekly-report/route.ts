@@ -93,8 +93,27 @@ export async function GET(req: NextRequest) {
 
     if (path) {
       const nodes = JSON.parse(path.knowledgeData as string);
+      // 根据实际掌握度动态计算待加强数量（与 learning-path route 保持一致）
+      const MASTERY_THRESHOLD = 0.9;
+      const nodeIds = nodes.map((n: { nodeId: string }) => n.nodeId);
+      const userKnowledgeList = await prisma.userKnowledge.findMany({
+        where: {
+          userId: session.user.id,
+          knowledgePoint: { in: nodeIds }
+        },
+        select: {
+          knowledgePoint: true,
+          mastery: true
+        }
+      });
+
+      const masteryMap = new Map(
+        userKnowledgeList.map(uk => [uk.knowledgePoint, uk.mastery])
+      );
+
+      // mastery < MASTERY_THRESHOLD 的为待加强
       weakCount = nodes.filter(
-        (n: { status: string }) => n.status === 'pending' || n.status === 'learning'
+        (n: { nodeId: string }) => (masteryMap.get(n.nodeId) ?? 0) < MASTERY_THRESHOLD
       ).length;
 
       // Detect stale knowledge points (not practiced in 14+ days, mastery >= 0.7)

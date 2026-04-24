@@ -28,28 +28,52 @@ export const TEMPLATE_REGISTRY: Record<string, QuestionTemplate> = {
 };
 
 /**
- * 根据知识点ID获取可用的模板ID列表
- * 查询优先级：直接匹配 > 概念匹配
+ * 根据知识点获取可用的模板KEY列表
+ * 支持ID或名称查询
+ * 查询优先级：直接ID匹配 > 名称匹配 > 概念匹配
+ * 返回 TEMPLATE_REGISTRY 的 key（如 quadratic_vertex），而不是数据库 id
  */
 export async function getTemplateIdsByKnowledgePointId(
-  knowledgePointId: string
+  knowledgePointIdOrName: string
 ): Promise<string[]> {
-  // 1. 直接匹配：Template.knowledgeId == knowledgePointId
+  // 1. 直接匹配：Template.knowledgeId == knowledgePointId（使用 templateKey）
   const directTemplates = await prisma.template.findMany({
     where: {
-      knowledgeId: knowledgePointId,
-      status: 'production'
+      knowledgeId: knowledgePointIdOrName,
+      status: 'production',
+      templateKey: { not: null }
     },
-    select: { id: true }
+    select: { templateKey: true }
   });
 
   if (directTemplates.length > 0) {
-    return directTemplates.map(t => t.id);
+    return directTemplates.map(t => t.templateKey!).filter(Boolean);
   }
 
-  // 2. 概念匹配：获取该知识点的 conceptId，查找同学期的模板
-  const kp = await prisma.knowledgePoint.findUnique({
-    where: { id: knowledgePointId },
+  // 2. 名称匹配：通过知识点名称查找对应的模板（使用 templateKey）
+  const nameTemplates = await prisma.template.findMany({
+    where: {
+      status: 'production',
+      templateKey: { not: null },
+      knowledge: {
+        name: knowledgePointIdOrName
+      }
+    },
+    select: { templateKey: true }
+  });
+
+  if (nameTemplates.length > 0) {
+    return nameTemplates.map(t => t.templateKey!).filter(Boolean);
+  }
+
+  // 3. 概念匹配：获取该知识点的 conceptId，查找同学期的模板
+  const kp = await prisma.knowledgePoint.findFirst({
+    where: {
+      OR: [
+        { id: knowledgePointIdOrName },
+        { name: knowledgePointIdOrName }
+      ]
+    },
     select: { conceptId: true }
   });
 
@@ -57,37 +81,39 @@ export async function getTemplateIdsByKnowledgePointId(
     const conceptTemplates = await prisma.template.findMany({
       where: {
         status: 'production',
+        templateKey: { not: null },
         knowledge: {
           conceptId: kp.conceptId
         }
       },
-      select: { id: true }
+      select: { templateKey: true }
     });
-    return conceptTemplates.map(t => t.id);
+    return conceptTemplates.map(t => t.templateKey!).filter(Boolean);
   }
 
-  // 3. 无匹配
+  // 4. 无匹配
   return [];
 }
 
 /**
- * 根据知识点ID随机获取一个模板ID
+ * 根据知识点获取一个随机模板KEY
  */
 export async function getTemplateIdByKnowledgePointId(
   knowledgePointId: string
 ): Promise<string | null> {
-  const templateIds = await getTemplateIdsByKnowledgePointId(knowledgePointId);
-  if (templateIds.length === 0) {
+  const templateKeys = await getTemplateIdsByKnowledgePointId(knowledgePointId);
+  if (templateKeys.length === 0) {
     return null;
   }
-  return templateIds[Math.floor(Math.random() * templateIds.length)];
+  return templateKeys[Math.floor(Math.random() * templateKeys.length)];
 }
 
 /**
- * 根据模板ID获取模板
+ * 根据模板KEY获取模板实例
+ * @param templateKey - TEMPLATE_REGISTRY 的 key（如 quadratic_vertex）
  */
-export function getTemplate(templateId: string): QuestionTemplate | null {
-  return TEMPLATE_REGISTRY[templateId] || null;
+export function getTemplate(templateKey: string): QuestionTemplate | null {
+  return TEMPLATE_REGISTRY[templateKey] || null;
 }
 
 /**

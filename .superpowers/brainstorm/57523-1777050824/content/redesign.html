@@ -1,0 +1,78 @@
+<h2>改造后的"成长故事"模块</h2>
+<p class="subtitle">方案A：前端过滤 — 只展示测评分数</p>
+
+<div class="mockup" style="margin-top: 24px;">
+  <div class="mockup-header">改造后的成绩提升卡片</div>
+  <div class="mockup-body" style="padding: 32px; background: #fafafa;">
+    <!-- 新设计 -->
+    <div style="background: white; border-radius: 24px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <h3 style="font-size: 20px; font-weight: 900; margin: 0;">测评成长轨迹</h3>
+        <span style="font-size: 11px; padding: 4px 10px; background: #fef3c7; color: #92400e; border-radius: 20px; font-weight: 600;">仅测评数据</span>
+      </div>
+
+      <div style="display: flex; align-items: baseline; gap: 24px; margin-bottom: 24px;">
+        <div style="text-align: center;">
+          <p style="font-size: 10px; color: #888; margin-bottom: 4px; text-transform: uppercase;">首次测评</p>
+          <p style="font-size: 32px; font-weight: 900; color: #6b7280;">79</p>
+          <p style="font-size: 12px; color: #888;">分</p>
+        </div>
+
+        <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
+          <div style="flex: 1; height: 2px; background: linear-gradient(to right, #d1d5db, #9ca3af);"></div>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          <div style="flex: 1; height: 2px; background: linear-gradient(to right, #9ca3af, #d1d5db);"></div>
+        </div>
+
+        <div style="text-align: center;">
+          <p style="font-size: 10px; color: #ef4444; margin-bottom: 4px; text-transform: uppercase;">最近测评</p>
+          <div style="display: flex; align-items: baseline; gap: 4px;">
+            <p style="font-size: 40px; font-weight: 900; color: #ef4444;">82</p>
+            <p style="font-size: 14px; color: #ef4444;">分</p>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 20px; background: #dcfce7; border-radius: 30px; width: fit-content; margin: 0 auto;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5"><path d="M23 6l-9.5 9.5-5-5L1 18"/></svg>
+        <span style="font-size: 18px; font-weight: 900; color: #16a34a;">+3分</span>
+      </div>
+
+      <p style="text-align: center; font-size: 12px; color: #888; margin-top: 16px;">测评分数提升 · 真实反映学习进步</p>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 32px;">
+  <h3>数据来源</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+    <div style="padding: 16px; background: #f0fdf4; border-radius: 12px;">
+      <p style="font-weight: 700; color: #16a34a; margin-bottom: 8px;">首次测评</p>
+      <p style="font-size: 13px; color: #374151; margin-bottom: 4px;">✓ initialAssessmentScore</p>
+      <p style="font-size: 11px; color: #6b7280;">或首次 diagnostic attempt</p>
+    </div>
+    <div style="padding: 16px; background: #fef2f2; border-radius: 12px;">
+      <p style="font-weight: 700; color: #dc2626; margin-bottom: 8px;">最近测评</p>
+      <p style="font-size: 13px; color: #374151; margin-bottom: 4px;">✓ 最新 diagnostic attempt</p>
+      <p style="font-size: 11px; color: #6b7280;">按 completedAt desc 取第一条</p>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 24px; padding: 16px; background: #eff6ff; border-radius: 12px; border-left: 4px solid #3b82f6;">
+  <p style="font-weight: 600; color: #1e40af; margin-bottom: 8px;">前端改动清单（AnalyzePage.tsx）</p>
+  <ol style="margin: 0; padding-left: 20px; font-size: 13px; color: #374151;">
+    <li>调用 /api/analytics/overview 获取全部数据</li>
+    <li>新增 API 调用获取 diagnostic attempts（只取 mode='diagnostic'）</li>
+    <li>提取首次测评分数和最近测评分数</li>
+    <li>计算提升值 = 最近 - 首次</li>
+    <li>渲染新的成长轨迹 UI</li>
+  </ol>
+</div>
+
+<div style="margin-top: 24px; padding: 16px; background: #fafafa; border-radius: 12px; border: 1px dashed #ccc;">
+  <p style="font-size: 13px; color: #666;">
+    <strong>练习数据怎么处理？</strong><br/>
+    从这个模块移除。可选：在页面其他地方单独显示"练习统计"模块，或者彻底不管它（练习只是巩固手段，不是成长指标）。
+  </p>
+</div>

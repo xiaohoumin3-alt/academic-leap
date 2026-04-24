@@ -36,8 +36,10 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, onAssess, onOpenConsole })
       // 兼容两种格式：ApiResponse包装 或 直接返回
       const overview = overviewRes.data?.overview || overviewRes.overview;
       if (overview) {
-        // 检查是否已完成测评但未设置教材
-        const needsOnboarding = overview.initialAssessmentCompleted && !overview.selectedTextbookId;
+        // 检查是否需要设置教材（在测评之前必须设置教材）
+        // 触发条件：没有完成测评 且 没有选择教材
+        const needsOnboarding = !overview.initialAssessmentCompleted &&
+                                !overview.selectedTextbookId;
         if (needsOnboarding) {
           setShowOnboarding(true);
         }

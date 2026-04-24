@@ -32,6 +32,12 @@ interface KnowledgeData {
   status?: 'high' | 'medium' | 'low';
 }
 
+interface DiagnosticAttempt {
+  id: string;
+  score: number;
+  completedAt: string;
+}
+
 interface OverviewInner {
   totalAttempts: number;
   completedAttempts: number;
@@ -50,6 +56,10 @@ interface OverviewInner {
   // Stats for "My" page
   totalQuestions: number;
   correctRate: number;
+  // Growth story fields
+  diagnosticAttempts: DiagnosticAttempt[];
+  trainingAvgScore: number;
+  trainingCount: number;
 }
 
 interface OverviewData {
@@ -114,6 +124,36 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
     }
   };
 
+  // 计算成长故事数据
+  const getGrowthStoryData = (overview: OverviewData['overview']) => {
+    const diagnosticAttempts = overview?.diagnosticAttempts || [];
+
+    // 首次测评分数
+    const firstScore = overview?.initialAssessmentScore ||
+      (diagnosticAttempts.length > 0 ? diagnosticAttempts[0].score : null);
+
+    // 最近测评分数
+    const latestScore = diagnosticAttempts.length > 0
+      ? diagnosticAttempts[diagnosticAttempts.length - 1].score
+      : null;
+
+    // 提升值
+    const growth = (firstScore !== null && latestScore !== null && firstScore !== latestScore)
+      ? latestScore - firstScore
+      : null;
+
+    return { firstScore, latestScore, growth };
+  };
+
+  // 计算练习统计数据
+  const getPracticeStats = (overview: OverviewData['overview']) => {
+    return {
+      avgScore: overview?.trainingAvgScore || 0,
+      totalQuestions: overview?.totalQuestions || 0,
+      totalMinutes: overview?.totalMinutes || 0,
+    };
+  };
+
   const handleCalibration = async () => {
     try {
       const response = await fetch('/api/analytics/recalibrate', {
@@ -165,16 +205,6 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
     );
   }
 
-  // 加载状态
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-4">
-        <div className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-        <p className="font-medium text-on-surface-variant">加载分析数据...</p>
-      </div>
-    );
-  }
-
   // 无数据状态
   const hasNoData = !overview?.overview?.totalAttempts;
   if (hasNoData) {
@@ -195,11 +225,8 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
     );
   }
 
-  // 使用真实数据
-  const currentScore = overview?.overview?.averageScore || 0;
-  const startScore = overview?.overview?.startingScoreCalibrated && overview?.overview?.calibratedStartingScore
-    ? overview.overview.calibratedStartingScore
-    : overview?.overview?.lowestScore ?? currentScore;
+  // 使用真实数据 - 基于诊断测评计算当前分数
+  const { latestScore: currentScore } = getGrowthStoryData(overview?.overview);
 
   return (
     <>
@@ -228,7 +255,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
         <StartingScoreCalibrationCard
           originalLowestScore={overview.overview.lowestScore}
           newStartingScore={overview.overview.calibratedStartingScore}
-          currentScore={currentScore}
+          currentScore={currentScore ?? overview?.overview?.averageScore ?? 0}
           onConfirm={handleCalibration}
           onDismiss={() => {
             // 用户选择保持现状，不再提示（可选：记录到本地存储）
@@ -240,27 +267,100 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
       <section className="bg-surface-container-lowest rounded-[2rem] p-8 relative overflow-hidden ambient-shadow">
         <div className="absolute -right-8 -top-8 w-40 h-40 bg-gradient-to-br from-primary/10 to-primary-container/10 rounded-full blur-3xl pointer-events-none"></div>
 
-        <div className="flex flex-col md:flex-row items-baseline justify-between gap-4 relative z-10">
-          <div>
-            <h3 className="text-xl font-display font-black text-on-surface mb-4">成绩提升</h3>
-            <div className="flex items-center gap-4">
-              <div className="text-center">
-                <p className="text-[10px] font-bold text-on-surface-variant uppercase">起始</p>
-                <p className="text-2xl font-display font-black text-on-surface-variant">{startScore}</p>
+        {(() => {
+          const { firstScore, latestScore, growth } = getGrowthStoryData(overview?.overview);
+          const hasData = firstScore !== null && latestScore !== null;
+
+          return (
+            <>
+              <div className="flex items-center justify-between mb-4 relative z-10">
+                <h3 className="text-xl font-display font-black text-on-surface">测评成长轨迹</h3>
+                <span className="text-[10px] px-3 py-1 bg-warning-container text-on-warning-container rounded-full font-bold">
+                  真实水平
+                </span>
               </div>
-              <MaterialIcon icon="chevron_right" className="text-outline-variant" style={{ fontSize: '24px' }} />
-              <div className="text-center">
-                <p className="text-[10px] font-bold text-primary uppercase">当前</p>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-display font-black text-primary">{currentScore}</span>
-                  <span className="text-sm font-bold text-primary">分</span>
+
+              {!hasData ? (
+                <div className="text-center py-8">
+                  <p className="text-on-surface-variant">完成诊断测评后查看成长轨迹</p>
                 </div>
-              </div>
-            </div>
+              ) : (
+                <>
+                  <div className="flex items-baseline justify-center gap-6 mb-6 relative z-10">
+                    <div className="text-center">
+                      <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">首次</p>
+                      <p className="text-3xl font-display font-black text-on-surface-variant">{firstScore}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-12 h-0.5 bg-surface-variant"></div>
+                      <MaterialIcon icon="chevron_right" className="text-outline-variant" style={{ fontSize: '20px' }} />
+                      <div className="w-12 h-0.5 bg-surface-variant"></div>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] font-bold text-primary uppercase mb-1">最近</p>
+                      <p className="text-4xl font-display font-black text-primary">{latestScore}</p>
+                    </div>
+                  </div>
+
+                  {growth !== null && growth !== 0 && (
+                    <div className="flex items-center justify-center gap-2 relative z-10">
+                      <div className={`flex items-center gap-1 px-4 py-2 rounded-full ${
+                        growth > 0 ? 'bg-success/20' : 'bg-error/20'
+                      }`}>
+                        <MaterialIcon
+                          icon={growth > 0 ? 'trending_up' : 'trending_down'}
+                          className={growth > 0 ? 'text-success' : 'text-error'}
+                          style={{ fontSize: '18px' }}
+                        />
+                        <span className={`text-base font-display font-black ${
+                          growth > 0 ? 'text-success' : 'text-error'
+                        }`}>
+                          {growth > 0 ? '+' : ''}{growth}分
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-center text-xs text-on-surface-variant mt-4">
+                    测评分数对比 · 真实反映学习进步
+                  </p>
+                </>
+              )}
+            </>
+          );
+        })()}
+      </section>
+
+      {/* 练习统计 */}
+      <section className="bg-surface-container-lowest rounded-[2rem] p-8">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-display font-black text-on-surface">练习状态</h3>
+          <span className="text-[10px] px-3 py-1 bg-secondary-container text-on-secondary-container rounded-full font-bold">
+            日常巩固
+          </span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center p-4 bg-surface-container rounded-2xl">
+            <p className="text-2xl font-display font-black text-secondary">
+              {(() => {
+                const stats = getPracticeStats(overview?.overview);
+                return stats.avgScore > 0 ? stats.avgScore : '-';
+              })()}
+            </p>
+            <p className="text-[10px] text-on-surface-variant mt-1">正确率</p>
           </div>
-          <div className="flex items-center gap-2 px-6 py-3 bg-success/20 rounded-full">
-            <MaterialIcon icon="trending_up" className="text-success" style={{ fontSize: '20px' }} />
-            <span className="text-lg font-display font-black text-success">+{currentScore - startScore}分</span>
+          <div className="text-center p-4 bg-surface-container rounded-2xl">
+            <p className="text-2xl font-display font-black text-secondary">
+              {overview?.overview?.totalQuestions || 0}
+            </p>
+            <p className="text-[10px] text-on-surface-variant mt-1">总题数</p>
+          </div>
+          <div className="text-center p-4 bg-surface-container rounded-2xl">
+            <p className="text-2xl font-display font-black text-secondary">
+              {overview?.overview?.totalMinutes || 0}
+            </p>
+            <p className="text-[10px] text-on-surface-variant mt-1">分钟</p>
           </div>
         </div>
       </section>

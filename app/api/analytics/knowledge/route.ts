@@ -13,9 +13,28 @@ export async function GET(req: NextRequest) {
 
     const userId = session.user.id;
 
-    // 获取所有活跃的知识点（从 KnowledgePoint 表）
+    // 获取用户选择的教材
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { selectedTextbookId: true },
+    });
+
+    // 获取用户选择的教材对应的知识点（按教材过滤）
+    const knowledgePointWhere: any = {
+      status: 'active',
+      inAssess: true,
+      deletedAt: null,
+    };
+
+    // 如果用户已选择教材，只获取该教材的知识点
+    if (user?.selectedTextbookId) {
+      knowledgePointWhere.chapter = {
+        textbookId: user.selectedTextbookId,
+      };
+    }
+
     const activeKnowledgePoints = await prisma.knowledgePoint.findMany({
-      where: { status: 'active', inAssess: true, deletedAt: null },
+      where: knowledgePointWhere,
       select: { name: true },
       orderBy: { weight: 'desc' },
     });

@@ -46,13 +46,31 @@ export default function LearningPathOverview({
   const loadPath = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/learning-path');
+      const res = await fetch('/api/learning-path', {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      });
       const data = await res.json();
 
       if (data.success) {
         setPath(data.data.path);
         setRoadmap(data.data.roadmap);
         setWeeklySummary(data.data.weeklySummary);
+
+        // Debug log
+        const actualCompletedCount = data.data.roadmap?.filter((item: RoadmapItem) => item.status === 'completed').length || 0;
+        console.log('[LearningPathOverview] Received data:', {
+          roadmapLength: data.data.roadmap?.length,
+          completedCount: actualCompletedCount,
+          masteredCount: data.data.weeklySummary?.masteredCount,
+        });
+        console.log('[LearningPathOverview] roadmapItems:', data.data.roadmap?.map((item: RoadmapItem) => ({
+          name: item.name,
+          status: item.status,
+          mastery: item.mastery
+        })));
       } else if (data.error) {
         setError(data.error);
       }

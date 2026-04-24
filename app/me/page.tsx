@@ -8,6 +8,8 @@ import LearningPathOverview from '@/components/LearningPathOverview';
 import WeeklyReportDialog from '@/components/WeeklyReportDialog';
 import LearningSettingsDialog from '@/components/LearningSettingsDialog';
 
+const DEFAULT_TARGET_SCORE = 90;
+
 interface User {
   id: string;
   name: string;
@@ -28,6 +30,7 @@ export default function MePage() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [showWeeklyReport, setShowWeeklyReport] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   // 获取用户信息和学习设置
   useEffect(() => {
@@ -45,15 +48,25 @@ export default function MePage() {
           setUser(null);
         }
       })
-      .catch(console.error)
+      .catch(() => {
+        // Silently handle error, show empty state
+      })
       .finally(() => setLoading(false));
   }, []);
 
   const refreshSettings = async () => {
-    const settingsRes = await fetch('/api/user/settings');
-    const settingsData = await settingsRes.json();
-    if (settingsData.data) {
-      setSettings(settingsData.data);
+    try {
+      const settingsRes = await fetch('/api/user/settings');
+      if (!settingsRes.ok) {
+        throw new Error('获取设置失败');
+      }
+      const settingsData = await settingsRes.json();
+      if (settingsData.data) {
+        setSettings(settingsData.data);
+        setSettingsError(null);
+      }
+    } catch {
+      setSettingsError('获取设置失败，请重试');
     }
   };
 
@@ -125,6 +138,12 @@ export default function MePage() {
             </div>
           </div>
 
+          {settingsError && (
+            <div className="bg-error-container/10 text-error text-sm p-3 rounded-xl mb-4">
+              {settingsError}
+            </div>
+          )}
+
           {settings ? (
             <div className="bg-surface rounded-2xl p-4">
               <div className="flex items-center justify-between">
@@ -132,7 +151,7 @@ export default function MePage() {
                   <MaterialIcon icon="school" style={{ fontSize: '18px' }} />
                   <span>
                     {settings.grade}年级 · {settings.selectedSubject || '未设置'}
-                    {settings.selectedTextbookId && ' | 目标 ' + (settings.targetScore || 90) + '分'}
+                    {settings.selectedTextbookId && ' | 目标 ' + (settings.targetScore || DEFAULT_TARGET_SCORE) + '分'}
                   </span>
                 </div>
                 <button

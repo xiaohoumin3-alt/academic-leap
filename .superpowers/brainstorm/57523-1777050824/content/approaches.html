@@ -1,0 +1,70 @@
+<h2>方案对比：最小改动</h2>
+<p class="subtitle">充分利用现有资产，只改数据不换结构</p>
+
+<div class="options" style="margin-top: 24px;">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>方案A：前端过滤（推荐）</h3>
+      <p>Overview API 返回的数据里，averageScore 已经包含了测评和练习。前端按 mode 分开算。</p>
+      <p style="margin-top: 12px; padding: 8px 12px; background: #f0fdf4; border-radius: 8px; font-size: 12px;">
+        <strong>改动点：</strong>只改 AnalyzePage.tsx，把 averageScore 拆成 assessmentAvg + trainingAvg
+      </p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>方案B：API 扩展字段</h3>
+      <p>在 overview API 里增加 assessmentAvgScore、trainingAvgScore 两个字段，前端直接用。</p>
+      <p style="margin-top: 12px; padding: 8px 12px; background: #eff6ff; border-radius: 8px; font-size: 12px;">
+        <strong>改动点：</strong>改 overview/route.ts 返回新字段，AnalyzePage.tsx 接收新字段
+      </p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>方案C：新增专用 API</h3>
+      <p>创建 /api/analytics/growth-story，返回 {assessmentScores: [], trainingAvg: ...}</p>
+      <p style="margin-top: 12px; padding: 8px 12px; background: #fef3c7; border-radius: 8px; font-size: 12px;">
+        <strong>改动点：</strong>新文件 + 新接口 + AnalyzePage.tsx 调用新接口
+      </p>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 32px;">
+  <h3>现有资产盘点</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+    <div style="padding: 12px; background: #f5f5f5; border-radius: 8px; font-size: 13px;">
+      <p style="font-weight: 600;">数据库层</p>
+      <p style="color: #666;">✓ Attempt.mode 字段已存在</p>
+      <p style="color: #666;">✓ initialAssessmentScore 已存储</p>
+    </div>
+    <div style="padding: 12px; background: #f5f5f5; border-radius: 8px; font-size: 13px;">
+      <p style="font-weight: 600;">API 层</p>
+      <p style="color: #666;">✓ overview/route.ts 可扩展</p>
+      <p style="color: #666;">✓ 不需要新建接口</p>
+    </div>
+    <div style="padding: 12px; background: #f5f5f5; border-radius: 8px; font-size: 13px;">
+      <p style="font-weight: 600;">UI 层</p>
+      <p style="color: #666;">✓ 现有卡片组件复用</p>
+      <p style="color: #666;">✓ 现有图表组件复用</p>
+    </div>
+    <div style="padding: 12px; background: #f5f5f5; border-radius: 8px; font-size: 13px;">
+      <p style="font-weight: 600;">数据结构</p>
+      <p style="color: #666;">✓ OverviewInner 接口可扩展</p>
+      <p style="color: #666;">✓ 只需增加字段</p>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 24px; padding: 16px; background: #fafafa; border-radius: 12px; border: 1px dashed #ccc;">
+  <p style="font-size: 13px; color: #666;">
+    <strong>建议：</strong>方案B 最平衡。API 层改动最小（只加2个字段），前端改动也清晰。
+    方案A 适合不想动 API 的情况，方案C 改动最大但结构最干净。
+  </p>
+</div>
