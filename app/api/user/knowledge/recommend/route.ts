@@ -108,50 +108,53 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 清除现有勾选（如果覆盖）
-    if (overwrite) {
-      await prisma.userEnabledKnowledge.deleteMany({
-        where: { userId: session.user.id },
-      });
-    }
-
     // 获取推荐章节及之前章节的所有知识点
     const targetChapters = chapters.filter(c => c.chapterNumber <= recommendedChapter.chapterNumber);
     const chapterIds = targetChapters.map(c => c.id);
 
-    const knowledgePoints = await prisma.knowledgePoint.findMany({
-      where: {
-        chapterId: { in: chapterIds },
-        deletedAt: null,
-        inAssess: true,
-      },
-      select: { id: true },
-    });
+    // 使用事务确保删除和插入操作的原子性
+    await prisma.$transaction(async (tx) => {
+      // 清除现有勾选（如果覆盖）
+      if (overwrite) {
+        await tx.userEnabledKnowledge.deleteMany({
+          where: { userId: session.user.id },
+        });
+      }
 
-    // 批量插入 - SQLite 兼容性处理
-    // SQLite 不支持 skipDuplicates，使用事务 + 查询现有记录
-    const existingRecords = await prisma.userEnabledKnowledge.findMany({
-      where: {
-        userId: session.user.id,
-        nodeId: { in: knowledgePoints.map(kp => kp.id) },
-      },
-      select: { nodeId: true },
-    });
-
-    const existingNodeIds = new Set(existingRecords.map(r => r.nodeId));
-    const newRecords = knowledgePoints
-      .filter(kp => !existingNodeIds.has(kp.id))
-      .map(kp => ({
-        userId: session.user.id,
-        nodeId: kp.id,
-        nodeType: 'point' as const,
-      }));
-
-    if (newRecords.length > 0) {
-      await prisma.userEnabledKnowledge.createMany({
-        data: newRecords,
+      const knowledgePoints = await tx.knowledgePoint.findMany({
+        where: {
+          chapterId: { in: chapterIds },
+          deletedAt: null,
+          inAssess: true,
+        },
+        select: { id: true },
       });
-    }
+
+      // 批量插入 - SQLite 兼容性处理
+      // SQLite 不支持 skipDuplicates，使用事务 + 查询现有记录
+      const existingRecords = await tx.userEnabledKnowledge.findMany({
+        where: {
+          userId: session.user.id,
+          nodeId: { in: knowledgePoints.map(kp => kp.id) },
+        },
+        select: { nodeId: true },
+      });
+
+      const existingNodeIds = new Set(existingRecords.map(r => r.nodeId));
+      const newRecords = knowledgePoints
+        .filter(kp => !existingNodeIds.has(kp.id))
+        .map(kp => ({
+          userId: session.user.id,
+          nodeId: kp.id,
+          nodeType: 'point' as const,
+        }));
+
+      if (newRecords.length > 0) {
+        await tx.userEnabledKnowledge.createMany({
+          data: newRecords,
+        });
+      }
+    });
 
     const enabledCount = await prisma.userEnabledKnowledge.count({
       where: { userId: session.user.id },
