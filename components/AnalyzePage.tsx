@@ -60,6 +60,10 @@ interface OverviewInner {
   diagnosticAttempts: DiagnosticAttempt[];
   trainingAvgScore: number;
   trainingCount: number;
+  // 练习专用统计
+  trainingQuestions: number;
+  trainingCorrectRate: number;
+  trainingMinutes: number;
 }
 
 interface OverviewData {
@@ -150,8 +154,9 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
   const getPracticeStats = (overview: OverviewData['overview']) => {
     return {
       avgScore: overview?.trainingAvgScore || 0,
-      totalQuestions: overview?.totalQuestions || 0,
-      totalMinutes: overview?.totalMinutes || 0,
+      correctRate: overview?.trainingCorrectRate || 0,
+      totalQuestions: overview?.trainingQuestions || 0,
+      totalMinutes: overview?.trainingMinutes || 0,
     };
   };
 
@@ -346,20 +351,26 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
             <p className="text-2xl font-display font-black text-secondary">
               {(() => {
                 const stats = getPracticeStats(overview?.overview);
-                return stats.avgScore > 0 ? stats.avgScore : '-';
+                return stats.correctRate > 0 ? stats.correctRate + '%' : '-';
               })()}
             </p>
             <p className="text-[10px] text-on-surface-variant mt-1">正确率</p>
           </div>
           <div className="text-center p-4 bg-surface-container rounded-2xl">
             <p className="text-2xl font-display font-black text-secondary">
-              {overview?.overview?.totalQuestions || 0}
+              {(() => {
+                const stats = getPracticeStats(overview?.overview);
+                return stats.totalQuestions > 0 ? stats.totalQuestions : '-';
+              })()}
             </p>
             <p className="text-[10px] text-on-surface-variant mt-1">总题数</p>
           </div>
           <div className="text-center p-4 bg-surface-container rounded-2xl">
             <p className="text-2xl font-display font-black text-secondary">
-              {overview?.overview?.totalMinutes || 0}
+              {(() => {
+                const stats = getPracticeStats(overview?.overview);
+                return stats.totalMinutes > 0 ? stats.totalMinutes : '-';
+              })()}
             </p>
             <p className="text-[10px] text-on-surface-variant mt-1">分钟</p>
           </div>
