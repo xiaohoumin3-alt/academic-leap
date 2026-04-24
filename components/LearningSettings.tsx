@@ -237,18 +237,30 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
   }
 
   // 教材选择器
-  if (showTextbookSelector) {
+  if (showTextbookSelector || isEditing) {
     return (
       <div className="bg-surface-container-low rounded-[2rem] p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-            <MaterialIcon icon="school" className="text-primary" style={{ fontSize: '22px' }} />
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <MaterialIcon icon="school" className="text-primary" style={{ fontSize: '22px' }} />
+            </div>
+            <h3 className="font-bold text-on-surface">
+              {isEditing ? '更改学习教材' : '选择学习教材'}
+            </h3>
           </div>
-          <h3 className="font-bold text-on-surface">选择学习教材</h3>
+          {(isEditing || settings?.selectedTextbookId) && (
+            <button
+              onClick={handleCancelEdit}
+              className="text-sm text-on-surface-variant hover:text-on-surface transition-colors"
+            >
+              取消
+            </button>
+          )}
         </div>
 
         <p className="text-sm text-on-surface-variant mb-6">
-          请选择您的年级和科目，我们将为您推荐合适的学习内容
+          {isEditing ? '请选择新的年级和科目' : '请选择您的年级和科目，我们将为您推荐合适的学习内容'}
         </p>
 
         {/* 年级选择 */}
