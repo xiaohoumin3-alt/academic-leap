@@ -5,6 +5,7 @@ import { motion } from 'motion/react';
 import MaterialIcon from './MaterialIcon';
 import { BottomNavigation } from './BottomNavigation';
 import { analyticsApi } from '@/lib/api';
+import OnboardingGuide from './OnboardingGuide';
 
 interface HomePageProps {
   onStart: () => void;
@@ -22,6 +23,7 @@ interface AssessmentStatus {
 const HomePage: React.FC<HomePageProps> = ({ onStart, onAssess, onOpenConsole }) => {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<AssessmentStatus | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     fetchStatus();
@@ -34,6 +36,12 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, onAssess, onOpenConsole })
       // 兼容两种格式：ApiResponse包装 或 直接返回
       const overview = overviewRes.data?.overview || overviewRes.overview;
       if (overview) {
+        // 检查是否已完成测评但未设置教材
+        const needsOnboarding = overview.initialAssessmentCompleted && !overview.selectedTextbookId;
+        if (needsOnboarding) {
+          setShowOnboarding(true);
+        }
+
         setStatus({
           initialAssessmentCompleted: overview.initialAssessmentCompleted || overview.totalAttempts > 0,
           currentScore: overview.initialAssessmentScore || overview.averageScore || 0,
@@ -184,42 +192,53 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, onAssess, onOpenConsole })
   const nextStep = getNextStep();
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 px-6 py-8 flex flex-col">
-        {/* 顶部状态 - 等效分显示 */}
-        <div className="text-center mb-6">
-          <p className="text-sm text-on-surface-variant mb-2">当前等效分</p>
-          <div className="flex items-center justify-center gap-2">
-            <h1 className="text-5xl font-display font-black text-primary">
-              {currentScore}
-            </h1>
-            <span className="text-xl text-on-surface-variant">分</span>
+    <>
+      {showOnboarding && (
+        <OnboardingGuide
+          onComplete={() => {
+            setShowOnboarding(false);
+            fetchStatus(); // 刷新状态
+          }}
+        />
+      )}
+
+      <div className="flex flex-col h-full">
+        <div className="flex-1 px-6 py-8 flex flex-col">
+          {/* 顶部状态 - 等效分显示 */}
+          <div className="text-center mb-6">
+            <p className="text-sm text-on-surface-variant mb-2">当前等效分</p>
+            <div className="flex items-center justify-center gap-2">
+              <h1 className="text-5xl font-display font-black text-primary">
+                {currentScore}
+              </h1>
+              <span className="text-xl text-on-surface-variant">分</span>
+            </div>
+            <p className="text-xs text-on-surface-variant mt-1">±3分波动区间</p>
           </div>
-          <p className="text-xs text-on-surface-variant mt-1">±3分波动区间</p>
+
+          {/* 主按钮 - 根据分数显示不同入口 */}
+          <button
+            onClick={nextStep.action}
+            className={`w-full bg-gradient-to-r ${nextStep.color} text-on-primary rounded-[2rem] py-8 px-6 flex flex-col items-center gap-3 hover:scale-[1.02] active:scale-95 transition-all shadow-xl mb-4`}
+          >
+            <MaterialIcon icon={nextStep.icon} className="fill-on-primary" style={{ fontSize: '48px' }} />
+            <span className="font-display font-black text-xl">{nextStep.label}</span>
+            <span className="text-sm text-on-primary/80">{nextStep.subLabel}</span>
+          </button>
+
+          {/* 说明 */}
+          <div className="bg-surface-container-low rounded-2xl p-4 mt-auto">
+            <h3 className="font-bold text-on-surface mb-2 text-sm">学习原理</h3>
+            <p className="text-xs text-on-surface-variant leading-relaxed">
+              系统会推送<span className="text-primary font-medium">+4%-8%难度</span>的题目，
+              让你处于"有点难但能做"的心流区，学习效率最高。
+            </p>
+          </div>
         </div>
 
-        {/* 主按钮 - 根据分数显示不同入口 */}
-        <button
-          onClick={nextStep.action}
-          className={`w-full bg-gradient-to-r ${nextStep.color} text-on-primary rounded-[2rem] py-8 px-6 flex flex-col items-center gap-3 hover:scale-[1.02] active:scale-95 transition-all shadow-xl mb-4`}
-        >
-          <MaterialIcon icon={nextStep.icon} className="fill-on-primary" style={{ fontSize: '48px' }} />
-          <span className="font-display font-black text-xl">{nextStep.label}</span>
-          <span className="text-sm text-on-primary/80">{nextStep.subLabel}</span>
-        </button>
-
-        {/* 说明 */}
-        <div className="bg-surface-container-low rounded-2xl p-4 mt-auto">
-          <h3 className="font-bold text-on-surface mb-2 text-sm">学习原理</h3>
-          <p className="text-xs text-on-surface-variant leading-relaxed">
-            系统会推送<span className="text-primary font-medium">+4%-8%难度</span>的题目，
-            让你处于"有点难但能做"的心流区，学习效率最高。
-          </p>
-        </div>
+        <BottomNavigation />
       </div>
-
-      <BottomNavigation />
-    </div>
+    </>
   );
 };
 
