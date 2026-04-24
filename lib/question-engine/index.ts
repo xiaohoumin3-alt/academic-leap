@@ -39,10 +39,16 @@ export async function generateQuestion(
 ): Promise<QuestionProtocol | null> {
   const { knowledgePoint, difficultyLevel, renderStyle = 'standard' } = options;
 
-  // 1. 选择模板
-  const templateId = getTemplateIdByKnowledge(knowledgePoint);
+  // 1. 选择模板（未知知识点时回退到"二次函数"）
+  let resolvedKnowledge = knowledgePoint;
+  let templateId = getTemplateIdByKnowledge(resolvedKnowledge);
   if (!templateId) {
-    console.error(`未找到知识点 "${knowledgePoint}" 对应的模板`);
+    console.warn(`知识点 "${resolvedKnowledge}" 未找到模板，回退到"二次函数"`);
+    resolvedKnowledge = '二次函数';
+    templateId = getTemplateIdByKnowledge(resolvedKnowledge);
+  }
+  if (!templateId) {
+    console.error(`无法为知识点 "${resolvedKnowledge}" 获取模板`);
     return null;
   }
 
@@ -64,7 +70,7 @@ export async function generateQuestion(
   // 5. 组装题目
   const question: QuestionProtocol = {
     id: `q_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    knowledgePoint,
+    knowledgePoint: resolvedKnowledge,
     templateId,
     difficultyLevel,
     params,
