@@ -50,24 +50,34 @@ interface User {
   id: string;
   name: string;
   email: string;
+}
+
+interface UserSettings {
   grade?: number;
+  selectedSubject?: string;
+  selectedTextbookId?: string;
 }
 
 export default function MePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
+  const [settings, setSettings] = useState<UserSettings | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
 
   // 获取用户信息和统计数据 - 使用 analytics API 保持数据一致性
   useEffect(() => {
     Promise.all([
       fetch('/api/auth/session').then(res => res.json()),
-      fetch('/api/analytics/overview').then(res => res.json()).catch(() => ({ overview: null }))
+      fetch('/api/analytics/overview').then(res => res.json()).catch(() => ({ overview: null })),
+      fetch('/api/user/settings').then(res => res.json()).catch(() => ({ data: null }))
     ])
-      .then(([sessionData, analyticsData]) => {
+      .then(([sessionData, analyticsData, settingsData]) => {
         if (sessionData && sessionData.user) {
           setUser(sessionData.user);
+          if (settingsData.data) {
+            setSettings(settingsData.data);
+          }
           // 将 analytics 数据转换为 stats 格式
           if (analyticsData.overview) {
             setStats({
@@ -161,10 +171,10 @@ export default function MePage() {
             </div>
           </div>
 
-          {user.grade && (
+          {settings && (
             <div className="flex items-center gap-2 text-sm text-on-surface-variant">
               <MaterialIcon icon="school" style={{ fontSize: '18px' }} />
-              <span>{user.grade}年级</span>
+              <span>{settings.grade}年级 · {settings.selectedSubject || '未设置'}</span>
             </div>
           )}
         </div>
@@ -226,8 +236,13 @@ export default function MePage() {
 
         {/* 学习设置 */}
         <div className="mt-6">
-          <LearningSettings onRefresh={() => {
-            // 刷新统计数据
+          <LearningSettings onRefresh={async () => {
+            // 刷新学习设置
+            const settingsRes = await fetch('/api/user/settings');
+            const settingsData = await settingsRes.json();
+            if (settingsData.data) {
+              setSettings(settingsData.data);
+            }
           }} />
         </div>
 
