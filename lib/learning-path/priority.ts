@@ -5,6 +5,11 @@ const STALE_DAYS_THRESHOLD = 14;
 const HIGH_FAILURE_RATE_THRESHOLD = 0.5;
 const FAILURE_BONUS_MULTIPLIER = 1.5;
 const STALE_PENALTY_MULTIPLIER = 0.5;
+const NEVER_PRACTICED_DAYS = 999;
+const HIGH_WEIGHT_THRESHOLD = 4;
+const LOW_WEIGHT_THRESHOLD = 2;
+const LOW_MASTERY_THRESHOLD = 0.3;
+const HIGH_MASTERY_THRESHOLD = 0.8;
 
 export function calculatePriority(input: PriorityFactorsInput): PriorityResult {
   const { mastery, weight, daysSincePractice, recentFailureRate, includeStale } = input;
@@ -36,15 +41,15 @@ export function generatePriorityReasons(input: PriorityFactorsInput): string[] {
   const reasons: string[] = [];
   const { mastery, weight, daysSincePractice, recentFailureRate } = input;
 
-  if (weight >= 4) {
+  if (weight >= HIGH_WEIGHT_THRESHOLD) {
     reasons.push(`权重高(${weight})`);
-  } else if (weight <= 2) {
+  } else if (weight <= LOW_WEIGHT_THRESHOLD) {
     reasons.push(`权重低(${weight})`);
   }
 
-  if (mastery < 0.3) {
+  if (mastery < LOW_MASTERY_THRESHOLD) {
     reasons.push('测评正确率低');
-  } else if (mastery > 0.8) {
+  } else if (mastery > HIGH_MASTERY_THRESHOLD) {
     reasons.push('基本掌握');
   }
 
@@ -66,6 +71,9 @@ export async function getUserMastery(userId: string, knowledgePointId: string): 
         userId,
         knowledgePoint: knowledgePointId
       }
+    },
+    select: {
+      mastery: true
     }
   });
 
@@ -76,7 +84,10 @@ export async function getUserMastery(userId: string, knowledgePointId: string): 
   const latestAssessment = await prisma.assessment.findFirst({
     where: { userId },
     orderBy: { completedAt: 'desc' },
-    take: 1
+    take: 1,
+    select: {
+      knowledgeData: true
+    }
   });
 
   if (latestAssessment) {
@@ -86,8 +97,8 @@ export async function getUserMastery(userId: string, knowledgePointId: string): 
       if (kpData && kpData.mastery !== undefined) {
         return kpData.mastery;
       }
-    } catch {
-      // 解析失败，返回默认值
+    } catch (error) {
+      console.warn(`[getUserMastery] Failed to parse assessment knowledgeData for user ${userId}:`, error);
     }
   }
 
@@ -105,7 +116,7 @@ export async function getDaysSincePractice(userId: string, knowledgePointId: str
   });
 
   if (!userKnowledge) {
-    return 999;
+    return NEVER_PRACTICED_DAYS;
   }
 
   const now = new Date();
@@ -122,20 +133,20 @@ export async function getRecentFailureRate(
   const since = new Date();
   since.setDate(since.getDate() - days);
 
+  // Fix N+1 query: Filter at database level and use correct Prisma relationships
   const recentSteps = await prisma.attemptStep.findMany({
     where: {
       attempt: {
         userId
+      },
+      submittedAt: {
+        gte: since
       }
     },
     include: {
-      attempt: {
+      questionStep: {
         include: {
-          questionStep: {
-            include: {
-              question: true
-            }
-          }
+          question: true
         }
       }
     }
@@ -145,23 +156,18 @@ export async function getRecentFailureRate(
   let failureCount = 0;
 
   for (const step of recentSteps) {
-    if (step.submittedAt < since) continue;
-
     try {
-      if (step.attempt?.questionStep) {
-        const question = step.attempt.questionStep.question;
-        if (question) {
-          const knowledgePoints = JSON.parse(question.knowledgePoints || '[]');
-          if (knowledgePoints.includes(knowledgePointId)) {
-            relevantCount++;
-            if (!step.isCorrect) {
-              failureCount++;
-            }
+      if (step.questionStep?.question) {
+        const knowledgePoints = JSON.parse(step.questionStep.question.knowledgePoints || '[]');
+        if (knowledgePoints.includes(knowledgePointId)) {
+          relevantCount++;
+          if (!step.isCorrect) {
+            failureCount++;
           }
         }
       }
-    } catch {
-      // 忽略解析错误
+    } catch (error) {
+      console.warn(`[getRecentFailureRate] Failed to parse knowledgePoints for step ${step.id}:`, error);
     }
   }
 
