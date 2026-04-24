@@ -19,7 +19,7 @@ interface RoadmapItem {
 }
 
 interface WeeklySummary {
-  practicedCount: number;
+  practicedKnowledgePoints: number;
   masteredCount: number;
   weakCount: number;
 }
@@ -177,8 +177,8 @@ export default function LearningPathOverview({
       {weeklySummary && (
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-surface rounded-xl p-3 text-center">
-            <p className="text-2xl font-bold text-primary">{weeklySummary.practicedCount}</p>
-            <p className="text-xs text-on-surface-variant">本周练习</p>
+            <p className="text-2xl font-bold text-primary">{weeklySummary.practicedKnowledgePoints}</p>
+            <p className="text-xs text-on-surface-variant">本周练习知识点</p>
           </div>
           <div className="bg-surface rounded-xl p-3 text-center">
             <p className="text-2xl font-bold text-success">{weeklySummary.masteredCount}</p>
