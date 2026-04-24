@@ -73,6 +73,79 @@ export const userApi = {
       completionRate: number;
     }>>;
   },
+
+  /**
+   * 获取用户学习设置
+   */
+  async getSettings() {
+    const res = await fetch(`${API_BASE}/user/settings`);
+    return res.json() as Promise<ApiResponse<UserSettings & { selectedTextbook?: { id: string; name: string; year: string } }>>;
+  },
+
+  /**
+   * 更新用户学习设置
+   */
+  async updateSettings(data: UserSettings) {
+    const res = await fetch(`${API_BASE}/user/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json() as Promise<ApiResponse<UserSettings>>;
+  },
+
+  /**
+   * 获取知识点树
+   */
+  async getKnowledgeTree(expand = false) {
+    const res = await fetch(`${API_BASE}/user/knowledge-tree?expand=${expand}`);
+    return res.json() as Promise<ApiResponse<KnowledgeTreeResponse>>;
+  },
+
+  /**
+   * 勾选/取消知识点
+   */
+  async toggleKnowledge(data: { nodeId: string; nodeType: 'chapter' | 'point'; enabled: boolean; cascade?: boolean }) {
+    const res = await fetch(`${API_BASE}/user/knowledge/toggle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json() as Promise<ApiResponse<{ affectedCount: number }>>;
+  },
+
+  /**
+   * 智能推荐
+   */
+  async recommend(overwrite = false) {
+    const res = await fetch(`${API_BASE}/user/knowledge/recommend`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ overwrite }),
+    });
+    return res.json() as Promise<ApiResponse<{
+      recommendedChapterId: string;
+      recommendedChapterName: string;
+      progress: number;
+      enabledCount: number;
+      executed: boolean;
+    }>>;
+  },
+
+  /**
+   * 获取进度计算
+   */
+  async getProgress() {
+    const res = await fetch(`${API_BASE}/user/progress`);
+    return res.json() as Promise<ApiResponse<{
+      currentChapter: { id: string; chapterNumber: number; chapterName: string } | null;
+      progress: number;
+      completedChapters: number;
+      totalChapters: number;
+      enabledKnowledgeCount: number;
+      totalKnowledgeCount: number;
+    }>>;
+  },
 };
 
 /**
@@ -244,6 +317,40 @@ export const analyticsApi = {
     }>>;
   },
 };
+
+/**
+ * 用户设置类型定义
+ */
+export interface UserSettings {
+  selectedGrade?: number;
+  selectedSubject?: string;
+  selectedTextbookId?: string;
+  studyProgress?: number;
+}
+
+export interface KnowledgeTreeNode {
+  id: string;
+  chapterNumber?: number;
+  chapterName?: string;
+  name?: string;
+  type?: 'chapter' | 'point';
+  enabled: boolean;
+  conceptId?: string;
+  conceptName?: string;
+  knowledgePoints?: KnowledgeTreeNode[];
+}
+
+export interface KnowledgeTreeResponse {
+  textbook: {
+    id: string;
+    name: string;
+    grade: number;
+    subject: string;
+  };
+  chapters: KnowledgeTreeNode[];
+  enabledCount: number;
+  totalCount: number;
+}
 
 /**
  * 类型定义
