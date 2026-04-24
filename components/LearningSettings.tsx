@@ -114,6 +114,20 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
     setSelectedTextbookId(null);
   };
 
+  const handleEnterEditMode = () => {
+    setIsEditing(true);
+    // 预填当前设置
+    if (settings) {
+      setSelectedGrade(settings.selectedGrade ?? null);
+      setSelectedSubject(settings.selectedSubject ?? null);
+      setSelectedTextbookId(settings.selectedTextbookId ?? null);
+    }
+    // 加载教材列表（如果还没有）
+    if (textbooks.length === 0) {
+      loadTextbooks();
+    }
+  };
+
   const handleSaveTextbook = async () => {
     if (!selectedTextbookId) return;
 
@@ -395,7 +409,7 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
           </div>
           {!isEditing && (
             <button
-              onClick={() => setIsEditing(true)}
+              onClick={handleEnterEditMode}
               className="w-10 h-10 rounded-full bg-surface hover:bg-surface-container-high flex items-center justify-center transition-colors"
               aria-label="编辑设置"
             >
