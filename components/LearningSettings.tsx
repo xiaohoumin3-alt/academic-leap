@@ -373,11 +373,22 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
 
   return (
     <div className="bg-surface-container-low rounded-[2rem] p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-          <MaterialIcon icon="school" className="text-primary" style={{ fontSize: '22px' }} />
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+            <MaterialIcon icon="school" className="text-primary" style={{ fontSize: '22px' }} />
+          </div>
+          <h3 className="font-bold text-on-surface">学习设置</h3>
         </div>
-        <h3 className="font-bold text-on-surface">学习设置</h3>
+        {!isEditing && (
+          <button
+            onClick={() => setIsEditing(true)}
+            className="w-10 h-10 rounded-full bg-surface hover:bg-surface-container-high flex items-center justify-center transition-colors"
+            aria-label="编辑设置"
+          >
+            <MaterialIcon icon="edit" className="text-on-surface-variant" style={{ fontSize: '20px' }} />
+          </button>
+        )}
       </div>
 
       {/* 设置摘要 */}
