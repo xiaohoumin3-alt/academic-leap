@@ -193,24 +193,70 @@ export async function GET(): Promise<NextResponse> {
       });
     }
 
-    // 7. Calculate weekly summary
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    // 7. Calculate weekly summary (natural week: Monday 00:00:00 to now)
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const startOfWeek = new Date(now);
+    // Calculate Monday: Sunday(0) -> -6, Monday(1) -> 0, ..., Saturday(6) -> -5
+    const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    startOfWeek.setDate(now.getDate() - daysToSubtract);
+    startOfWeek.setHours(0, 0, 0, 0);
 
-    // Count practiced attempts in last 7 days
+    // Query completed attempts since start of week with steps and question data
     const recentAttempts = await prisma.attempt.findMany({
       where: {
         userId,
         startedAt: {
-          gte: sevenDaysAgo,
+          gte: startOfWeek,
+        },
+        completedAt: {
+          not: null, // Only count completed attempts
         },
       },
-      select: {
-        startedAt: true,
+      include: {
+        steps: {
+          include: {
+            questionStep: {
+              include: {
+                question: {
+                  select: {
+                    knowledgePoints: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
-    const practicedCount = recentAttempts.length;
+    // Count practice attempts per knowledge point
+    const knowledgePointPracticeCount = new Map<string, number>();
+    for (const attempt of recentAttempts) {
+      for (const step of attempt.steps) {
+        if (step.questionStep?.question) {
+          try {
+            const kps = JSON.parse(step.questionStep.question.knowledgePoints || '[]');
+            for (const kp of kps) {
+              knowledgePointPracticeCount.set(
+                kp,
+                (knowledgePointPracticeCount.get(kp) || 0) + 1
+              );
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        }
+      }
+    }
+
+    // Filter knowledge points with >= 3 practice attempts
+    const practicedKnowledgePoints = Array.from(knowledgePointPracticeCount.entries())
+      .filter(([_, count]) => count >= 3)
+      .map(([kp]) => kp);
+
+    // Return unique knowledge point count
+    const practicedCount = new Set(practicedKnowledgePoints).size;
 
     // 统计路径内已掌握的知识点（保持数据一致性）
     const masteredCount = roadmap.filter(
@@ -223,7 +269,7 @@ export async function GET(): Promise<NextResponse> {
     ).length;
 
     const weeklySummary = {
-      practicedCount,
+      practicedKnowledgePoints: practicedCount,
       masteredCount,
       weakCount,
     };
@@ -236,6 +282,7 @@ export async function GET(): Promise<NextResponse> {
       userId,
       roadmapLength: roadmap.length,
       completedCount: masteredCount,
+      practicedKnowledgePoints,
       roadmapItems: roadmap.map(r => ({ name: r.name, status: r.status, mastery: r.mastery }))
     });
 

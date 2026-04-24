@@ -77,7 +77,7 @@ export type AdjustmentTrigger = z.infer<typeof AdjustmentTriggerSchema>;
  * 周报摘要
  */
 export const WeeklyReportSummarySchema = z.object({
-  practicedCount: z.number().int().min(0),
+  practicedKnowledgePoints: z.number().int().min(0),
   masteredCount: z.number().int().min(0),
   weakCount: z.number().int().min(0)
 });
@@ -133,7 +133,7 @@ export interface PathQueryResponse {
     priority: number;
   }>;
   weeklySummary: {
-    practicedCount: number;
+    practicedKnowledgePoints: number;
     masteredCount: number;
     weakCount: number;
   };
