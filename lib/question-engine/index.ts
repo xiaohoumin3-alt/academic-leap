@@ -22,7 +22,7 @@ export * from './difficulty';
  * 生成题目（主入口）
  */
 import { QuestionProtocol } from './protocol';
-import { getTemplateIdByKnowledge, getTemplate } from './templates';
+import { getTemplateIdByKnowledgePointId, getTemplate } from './templates';
 import { renderQuestion } from './render';
 
 export interface GenerateQuestionOptions {
@@ -41,11 +41,11 @@ export async function generateQuestion(
 
   // 1. 选择模板（未知知识点时回退到"二次函数"）
   let resolvedKnowledge = knowledgePoint;
-  let templateId = getTemplateIdByKnowledge(resolvedKnowledge);
+  let templateId = await getTemplateIdByKnowledgePointId(resolvedKnowledge);
   if (!templateId) {
     console.warn(`知识点 "${resolvedKnowledge}" 未找到模板，回退到"二次函数"`);
     resolvedKnowledge = '二次函数';
-    templateId = getTemplateIdByKnowledge(resolvedKnowledge);
+    templateId = await getTemplateIdByKnowledgePointId(resolvedKnowledge);
   }
   if (!templateId) {
     console.error(`无法为知识点 "${resolvedKnowledge}" 获取模板`);

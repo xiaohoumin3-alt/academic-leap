@@ -3,6 +3,7 @@
  * 所有题目模板的中央仓库
  */
 
+import { prisma } from '@/lib/prisma';
 import { QuestionTemplate } from '../protocol';
 import { QuadraticVertexTemplate, QuadraticEvaluateTemplate } from './quadratic-function';
 import { PythagorasTemplate } from './pythagoras';
@@ -27,27 +28,59 @@ export const TEMPLATE_REGISTRY: Record<string, QuestionTemplate> = {
 };
 
 /**
- * 知识点到模板ID的映射
- * 一个知识点可以有多个模板
+ * 根据知识点ID获取可用的模板ID列表
+ * 查询优先级：直接匹配 > 概念匹配
  */
-export const KNOWLEDGE_TO_TEMPLATES: Record<string, string[]> = {
-  '二次函数': ['quadratic_vertex', 'quadratic_evaluate'],
-  '勾股定理': ['pythagoras'],
-  '概率统计': ['probability'],
-  '一元一次方程': ['linear_equation'],
-};
+export async function getTemplateIdsByKnowledgePointId(
+  knowledgePointId: string
+): Promise<string[]> {
+  // 1. 直接匹配：Template.knowledgeId == knowledgePointId
+  const directTemplates = await prisma.template.findMany({
+    where: {
+      knowledgeId: knowledgePointId,
+      status: 'production'
+    },
+    select: { id: true }
+  });
+
+  if (directTemplates.length > 0) {
+    return directTemplates.map(t => t.id);
+  }
+
+  // 2. 概念匹配：获取该知识点的 conceptId，查找同学期的模板
+  const kp = await prisma.knowledgePoint.findUnique({
+    where: { id: knowledgePointId },
+    select: { conceptId: true }
+  });
+
+  if (kp) {
+    const conceptTemplates = await prisma.template.findMany({
+      where: {
+        status: 'production',
+        knowledge: {
+          conceptId: kp.conceptId
+        }
+      },
+      select: { id: true }
+    });
+    return conceptTemplates.map(t => t.id);
+  }
+
+  // 3. 无匹配
+  return [];
+}
 
 /**
- * 根据知识点获取模板ID
- * 随机选择一个模板
+ * 根据知识点ID随机获取一个模板ID
  */
-export function getTemplateIdByKnowledge(knowledgePoint: string): string | null {
-  const templates = KNOWLEDGE_TO_TEMPLATES[knowledgePoint];
-  if (!templates || templates.length === 0) {
+export async function getTemplateIdByKnowledgePointId(
+  knowledgePointId: string
+): Promise<string | null> {
+  const templateIds = await getTemplateIdsByKnowledgePointId(knowledgePointId);
+  if (templateIds.length === 0) {
     return null;
   }
-  // 随机选择一个模板
-  return templates[Math.floor(Math.random() * templates.length)];
+  return templateIds[Math.floor(Math.random() * templateIds.length)];
 }
 
 /**
@@ -61,7 +94,7 @@ export function getTemplate(templateId: string): QuestionTemplate | null {
  * 获取所有可用的知识点
  */
 export function getAllKnowledgePoints(): string[] {
-  return Object.keys(KNOWLEDGE_TO_TEMPLATES);
+  return Object.keys(TEMPLATE_REGISTRY);
 }
 
 /**
