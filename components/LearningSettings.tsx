@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import MaterialIcon from './MaterialIcon';
 import KnowledgeTreeView from './KnowledgeTreeView';
+import SemesterDialog from './SemesterDialog';
 import { userApi } from '@/lib/api';
 
 interface LearningSettingsProps {
@@ -21,9 +22,9 @@ interface Textbook {
 }
 
 export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
-  const [mode, setMode] = useState<'smart' | 'manual'>('smart');
   const [settings, setSettings] = useState<any>(null);
   const [progress, setProgress] = useState(0);
+  const [progressMessage, setProgressMessage] = useState<string>('');
   const [treeData, setTreeData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -42,6 +43,9 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
   const [showWarning, setShowWarning] = useState(false);
   const [pendingTextbookId, setPendingTextbookId] = useState<string | null>(null);
 
+  // 学期设置对话框
+  const [showSemesterDialog, setShowSemesterDialog] = useState(false);
+
   useEffect(() => {
     loadSettings();
   }, []);
@@ -49,10 +53,13 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
   const loadSettings = async () => {
     setLoading(true);
     try {
-      const settingsRes = await userApi.getSettings();
+      const [settingsRes, progressRes] = await Promise.all([
+        userApi.getSettings(),
+        userApi.getProgress()
+      ]);
+
       if (settingsRes.data) {
         setSettings(settingsRes.data);
-        setProgress(settingsRes.data?.studyProgress ?? 0);
 
         // 如果有教材ID，加载知识树
         if (settingsRes.data.selectedTextbookId) {
@@ -60,23 +67,24 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
           if (treeRes.data) {
             setTreeData(treeRes.data);
           } else {
-            // 教材ID存在但加载失败（可能教材被删除），显示选择器
             setShowTextbookSelector(true);
             await loadTextbooks();
           }
         } else {
-          // 没有教材，显示选择器
           setShowTextbookSelector(true);
           await loadTextbooks();
         }
       } else {
-        // 没有设置数据，显示选择器
         setShowTextbookSelector(true);
         await loadTextbooks();
       }
+
+      if (progressRes.data) {
+        setProgress(progressRes.data.progress);
+        setProgressMessage(progressRes.data.progressMessage || '');
+      }
     } catch (error) {
       console.error('加载设置失败:', error);
-      // 加载失败时也显示教材选择器作为兜底
       setShowTextbookSelector(true);
       await loadTextbooks();
     } finally {
@@ -203,13 +211,14 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
   const handleApplyRecommend = async () => {
     setSaving(true);
     try {
-      const res = await userApi.recommend(false);
+      const res = await userApi.recommend();
       if (res.data?.executed) {
         await loadSettings();
         onRefresh?.();
       }
     } catch (error) {
       console.error('应用推荐失败:', error);
+      alert('推荐失败，请重试');
     } finally {
       setSaving(false);
     }
@@ -237,6 +246,19 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
       onRefresh?.();
     } catch (error) {
       console.error('保存进度失败:', error);
+    }
+  };
+
+  const handleSaveSemester = async (start: Date, end: Date) => {
+    try {
+      await userApi.updateSettings({
+        semesterStart: start.toISOString().split('T')[0],
+        semesterEnd: end.toISOString().split('T')[0],
+      });
+      await loadSettings();
+      onRefresh?.();
+    } catch (error) {
+      throw error;
     }
   };
 
@@ -407,7 +429,7 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
             </div>
             <h3 className="font-bold text-on-surface">学习设置</h3>
           </div>
-          {!isEditing && (
+          {!isEditing && settings?.selectedTextbookId && (
             <button
               onClick={handleEnterEditMode}
               className="w-10 h-10 rounded-full bg-surface hover:bg-surface-container-high flex items-center justify-center transition-colors"
@@ -419,79 +441,78 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
         </div>
 
         {/* 设置摘要 */}
-        <div className="bg-surface rounded-2xl p-4 mb-6">
-          <div className="flex items-center justify-between">
+        <div className="bg-surface rounded-2xl p-4 mb-4">
+          <div className="flex items-center justify-between mb-3">
             <span className="text-on-surface-variant">
-              {settings.grade}年级 · {settings.selectedSubject}
+              {settings?.grade}年级 · {settings?.selectedSubject}
             </span>
             <span className="text-sm text-on-surface-variant">
-              {treeData.enabledCount}/{treeData.totalCount} 知识点
+              {treeData?.enabledCount || 0}/{treeData?.totalCount || 0} 知识点
             </span>
           </div>
-        </div>
 
-        {/* 进度滑块 */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-on-surface-variant">学习进度</span>
-            <span className="text-sm font-medium text-primary">{progress}%</span>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={progress}
-            onChange={(e) => handleProgressChange(parseInt(e.target.value))}
-            className="w-full"
-          />
-        </div>
-
-        {/* 模式切换 */}
-        <div className="flex gap-2 mb-6">
-          <button
-            onClick={() => setMode('smart')}
-            className={`flex-1 py-3 rounded-xl font-medium transition-all ${
-              mode === 'smart'
-                ? 'bg-primary text-on-primary'
-                : 'bg-surface text-on-surface-variant'
-            }`}
-          >
-            智能推荐
-          </button>
-          <button
-            onClick={() => setMode('manual')}
-            className={`flex-1 py-3 rounded-xl font-medium transition-all ${
-              mode === 'manual'
-                ? 'bg-primary text-on-primary'
-                : 'bg-surface text-on-surface-variant'
-            }`}
-          >
-            手动勾选
-          </button>
-        </div>
-
-        {/* 内容区域 */}
-        {mode === 'smart' ? (
-          <div className="text-center py-8">
-            <p className="text-on-surface-variant mb-4">
-              根据当前进度 ({progress}%) 推荐学习内容
-            </p>
+          {/* 学习进度 */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-on-surface-variant">学习进度</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-primary">{progress}%</span>
+                  {progressMessage && (
+                    <span className="text-xs text-on-surface-variant">({progressMessage})</span>
+                  )}
+                </div>
+              </div>
+              <div className="w-full bg-surface-container rounded-full h-2">
+                <div
+                  className="bg-primary rounded-full h-2 transition-all"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
             <button
-              onClick={handleApplyRecommend}
-              disabled={saving}
-              className="bg-primary text-on-primary rounded-full py-4 px-8 font-medium disabled:opacity-50"
+              onClick={() => setShowSemesterDialog(true)}
+              className="px-3 py-2 rounded-lg bg-surface hover:bg-surface-container-high text-sm text-on-surface-variant transition-colors"
             >
-              {saving ? '应用中...' : '应用推荐'}
+              设置学期
             </button>
           </div>
-        ) : (
+        </div>
+
+        {/* 操作按钮 */}
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={handleApplyRecommend}
+            disabled={saving}
+            className="flex-1 py-3 rounded-xl font-medium bg-primary text-on-primary disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+          >
+            <MaterialIcon icon="auto_awesome" style={{ fontSize: '18px' }} />
+            {saving ? '应用中...' : '应用推荐'}
+          </button>
+        </div>
+
+        {/* 知识点树 - 始终显示 */}
+        {treeData ? (
           <KnowledgeTreeView
             chapters={treeData.chapters}
             onToggle={handleToggle}
             expandable={true}
           />
+        ) : (
+          <div className="text-center py-8 text-on-surface-variant">
+            加载知识点树中...
+          </div>
         )}
       </div>
+
+      {/* 学期设置对话框 */}
+      <SemesterDialog
+        isOpen={showSemesterDialog}
+        onClose={() => setShowSemesterDialog(false)}
+        onSave={handleSaveSemester}
+        currentStart={settings?.semesterStart ? new Date(settings.semesterStart) : undefined}
+        currentEnd={settings?.semesterEnd ? new Date(settings.semesterEnd) : undefined}
+      />
 
       {/* 警告对话框 */}
       {showWarning && (
