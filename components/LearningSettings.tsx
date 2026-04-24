@@ -384,98 +384,137 @@ export default function LearningSettings({ onRefresh }: LearningSettingsProps) {
   }
 
   return (
-    <div className="bg-surface-container-low rounded-[2rem] p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-            <MaterialIcon icon="school" className="text-primary" style={{ fontSize: '22px' }} />
+    <>
+      <div className="bg-surface-container-low rounded-[2rem] p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <MaterialIcon icon="school" className="text-primary" style={{ fontSize: '22px' }} />
+            </div>
+            <h3 className="font-bold text-on-surface">学习设置</h3>
           </div>
-          <h3 className="font-bold text-on-surface">学习设置</h3>
+          {!isEditing && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="w-10 h-10 rounded-full bg-surface hover:bg-surface-container-high flex items-center justify-center transition-colors"
+              aria-label="编辑设置"
+            >
+              <MaterialIcon icon="edit" className="text-on-surface-variant" style={{ fontSize: '20px' }} />
+            </button>
+          )}
         </div>
-        {!isEditing && (
+
+        {/* 设置摘要 */}
+        <div className="bg-surface rounded-2xl p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <span className="text-on-surface-variant">
+              {settings.selectedGrade}年级 · {settings.selectedSubject}
+            </span>
+            <span className="text-sm text-on-surface-variant">
+              {treeData.enabledCount}/{treeData.totalCount} 知识点
+            </span>
+          </div>
+        </div>
+
+        {/* 进度滑块 */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-on-surface-variant">学习进度</span>
+            <span className="text-sm font-medium text-primary">{progress}%</span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={progress}
+            onChange={(e) => handleProgressChange(parseInt(e.target.value))}
+            className="w-full"
+          />
+        </div>
+
+        {/* 模式切换 */}
+        <div className="flex gap-2 mb-6">
           <button
-            onClick={() => setIsEditing(true)}
-            className="w-10 h-10 rounded-full bg-surface hover:bg-surface-container-high flex items-center justify-center transition-colors"
-            aria-label="编辑设置"
+            onClick={() => setMode('smart')}
+            className={`flex-1 py-3 rounded-xl font-medium transition-all ${
+              mode === 'smart'
+                ? 'bg-primary text-on-primary'
+                : 'bg-surface text-on-surface-variant'
+            }`}
           >
-            <MaterialIcon icon="edit" className="text-on-surface-variant" style={{ fontSize: '20px' }} />
+            智能推荐
           </button>
+          <button
+            onClick={() => setMode('manual')}
+            className={`flex-1 py-3 rounded-xl font-medium transition-all ${
+              mode === 'manual'
+                ? 'bg-primary text-on-primary'
+                : 'bg-surface text-on-surface-variant'
+            }`}
+          >
+            手动勾选
+          </button>
+        </div>
+
+        {/* 内容区域 */}
+        {mode === 'smart' ? (
+          <div className="text-center py-8">
+            <p className="text-on-surface-variant mb-4">
+              根据当前进度 ({progress}%) 推荐学习内容
+            </p>
+            <button
+              onClick={handleApplyRecommend}
+              disabled={saving}
+              className="bg-primary text-on-primary rounded-full py-4 px-8 font-medium disabled:opacity-50"
+            >
+              {saving ? '应用中...' : '应用推荐'}
+            </button>
+          </div>
+        ) : (
+          <KnowledgeTreeView
+            chapters={treeData.chapters}
+            onToggle={handleToggle}
+            expandable={true}
+          />
         )}
       </div>
 
-      {/* 设置摘要 */}
-      <div className="bg-surface rounded-2xl p-4 mb-6">
-        <div className="flex items-center justify-between">
-          <span className="text-on-surface-variant">
-            {settings.selectedGrade}年级 · {settings.selectedSubject}
-          </span>
-          <span className="text-sm text-on-surface-variant">
-            {treeData.enabledCount}/{treeData.totalCount} 知识点
-          </span>
-        </div>
-      </div>
+      {/* 警告对话框 */}
+      {showWarning && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface-container-low rounded-[2rem] p-6 max-w-sm w-full">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-error-container flex items-center justify-center">
+                <MaterialIcon icon="warning" className="text-on-error-container" style={{ fontSize: '22px' }} />
+              </div>
+              <h3 className="font-bold text-on-surface">确认更换教材？</h3>
+            </div>
 
-      {/* 进度滑块 */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-on-surface-variant">学习进度</span>
-          <span className="text-sm font-medium text-primary">{progress}%</span>
-        </div>
-        <input
-          type="range"
-          min="0"
-          max="100"
-          value={progress}
-          onChange={(e) => handleProgressChange(parseInt(e.target.value))}
-          className="w-full"
-        />
-      </div>
+            <p className="text-on-surface-variant mb-6">
+              更换教材将清空当前的知识点选择，需要重新勾选学习内容。
+            </p>
 
-      {/* 模式切换 */}
-      <div className="flex gap-2 mb-6">
-        <button
-          onClick={() => setMode('smart')}
-          className={`flex-1 py-3 rounded-xl font-medium transition-all ${
-            mode === 'smart'
-              ? 'bg-primary text-on-primary'
-              : 'bg-surface text-on-surface-variant'
-          }`}
-        >
-          智能推荐
-        </button>
-        <button
-          onClick={() => setMode('manual')}
-          className={`flex-1 py-3 rounded-xl font-medium transition-all ${
-            mode === 'manual'
-              ? 'bg-primary text-on-primary'
-              : 'bg-surface text-on-surface-variant'
-          }`}
-        >
-          手动勾选
-        </button>
-      </div>
-
-      {/* 内容区域 */}
-      {mode === 'smart' ? (
-        <div className="text-center py-8">
-          <p className="text-on-surface-variant mb-4">
-            根据当前进度 ({progress}%) 推荐学习内容
-          </p>
-          <button
-            onClick={handleApplyRecommend}
-            disabled={saving}
-            className="bg-primary text-on-primary rounded-full py-4 px-8 font-medium disabled:opacity-50"
-          >
-            {saving ? '应用中...' : '应用推荐'}
-          </button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowWarning(false);
+                  setPendingTextbookId(null);
+                }}
+                className="flex-1 py-3 rounded-xl font-medium bg-surface text-on-surface-variant transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleConfirmTextbookChange}
+                disabled={saving}
+                className="flex-1 py-3 rounded-xl font-medium bg-error text-on-error-container disabled:opacity-50 transition-colors"
+              >
+                {saving ? '保存中...' : '继续'}
+              </button>
+            </div>
+          </div>
         </div>
-      ) : (
-        <KnowledgeTreeView
-          chapters={treeData.chapters}
-          onToggle={handleToggle}
-          expandable={true}
-        />
       )}
-    </div>
+    </>
   );
 }
