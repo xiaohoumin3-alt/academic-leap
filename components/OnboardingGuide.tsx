@@ -55,7 +55,7 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
     setLoading(true);
     try {
       await userApi.updateSettings({
-        selectedGrade: grade,
+        grade: grade,
         selectedSubject: subject,
         selectedTextbookId,
         studyProgress: 0,

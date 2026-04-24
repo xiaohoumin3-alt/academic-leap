@@ -322,7 +322,7 @@ export const analyticsApi = {
  * 用户设置类型定义
  */
 export interface UserSettings {
-  selectedGrade?: number;
+  grade?: number;
   selectedSubject?: string;
   selectedTextbookId?: string;
   studyProgress?: number;

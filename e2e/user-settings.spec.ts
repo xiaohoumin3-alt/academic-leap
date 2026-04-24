@@ -17,7 +17,7 @@ test.describe('用户设置 API', () => {
     expect(response.status()).toBe(200);
     const data = await response.json();
     expect(data.success).toBe(true);
-    expect(data.data).toHaveProperty('selectedGrade');
+    expect(data.data).toHaveProperty('grade');
     expect(data.data).toHaveProperty('selectedSubject');
     expect(data.data).toHaveProperty('selectedTextbookId');
     expect(data.data).toHaveProperty('studyProgress');
@@ -26,7 +26,7 @@ test.describe('用户设置 API', () => {
   test('PUT /api/user/settings 更新用户设置', async ({ request }) => {
     const response = await request.put(`${BASE_URL}/api/user/settings`, {
       data: {
-        selectedGrade: 8,
+        grade: 8,
         selectedSubject: '数学',
         studyProgress: 50
       }
@@ -41,7 +41,7 @@ test.describe('用户设置 API', () => {
     expect(response.status()).toBe(200);
     const data = await response.json();
     expect(data.success).toBe(true);
-    expect(data.data.selectedGrade).toBe(8);
+    expect(data.data.grade).toBe(8);
   });
 });
 
@@ -111,7 +111,7 @@ test.describe('用户设置完整流程', () => {
     if (settingsResponse.ok()) {
       const data = await settingsResponse.json();
       if (data.success) {
-        expect(data.data.selectedGrade).toBeDefined();
+        expect(data.data.grade).toBeDefined();
         expect(data.data.selectedSubject).toBe('数学');
       }
     }

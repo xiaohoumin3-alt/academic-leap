@@ -16,17 +16,49 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const expand = searchParams.get('expand') === 'true';
 
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
-        selectedGrade: true,
+        id: true,
+        email: true,
+        grade: true,
         selectedSubject: true,
         selectedTextbookId: true,
         studyProgress: true,
       },
     });
 
-    if (!user || !user.selectedTextbookId) {
+    // 如果用户不存在，创建用户
+    if (!user) {
+      try {
+        user = await prisma.user.create({
+          data: {
+            id: session.user.id,
+            email: session.user.email || '',
+            name: session.user.name || null,
+            password: '', // OAuth用户没有密码
+            grade: 9, // 默认年级
+            targetScore: 90,
+          },
+          select: {
+            id: true,
+            email: true,
+            grade: true,
+            selectedSubject: true,
+            selectedTextbookId: true,
+            studyProgress: true,
+          },
+        });
+      } catch (createError) {
+        console.error('创建用户失败:', createError);
+        return NextResponse.json(
+          { success: false, error: '用户数据异常，请联系客服' },
+          { status: 500 }
+        );
+      }
+    }
+
+    if (!user.selectedTextbookId) {
       return NextResponse.json(
         { success: false, error: '用户未设置教材' },
         { status: 400 }
