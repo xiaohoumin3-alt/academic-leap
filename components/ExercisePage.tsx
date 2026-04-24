@@ -717,6 +717,28 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
           duration,
         });
         console.log('完成练习响应:', finishResponse);
+
+        // 调用学习路径微调API - 使用 questionStepId 让 API 处理知识点映射
+        try {
+          const questionStepIds = currentQuestion?.steps?.map((step, idx) => ({
+            questionStepId: (step as any).id || `step-${idx}`,
+            isCorrect: currentStepsResults[idx] === 'correct'
+          })) || [];
+
+          await fetch('/api/learning-path/adjust', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              attemptId,
+              practiceResults: questionStepIds.map(r => ({
+                knowledgePointId: r.questionStepId,
+                isCorrect: r.isCorrect
+              }))
+            })
+          });
+        } catch (adjustError) {
+          console.error('学习路径微调失败:', adjustError);
+        }
       } catch (error) {
         console.error('提交练习失败:', error);
       }
