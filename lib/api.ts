@@ -115,19 +115,20 @@ export const userApi = {
   },
 
   /**
-   * 智能推荐
+   * 智能推荐（一键勾选到当前进度）
    */
-  async recommend(overwrite = false) {
+  async recommend() {
     const res = await fetch(`${API_BASE}/user/knowledge/recommend`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ overwrite }),
+      body: JSON.stringify({}),  // 空对象
     });
     return res.json() as Promise<ApiResponse<{
-      recommendedChapterId: string;
-      recommendedChapterName: string;
       progress: number;
+      progressMessage?: string;
+      recommendedChapterName: string;
       enabledCount: number;
+      totalChapters: number;
       executed: boolean;
     }>>;
   },
@@ -140,6 +141,7 @@ export const userApi = {
     return res.json() as Promise<ApiResponse<{
       currentChapter: { id: string; chapterNumber: number; chapterName: string } | null;
       progress: number;
+      progressMessage?: string;
       completedChapters: number;
       totalChapters: number;
       enabledKnowledgeCount: number;
@@ -326,6 +328,8 @@ export interface UserSettings {
   selectedSubject?: string;
   selectedTextbookId?: string;
   studyProgress?: number;
+  semesterStart?: string;  // ISO 8601 格式
+  semesterEnd?: string;    // ISO 8601 格式
 }
 
 export interface KnowledgeTreeNode {
