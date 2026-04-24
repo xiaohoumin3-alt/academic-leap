@@ -10,4 +10,7 @@ module.exports = {
   ],
   roots: ['<rootDir>/lib', '<rootDir>/e2e'],
   testPathIgnorePatterns: ['/node_modules/', '/.next/'],
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/$1',
+  },
 };
