@@ -6,7 +6,7 @@ import MaterialIcon from '../../components/MaterialIcon';
 import { BottomNavigation } from '../../components/BottomNavigation';
 import LearningPathOverview from '@/components/LearningPathOverview';
 import WeeklyReportDialog from '@/components/WeeklyReportDialog';
-import LearningSettingsDialog from '@/components/LearningSettingsDialog';
+import LearningSettings from '@/components/LearningSettings';
 
 const DEFAULT_TARGET_SCORE = 90;
 
@@ -29,7 +29,7 @@ export default function MePage() {
   const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [showWeeklyReport, setShowWeeklyReport] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
   // 获取用户信息和学习设置
@@ -155,16 +155,17 @@ export default function MePage() {
                   </span>
                 </div>
                 <button
-                  onClick={() => setShowSettings(true)}
-                  className="px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors"
+                  onClick={() => setSettingsExpanded(!settingsExpanded)}
+                  className="px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors flex items-center gap-1"
                 >
-                  修改
+                  {settingsExpanded ? '收起' : '展开'}
+                  <MaterialIcon icon={settingsExpanded ? 'expand_less' : 'expand_more'} style={{ fontSize: '18px' }} />
                 </button>
               </div>
             </div>
           ) : (
             <button
-              onClick={() => setShowSettings(true)}
+              onClick={() => setSettingsExpanded(true)}
               className="w-full py-3 rounded-xl bg-primary text-on-primary font-medium"
             >
               设置学习信息
@@ -178,6 +179,13 @@ export default function MePage() {
             onShowWeeklyReport={() => setShowWeeklyReport(true)}
           />
         </div>
+
+        {/* 学习设置 - 折叠式 */}
+        {settingsExpanded && (
+          <div className="mb-6">
+            <LearningSettings onRefresh={refreshSettings} />
+          </div>
+        )}
 
         {/* 功能列表 */}
         <div className="space-y-3">
@@ -231,16 +239,6 @@ export default function MePage() {
           // 重组后刷新页面
           router.refresh();
         }}
-      />
-
-      {/* 学习设置弹窗 */}
-      <LearningSettingsDialog
-        isOpen={showSettings}
-        onClose={() => setShowSettings(false)}
-        onSave={async () => {
-          await refreshSettings();
-        }}
-        settings={settings}
       />
     </div>
   );
