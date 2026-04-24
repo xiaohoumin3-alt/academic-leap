@@ -38,6 +38,11 @@ model User {
   semesterStart      DateTime? // 学期开始日期
   semesterEnd        DateTime? // 学期结束日期
 
+  // 学习路径偏好（新增）
+  includeStale      Boolean @default(false)  // 是否包含久未练习的已掌握知识点
+  pathUpdateMode    String  @default("auto") // 'auto' | 'manual'
+  weeklyReportDay   Int     @default(0)      // 0=周日, 1=周一, ...
+
   // 关联
   attempts            Attempt[]
   knowledge           UserKnowledge[]
@@ -47,6 +52,7 @@ model User {
   admin               Admin?
   assessments         Assessment[]
   enabledKnowledge    UserEnabledKnowledge[]
+  learningPaths       LearningPath[]
 }
 
 // 题目模型
@@ -365,4 +371,57 @@ model Assessment {
   completedAt   DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// 学习路径
+model LearningPath {
+  id                String   @id @default(cuid())
+  userId            String
+  name              String   // "2024秋季学期学习路径"
+  type              String   // 'initial' | 'weekly' | 'manual'
+  status            String   @default("active") // active/archived
+  knowledgeData     String   @default("[]") // JSON字符串: [{nodeId, priority, status, addedAt, reasons}]
+  generatedAt       DateTime @default(now())
+  expiresAt         DateTime? // 周路径的过期时间
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adjustments       PathAdjustment[]
+  weeklyReports     WeeklyReport[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId, status])
+}
+
+// 路径调整记录
+model PathAdjustment {
+  id                String   @id @default(cuid())
+  pathId            String
+  type              String   // 'micro' | 'weekly'
+  trigger           String   // 'practice_completed' | 'weekly_recalibration'
+  changes           String   @default("{}") // JSON字符串: {added: [], removed: [], reordered: []}
+  createdAt         DateTime @default(now())
+
+  path              LearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+
+  @@index([pathId, createdAt])
+}
+
+// 周报
+model WeeklyReport {
+  id                String   @id @default(cuid())
+  pathId            String
+  weekStart         DateTime
+  weekEnd           DateTime
+  summary           String   @default("{}") // JSON字符串: {practicedCount, masteredCount, weakCount}
+  staleKnowledge    String   @default("[]") // JSON字符串: [{nodeId, lastPractice, mastery}]
+  recommendations   String   @default("{}") // JSON字符串: {toReview: [], toLearn: []}
+  viewed           Boolean  @default(false)
+
+  path              LearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+
+  createdAt         DateTime @default(now())
+
+  @@index([pathId, weekStart])
 }
