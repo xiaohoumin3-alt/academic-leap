@@ -128,14 +128,30 @@ export async function POST(req: NextRequest) {
       select: { id: true },
     });
 
-    // 批量插入
-    await prisma.userEnabledKnowledge.createMany({
-      data: knowledgePoints.map(kp => ({
+    // 批量插入 - SQLite 兼容性处理
+    // SQLite 不支持 skipDuplicates，使用事务 + 查询现有记录
+    const existingRecords = await prisma.userEnabledKnowledge.findMany({
+      where: {
+        userId: session.user.id,
+        nodeId: { in: knowledgePoints.map(kp => kp.id) },
+      },
+      select: { nodeId: true },
+    });
+
+    const existingNodeIds = new Set(existingRecords.map(r => r.nodeId));
+    const newRecords = knowledgePoints
+      .filter(kp => !existingNodeIds.has(kp.id))
+      .map(kp => ({
         userId: session.user.id,
         nodeId: kp.id,
-        nodeType: 'point',
-      })),
-    });
+        nodeType: 'point' as const,
+      }));
+
+    if (newRecords.length > 0) {
+      await prisma.userEnabledKnowledge.createMany({
+        data: newRecords,
+      });
+    }
 
     const enabledCount = await prisma.userEnabledKnowledge.count({
       where: { userId: session.user.id },
