@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { inferDefaultSemester, parseDateInput } from '@/lib/semester';
 
 // Types for request validation
 interface SettingsUpdateBody {
   grade?: number;
   selectedSubject?: string;
   selectedTextbookId?: string;
-  studyProgress?: number;
+  studyProgress?: number;  // 保留兼容性
+  semesterStart?: string;  // YYYY-MM-DD 格式
+  semesterEnd?: string;    // YYYY-MM-DD 格式
 }
 
 // Validation helpers
@@ -16,7 +19,7 @@ function validateSettingsUpdate(body: unknown): body is SettingsUpdateBody {
     return false;
   }
 
-  const { grade, selectedSubject, selectedTextbookId, studyProgress } = body as Record<string, unknown>;
+  const { grade, selectedSubject, selectedTextbookId, studyProgress, semesterStart, semesterEnd } = body as Record<string, unknown>;
 
   // Validate grade if provided
   if (grade !== undefined) {
@@ -46,6 +49,28 @@ function validateSettingsUpdate(body: unknown): body is SettingsUpdateBody {
     }
   }
 
+  // Validate semester dates if provided
+  if (semesterStart !== undefined) {
+    if (typeof semesterStart !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(semesterStart)) {
+      return false;
+    }
+  }
+
+  if (semesterEnd !== undefined) {
+    if (typeof semesterEnd !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(semesterEnd)) {
+      return false;
+    }
+  }
+
+  // 如果同时提供，验证结束日期晚于开始日期
+  if (semesterStart && semesterEnd) {
+    const start = new Date(semesterStart);
+    const end = new Date(semesterEnd);
+    if (end <= start) {
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -69,12 +94,15 @@ export async function GET() {
         selectedSubject: true,
         selectedTextbookId: true,
         studyProgress: true,
+        semesterStart: true,
+        semesterEnd: true,
       },
     });
 
     // 如果用户不存在（session有效但数据库没有记录），创建用户
     if (!user) {
       try {
+        const defaultSemester = inferDefaultSemester();
         user = await prisma.user.create({
           data: {
             id: session.user.id,
@@ -83,6 +111,8 @@ export async function GET() {
             password: '', // OAuth用户没有密码
             grade: 9, // 默认年级
             targetScore: 90,
+            semesterStart: defaultSemester.start,
+            semesterEnd: defaultSemester.end,
           },
           select: {
             id: true,
@@ -91,6 +121,8 @@ export async function GET() {
             selectedSubject: true,
             selectedTextbookId: true,
             studyProgress: true,
+            semesterStart: true,
+            semesterEnd: true,
           },
         });
       } catch (createError) {
@@ -120,6 +152,8 @@ export async function GET() {
         selectedTextbookId: user.selectedTextbookId,
         selectedTextbook,
         studyProgress: user.studyProgress ?? 0,
+        semesterStart: user.semesterStart?.toISOString(),
+        semesterEnd: user.semesterEnd?.toISOString(),
       }
     });
   } catch (error) {
@@ -152,7 +186,31 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const { grade, selectedSubject, selectedTextbookId, studyProgress } = body as SettingsUpdateBody;
+    const { grade, selectedSubject, selectedTextbookId, studyProgress, semesterStart, semesterEnd } = body as SettingsUpdateBody;
+
+    // 处理学期日期
+    let parsedStart: Date | undefined;
+    let parsedEnd: Date | undefined;
+
+    if (semesterStart) {
+      parsedStart = parseDateInput(semesterStart);
+      if (!parsedStart) {
+        return NextResponse.json(
+          { success: false, error: '无效的开始日期格式' },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (semesterEnd) {
+      parsedEnd = parseDateInput(semesterEnd);
+      if (!parsedEnd) {
+        return NextResponse.json(
+          { success: false, error: '无效的结束日期格式' },
+          { status: 400 }
+        );
+      }
+    }
 
     // Verify textbook exists before allowing the update (only if provided and non-empty)
     if (selectedTextbookId !== undefined && selectedTextbookId !== null && selectedTextbookId !== '') {
@@ -178,6 +236,7 @@ export async function PUT(req: NextRequest) {
     let user;
     if (!existingUser) {
       // 用户不存在，创建新用户
+      const defaultSemester = inferDefaultSemester();
       user = await prisma.user.create({
         data: {
           id: session.user.id,
@@ -186,16 +245,22 @@ export async function PUT(req: NextRequest) {
           password: '', // OAuth用户没有密码
           grade: 9, // 默认年级
           targetScore: 90,
+          semesterStart: defaultSemester.start,
+          semesterEnd: defaultSemester.end,
           ...(grade !== undefined && { grade }),
           ...(selectedSubject !== undefined && { selectedSubject }),
           ...(selectedTextbookId !== undefined && { selectedTextbookId }),
           ...(studyProgress !== undefined && { studyProgress }),
+          ...(parsedStart && { semesterStart: parsedStart }),
+          ...(parsedEnd && { semesterEnd: parsedEnd }),
         },
         select: {
           grade: true,
           selectedSubject: true,
           selectedTextbookId: true,
           studyProgress: true,
+          semesterStart: true,
+          semesterEnd: true,
         },
       });
     } else {
@@ -207,12 +272,16 @@ export async function PUT(req: NextRequest) {
           ...(selectedSubject !== undefined && { selectedSubject }),
           ...(selectedTextbookId !== undefined && { selectedTextbookId }),
           ...(studyProgress !== undefined && { studyProgress }),
+          ...(parsedStart && { semesterStart: parsedStart }),
+          ...(parsedEnd && { semesterEnd: parsedEnd }),
         },
         select: {
           grade: true,
           selectedSubject: true,
           selectedTextbookId: true,
           studyProgress: true,
+          semesterStart: true,
+          semesterEnd: true,
         },
       });
     }
@@ -235,6 +304,8 @@ export async function PUT(req: NextRequest) {
         selectedTextbookId: user.selectedTextbookId,
         selectedTextbook,
         studyProgress: user.studyProgress ?? 0,
+        semesterStart: user.semesterStart?.toISOString(),
+        semesterEnd: user.semesterEnd?.toISOString(),
       }
     });
   } catch (error) {
