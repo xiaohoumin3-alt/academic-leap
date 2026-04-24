@@ -1,40 +1,66 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { generateQuestions as engineGenerateQuestions, QuestionProtocol } from '@/lib/question-engine';
-
-// 知识点映射（模板返回英文，数据库需要中文）
-const INTERNAL_TO_KNOWLEDGE: Record<string, string> = {
-  'quadratic_function': '二次函数',
-  'pythagoras_theorem': '勾股定理',
-  'probability': '概率统计',
-  'linear_equation': '一元一次方程',
-};
-
-// 模板引擎使用中文键查找
-const KNOWLEDGE_TO_TEMPLATES: Record<string, string[]> = {
-  '二次函数': ['quadratic_vertex', 'quadratic_evaluate'],
-  '勾股定理': ['pythagoras'],
-  '概率统计': ['probability'],
-  '一元一次方程': ['linear_equation'],
-};
+import { getTemplateIdByKnowledgePointId, getTemplate, QuestionProtocol } from '@/lib/question-engine';
+import { renderQuestion } from '@/lib/question-engine/render';
 
 /**
- * 将模板返回的英文知识点转为中文（用于数据库存储）
+ * 生成单个题目
  */
-function mapToChinese(knowledgePoint: string): string {
-  return INTERNAL_TO_KNOWLEDGE[knowledgePoint] || knowledgePoint;
+async function generateSingleQuestion(
+  knowledgePoint: string,
+  difficulty: number,
+  renderStyle: 'standard' | 'guided' | 'gamified' | 'story'
+): Promise<QuestionProtocol> {
+  // 1. 根据知识点获取模板ID
+  const templateId = await getTemplateIdByKnowledgePointId(knowledgePoint);
+
+  if (!templateId) {
+    throw new Error(`该知识点 "${knowledgePoint}" 暂未配置题目模板，请联系管理员`);
+  }
+
+  // 2. 获取模板实例
+  const template = getTemplate(templateId);
+  if (!template) {
+    throw new Error(`模板 "${templateId}" 不存在`);
+  }
+
+  // 3. 生成参数
+  const params = template.generateParams(difficulty);
+
+  // 4. 构建步骤
+  const steps = template.buildSteps(params);
+
+  // 5. 渲染内容
+  const content = template.render(params);
+
+  // 6. 组装题目协议
+  const question: QuestionProtocol = {
+    id: `q_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    knowledgePoint,
+    templateId,
+    difficultyLevel: difficulty,
+    params,
+    steps,
+    content,
+    meta: {
+      version: '1.0',
+      source: 'template_engine',
+    },
+  };
+
+  // 7. AI增强渲染（可选）
+  return renderQuestion(question, renderStyle);
 }
 
 // POST /api/questions/generate - 使用模板引擎生成题目
 export async function POST(req: NextRequest) {
-  let knowledgePoint = '二次函数';  // 使用中文知识点名称
+  let knowledgePoint = '二次函数';  // 默认知识点
   let difficulty = 2;
   let count = 1;
   let renderStyle: 'standard' | 'guided' | 'gamified' | 'story' = 'standard';
 
   try {
     const requestData = await req.json();
-    // 直接使用中文知识点名称，不转换（模板引擎期望中文）
     knowledgePoint = requestData.knowledgePoint || '二次函数';
     difficulty = requestData.difficulty || 2;
     count = requestData.count || 1;
@@ -45,19 +71,28 @@ export async function POST(req: NextRequest) {
     console.error('解析请求失败:', e);
   }
 
+  // 限制生成数量
+  if (count > 10) {
+    count = 10;
+  }
+
   try {
-    // 使用模板引擎生成题目
-    const questions = await engineGenerateQuestions(
-      knowledgePoint,
-      count,
-      difficulty,
-      renderStyle
-    );
+    // 生成题目（数据库驱动）
+    const questions: QuestionProtocol[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const question = await generateSingleQuestion(
+        knowledgePoint,
+        difficulty,
+        renderStyle
+      );
+      questions.push(question);
+    }
 
     if (questions.length === 0) {
       return NextResponse.json({
         success: false,
-        error: '未找到匹配的题目模板',
+        error: `知识点 "${knowledgePoint}" 暂未配置题目模板，请联系管理员`,
       }, { status: 400 });
     }
 
@@ -71,7 +106,7 @@ export async function POST(req: NextRequest) {
             content: JSON.stringify(q.content),
             answer: '', // 答案在步骤中
             hint: q.content.context || '',
-            knowledgePoints: JSON.stringify([mapToChinese(q.knowledgePoint)]),
+            knowledgePoints: JSON.stringify([knowledgePoint]), // 直接使用中文知识点
             isAI: renderStyle !== 'standard', // 非标准风格使用了AI
             templateId: q.templateId,
             params: JSON.stringify(q.params),
@@ -114,7 +149,7 @@ export async function POST(req: NextRequest) {
       questions: savedQuestions.map((q, i) => ({
         id: q.id,
         templateId: questions[i].templateId,
-        knowledgePoint: mapToChinese(questions[i].knowledgePoint),  // 转为中文
+        knowledgePoint: questions[i].knowledgePoint,
         difficultyLevel: questions[i].difficultyLevel,
         params: questions[i].params,
         steps: q.stepsWithIds,  // 返回带数据库 id 的步骤
@@ -124,9 +159,20 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('生成题目错误:', error);
+
+    // 区分不同类型的错误
+    const errorMessage = error instanceof Error ? error.message : '生成失败';
+
+    if (errorMessage.includes('暂未配置题目模板')) {
+      return NextResponse.json({
+        success: false,
+        error: errorMessage,
+      }, { status: 400 });
+    }
+
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : '生成失败',
+      error: errorMessage,
     }, { status: 500 });
   }
 }
