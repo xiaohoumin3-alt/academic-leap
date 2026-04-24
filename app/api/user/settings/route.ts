@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 
 // Types for request validation
 interface SettingsUpdateBody {
-  selectedGrade?: number;
+  grade?: number;
   selectedSubject?: string;
   selectedTextbookId?: string;
   studyProgress?: number;
@@ -16,11 +16,11 @@ function validateSettingsUpdate(body: unknown): body is SettingsUpdateBody {
     return false;
   }
 
-  const { selectedGrade, selectedSubject, selectedTextbookId, studyProgress } = body as Record<string, unknown>;
+  const { grade, selectedSubject, selectedTextbookId, studyProgress } = body as Record<string, unknown>;
 
-  // Validate selectedGrade if provided
-  if (selectedGrade !== undefined) {
-    if (typeof selectedGrade !== 'number' || selectedGrade < 1 || selectedGrade > 12) {
+  // Validate grade if provided
+  if (grade !== undefined) {
+    if (typeof grade !== 'number' || grade < 1 || grade > 12) {
       return false;
     }
   }
@@ -60,21 +60,46 @@ export async function GET() {
       );
     }
 
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
-        selectedGrade: true,
+        id: true,
+        email: true,
+        grade: true,
         selectedSubject: true,
         selectedTextbookId: true,
         studyProgress: true,
       },
     });
 
+    // 如果用户不存在（session有效但数据库没有记录），创建用户
     if (!user) {
-      return NextResponse.json(
-        { success: false, error: '用户不存在' },
-        { status: 404 }
-      );
+      try {
+        user = await prisma.user.create({
+          data: {
+            id: session.user.id,
+            email: session.user.email || '',
+            name: session.user.name || null,
+            password: '', // OAuth用户没有密码
+            grade: 9, // 默认年级
+            targetScore: 90,
+          },
+          select: {
+            id: true,
+            email: true,
+            grade: true,
+            selectedSubject: true,
+            selectedTextbookId: true,
+            studyProgress: true,
+          },
+        });
+      } catch (createError) {
+        console.error('创建用户失败:', createError);
+        return NextResponse.json(
+          { success: false, error: '用户数据异常，请联系客服' },
+          { status: 500 }
+        );
+      }
     }
 
     // 获取教材详情 - 仅当教材存在时
@@ -90,7 +115,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       data: {
-        selectedGrade: user.selectedGrade,
+        grade: user.grade,
         selectedSubject: user.selectedSubject,
         selectedTextbookId: user.selectedTextbookId,
         selectedTextbook,
@@ -127,7 +152,7 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const { selectedGrade, selectedSubject, selectedTextbookId, studyProgress } = body as SettingsUpdateBody;
+    const { grade, selectedSubject, selectedTextbookId, studyProgress } = body as SettingsUpdateBody;
 
     // Verify textbook exists before allowing the update (only if provided and non-empty)
     if (selectedTextbookId !== undefined && selectedTextbookId !== null && selectedTextbookId !== '') {
@@ -144,21 +169,53 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    const user = await prisma.user.update({
+    // 检查用户是否存在，不存在则创建
+    const existingUser = await prisma.user.findUnique({
       where: { id: session.user.id },
-      data: {
-        ...(selectedGrade !== undefined && { selectedGrade }),
-        ...(selectedSubject !== undefined && { selectedSubject }),
-        ...(selectedTextbookId !== undefined && { selectedTextbookId }),
-        ...(studyProgress !== undefined && { studyProgress }),
-      },
-      select: {
-        selectedGrade: true,
-        selectedSubject: true,
-        selectedTextbookId: true,
-        studyProgress: true,
-      },
+      select: { id: true },
     });
+
+    let user;
+    if (!existingUser) {
+      // 用户不存在，创建新用户
+      user = await prisma.user.create({
+        data: {
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.name || null,
+          password: '', // OAuth用户没有密码
+          grade: 9, // 默认年级
+          targetScore: 90,
+          ...(grade !== undefined && { grade }),
+          ...(selectedSubject !== undefined && { selectedSubject }),
+          ...(selectedTextbookId !== undefined && { selectedTextbookId }),
+          ...(studyProgress !== undefined && { studyProgress }),
+        },
+        select: {
+          grade: true,
+          selectedSubject: true,
+          selectedTextbookId: true,
+          studyProgress: true,
+        },
+      });
+    } else {
+      // 用户存在，更新设置
+      user = await prisma.user.update({
+        where: { id: session.user.id },
+        data: {
+          ...(grade !== undefined && { grade }),
+          ...(selectedSubject !== undefined && { selectedSubject }),
+          ...(selectedTextbookId !== undefined && { selectedTextbookId }),
+          ...(studyProgress !== undefined && { studyProgress }),
+        },
+        select: {
+          grade: true,
+          selectedSubject: true,
+          selectedTextbookId: true,
+          studyProgress: true,
+        },
+      });
+    }
 
     // 获取教材详情 - 仅当教材存在时
     let selectedTextbook = null;
@@ -173,7 +230,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        selectedGrade: user.selectedGrade,
+        grade: user.grade,
         selectedSubject: user.selectedSubject,
         selectedTextbookId: user.selectedTextbookId,
         selectedTextbook,
