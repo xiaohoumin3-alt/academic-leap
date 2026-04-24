@@ -2,7 +2,13 @@
 
 ## 背景
 
-分析页面"练习状态"卡片显示数据混乱：
+分析页面有两处数据问题：
+
+### 问题1：测评成长轨迹"首次"分数混乱
+- 显示首次 80 分，但用户之前是 79 分，重新测试后变成 80
+- `initialAssessmentScore` 会被重新测评覆盖，导致"首次"不再是真正的首次
+
+### 问题2：练习状态数据混乱
 - 总题数 93：实际包含诊断测评的题目（不应计入）
 - 正确率 100：显示的是 `trainingAvgScore`（平均分），标签误导
 - 分钟 0：数据为空但显示不友好
@@ -25,9 +31,23 @@
 
 ### 前端层 (`components/AnalyzePage.tsx`)
 
-1. **"正确率"显示 (line 346-351)**
+1. **"首次"分数计算 (line 128-146)**
+   ```typescript
+   const firstScore = overview?.initialAssessmentScore ||
+     (diagnosticAttempts.length > 0 ? diagnosticAttempts[0].score : null);
+   ```
+   - 优先使用 `initialAssessmentScore`（用户表字段）
+   - 但这个字段在重新测评时会被覆盖
+   - `diagnosticAttempts[0]` 才是真正的首次测评记录
+
+2. **"正确率"显示 (line 346-351)**
    - 显示 `trainingAvgScore`（练习平均分）
    - 标签写的是"正确率"（应改为"平均分"或显示真正的正确率）
+
+### 诊断测评API (`app/api/assessment/start/route.ts`)
+
+- 完成测评后更新 `user.initialAssessmentScore`
+- 没有检查是否已存在，直接覆盖
 
 ## 修复目标
 
@@ -43,7 +63,50 @@
 
 ### 修复内容
 
-#### 1. API层修改
+#### 问题1修复：首次分数保持不变
+
+**方案A：诊断测评API修改**
+```typescript
+// app/api/assessment/start/route.ts (或完成测评的API)
+// 只在首次设置 initialAssessmentScore，后续不再更新
+await prisma.user.update({
+  where: { id: userId },
+  data: {
+    // 只有当 initialAssessmentScore 为空时才设置
+    initialAssessmentScore: user.initialAssessmentScore ?? score,
+    initialAssessmentCompleted: true,
+  },
+});
+```
+
+**方案B：前端直接使用 diagnosticAttempts[0]**
+```typescript
+// components/AnalyzePage.tsx (line 128-146)
+const getGrowthStoryData = (overview: OverviewData['overview']) => {
+  const diagnosticAttempts = overview?.diagnosticAttempts || [];
+
+  // 首次测评分数：直接使用第一次诊断测评记录
+  const firstScore = diagnosticAttempts.length > 0
+    ? diagnosticAttempts[0].score
+    : null;
+
+  // 最近测评分数
+  const latestScore = diagnosticAttempts.length > 0
+    ? diagnosticAttempts[diagnosticAttempts.length - 1].score
+    : null;
+
+  // 提升值
+  const growth = (firstScore !== null && latestScore !== null && firstScore !== latestScore)
+    ? latestScore - firstScore
+    : null;
+
+  return { firstScore, latestScore, growth };
+};
+```
+
+**推荐：方案B**（前端修改），不需要改动数据更新逻辑，更安全。
+
+#### 问题2修复：练习统计数据分离
 
 **新增字段：练习专用统计**
 ```typescript
@@ -198,6 +261,12 @@ const getPracticeStats = (overview: OverviewData['overview']) => {
 
 ## 验收标准
 
+### 问题1：首次分数
+- [ ] "首次"分数始终显示第一次诊断测评的分数
+- [ ] 重新测评后"首次"分数不变
+- [ ] "最近"分数显示最新一次诊断测评分数
+
+### 问题2：练习状态
 - [ ] 练习统计只包含 `mode='training'` 的数据
 - [ ] 诊断测评数据不计入练习统计
 - [ ] 标签与显示内容一致（"正确率"显示正确率，"平均分"显示平均分）
