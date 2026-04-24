@@ -4,49 +4,9 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MaterialIcon from '../../components/MaterialIcon';
 import { BottomNavigation } from '../../components/BottomNavigation';
-import LearningSettings from '@/components/LearningSettings';
 import LearningPathOverview from '@/components/LearningPathOverview';
 import WeeklyReportDialog from '@/components/WeeklyReportDialog';
-
-interface UserStats {
-  currentScore: number;
-  targetScore: number;
-  totalAttempts: number;
-  avgScore: number;
-  totalQuestions: number;
-  correctRate: number;
-  recentAttempts: Array<{
-    id: string;
-    mode: string;
-    score: number;
-    duration: number;
-    completedAt: string | null;
-  }>;
-  weakKnowledge: Array<{
-    knowledgePoint: string;
-    mastery: number;
-  }>;
-  streak: number;
-}
-
-interface AnalyticsData {
-  overview: {
-    totalAttempts: number;
-    completedAttempts: number;
-    averageScore: number;
-    lowestScore: number;
-    totalMinutes: number;
-    completionRate: number;
-    dataReliability: "high" | "medium" | "low";
-    volatilityRange: number;
-    initialAssessmentCompleted: boolean;
-    initialAssessmentScore: number;
-    totalQuestions: number;
-    correctRate: number;
-  };
-  dailyData: Array<{ date: string; count: number; avgScore: number }>;
-  topKnowledge: Array<{ knowledgePoint: string; mastery: number }>;
-}
+import LearningSettingsDialog from '@/components/LearningSettingsDialog';
 
 interface User {
   id: string;
@@ -58,6 +18,7 @@ interface UserSettings {
   grade?: number;
   selectedSubject?: string;
   selectedTextbookId?: string;
+  targetScore?: number;
 }
 
 export default function MePage() {
@@ -65,35 +26,20 @@ export default function MePage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
-  const [stats, setStats] = useState<UserStats | null>(null);
   const [showWeeklyReport, setShowWeeklyReport] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
-  // 获取用户信息和统计数据 - 使用 analytics API 保持数据一致性
+  // 获取用户信息和学习设置
   useEffect(() => {
     Promise.all([
       fetch('/api/auth/session').then(res => res.json()),
-      fetch('/api/analytics/overview').then(res => res.json()).catch(() => ({ overview: null })),
       fetch('/api/user/settings').then(res => res.json()).catch(() => ({ data: null }))
     ])
-      .then(([sessionData, analyticsData, settingsData]) => {
+      .then(([sessionData, settingsData]) => {
         if (sessionData && sessionData.user) {
           setUser(sessionData.user);
           if (settingsData.data) {
             setSettings(settingsData.data);
-          }
-          // 将 analytics 数据转换为 stats 格式
-          if (analyticsData.overview) {
-            setStats({
-              currentScore: analyticsData.overview.averageScore,
-              targetScore: 90,
-              totalAttempts: analyticsData.overview.totalAttempts,
-              avgScore: analyticsData.overview.averageScore,
-              totalQuestions: analyticsData.overview.totalQuestions ?? 0,
-              correctRate: analyticsData.overview.correctRate ?? 0,
-              recentAttempts: [],
-              weakKnowledge: [],
-              streak: 0,
-            });
           }
         } else {
           setUser(null);
@@ -103,8 +49,13 @@ export default function MePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const totalQuestions = stats?.totalQuestions ?? 0;
-  const accuracy = stats?.correctRate ?? 0;
+  const refreshSettings = async () => {
+    const settingsRes = await fetch('/api/user/settings');
+    const settingsData = await settingsRes.json();
+    if (settingsData.data) {
+      setSettings(settingsData.data);
+    }
+  };
 
   if (loading) {
     return (
@@ -160,7 +111,7 @@ export default function MePage() {
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 px-6 py-8">
-        {/* 用户信息卡片 */}
+        {/* 用户信息 & 设置卡片 */}
         <div className="bg-surface-container-low rounded-[2rem] p-6 mb-6">
           <div className="flex items-center gap-4 mb-6">
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
@@ -174,40 +125,32 @@ export default function MePage() {
             </div>
           </div>
 
-          {settings && (
-            <div className="flex items-center gap-2 text-sm text-on-surface-variant">
-              <MaterialIcon icon="school" style={{ fontSize: '18px' }} />
-              <span>{settings.grade}年级 · {settings.selectedSubject || '未设置'}</span>
+          {settings ? (
+            <div className="bg-surface rounded-2xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-on-surface-variant">
+                  <MaterialIcon icon="school" style={{ fontSize: '18px' }} />
+                  <span>
+                    {settings.grade}年级 · {settings.selectedSubject || '未设置'}
+                    {settings.selectedTextbookId && ' | 目标 ' + (settings.targetScore || 90) + '分'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors"
+                >
+                  修改
+                </button>
+              </div>
             </div>
+          ) : (
+            <button
+              onClick={() => setShowSettings(true)}
+              className="w-full py-3 rounded-xl bg-primary text-on-primary font-medium"
+            >
+              设置学习信息
+            </button>
           )}
-        </div>
-
-        {/* 学习统计 */}
-        <div className="bg-surface-container-low rounded-[2rem] p-6 mb-6">
-          <h3 className="font-bold text-on-surface mb-4 flex items-center gap-2">
-            <MaterialIcon icon="bar_chart" className="text-primary" style={{ fontSize: '20px' }} />
-            学习统计
-          </h3>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="text-center">
-              <p className="text-2xl font-display font-black text-primary">
-                {stats?.totalAttempts || 0}
-              </p>
-              <p className="text-xs text-on-surface-variant">练习次数</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-display font-black text-secondary">
-                {totalQuestions}
-              </p>
-              <p className="text-xs text-on-surface-variant">答题数</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-display font-black text-tertiary">
-                {accuracy}%
-              </p>
-              <p className="text-xs text-on-surface-variant">正确率</p>
-            </div>
-          </div>
         </div>
 
         {/* 学习路径概览 */}
@@ -244,18 +187,6 @@ export default function MePage() {
           </button>
         </div>
 
-        {/* 学习设置 */}
-        <div className="mt-6">
-          <LearningSettings onRefresh={async () => {
-            // 刷新学习设置
-            const settingsRes = await fetch('/api/user/settings');
-            const settingsData = await settingsRes.json();
-            if (settingsData.data) {
-              setSettings(settingsData.data);
-            }
-          }} />
-        </div>
-
         {/* 退出登录 */}
         <button
           onClick={() => {
@@ -281,6 +212,16 @@ export default function MePage() {
           // 重组后刷新页面
           router.refresh();
         }}
+      />
+
+      {/* 学习设置弹窗 */}
+      <LearningSettingsDialog
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        onSave={async () => {
+          await refreshSettings();
+        }}
+        settings={settings}
       />
     </div>
   );
