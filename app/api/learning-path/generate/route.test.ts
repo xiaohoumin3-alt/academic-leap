@@ -1,4 +1,5 @@
 import { POST } from './route';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { calculatePriority, generatePriorityReasons, getUserMastery, getDaysSincePractice, getRecentFailureRate } from '@/lib/learning-path/priority';
@@ -47,7 +48,7 @@ describe('POST /api/learning-path/generate', () => {
     it('should return 401 when user is not authenticated', async () => {
       (auth as jest.Mock).mockResolvedValue(null);
 
-      const request = new Request('http://localhost:3000/api/learning-path/generate', {
+      const request = new NextRequest('http://localhost:3000/api/learning-path/generate', {
         method: 'POST',
         body: JSON.stringify({}),
       });
@@ -71,7 +72,7 @@ describe('POST /api/learning-path/generate', () => {
       };
       (prisma.assessment.findUnique as jest.Mock).mockResolvedValue(mockAssessment);
 
-      const request = new Request('http://localhost:3000/api/learning-path/generate', {
+      const request = new NextRequest('http://localhost:3000/api/learning-path/generate', {
         method: 'POST',
         body: JSON.stringify({ assessmentId: 'assessment1' }),
       });
@@ -93,7 +94,7 @@ describe('POST /api/learning-path/generate', () => {
       };
       (prisma.assessment.findUnique as jest.Mock).mockResolvedValue(mockAssessment);
 
-      const request = new Request('http://localhost:3000/api/learning-path/generate', {
+      const request = new NextRequest('http://localhost:3000/api/learning-path/generate', {
         method: 'POST',
         body: JSON.stringify({ assessmentId: 'assessment1' }),
       });
@@ -152,7 +153,7 @@ describe('POST /api/learning-path/generate', () => {
       (prisma.learningPath.create as jest.Mock).mockResolvedValue(mockLearningPath);
       (prisma.learningPath.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
 
-      const request = new Request('http://localhost:3000/api/learning-path/generate', {
+      const request = new NextRequest('http://localhost:3000/api/learning-path/generate', {
         method: 'POST',
         body: JSON.stringify({ assessmentId: 'assessment1' }),
       });
@@ -216,7 +217,7 @@ describe('POST /api/learning-path/generate', () => {
       (prisma.learningPath.create as jest.Mock).mockResolvedValue(mockLearningPath);
       (prisma.learningPath.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
 
-      const request = new Request('http://localhost:3000/api/learning-path/generate', {
+      const request = new NextRequest('http://localhost:3000/api/learning-path/generate', {
         method: 'POST',
         body: JSON.stringify({ assessmentId: 'assessment1' }),
       });
@@ -274,7 +275,7 @@ describe('POST /api/learning-path/generate', () => {
       (prisma.learningPath.create as jest.Mock).mockResolvedValue(mockLearningPath);
       (prisma.learningPath.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
 
-      const request = new Request('http://localhost:3000/api/learning-path/generate', {
+      const request = new NextRequest('http://localhost:3000/api/learning-path/generate', {
         method: 'POST',
         body: JSON.stringify({
           assessmentId: 'assessment1',
@@ -348,7 +349,7 @@ describe('POST /api/learning-path/generate', () => {
       (prisma.learningPath.create as jest.Mock).mockResolvedValue(mockLearningPath);
       (prisma.learningPath.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
 
-      const request = new Request('http://localhost:3000/api/learning-path/generate', {
+      const request = new NextRequest('http://localhost:3000/api/learning-path/generate', {
         method: 'POST',
         body: JSON.stringify({ assessmentId: 'assessment1' }),
       });
@@ -406,7 +407,7 @@ describe('POST /api/learning-path/generate', () => {
       (prisma.learningPath.create as jest.Mock).mockResolvedValue(mockLearningPath);
       (prisma.learningPath.updateMany as jest.Mock).mockResolvedValue({ count: 2 });
 
-      const request = new Request('http://localhost:3000/api/learning-path/generate', {
+      const request = new NextRequest('http://localhost:3000/api/learning-path/generate', {
         method: 'POST',
         body: JSON.stringify({ assessmentId: 'assessment1' }),
       });
@@ -463,7 +464,7 @@ describe('POST /api/learning-path/generate', () => {
       (prisma.learningPath.create as jest.Mock).mockResolvedValue(mockLearningPath);
       (prisma.learningPath.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
 
-      const request = new Request('http://localhost:3000/api/learning-path/generate', {
+      const request = new NextRequest('http://localhost:3000/api/learning-path/generate', {
         method: 'POST',
         body: JSON.stringify({}),
       });
