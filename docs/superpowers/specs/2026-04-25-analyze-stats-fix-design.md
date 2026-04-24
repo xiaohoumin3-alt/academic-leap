@@ -106,6 +106,8 @@ const getGrowthStoryData = (overview: OverviewData['overview']) => {
 
 **推荐：方案B**（前端修改），不需要改动数据更新逻辑，更安全。
 
+**UI调整**：标题"测评成长轨迹" → "成长轨迹" (line 277)
+
 #### 问题2修复：练习统计数据分离
 
 **新增字段：练习专用统计**
@@ -265,6 +267,7 @@ const getPracticeStats = (overview: OverviewData['overview']) => {
 - [ ] "首次"分数始终显示第一次诊断测评的分数
 - [ ] 重新测评后"首次"分数不变
 - [ ] "最近"分数显示最新一次诊断测评分数
+- [ ] 标题改为"成长轨迹"
 
 ### 问题2：练习状态
 - [ ] 练习统计只包含 `mode='training'` 的数据
