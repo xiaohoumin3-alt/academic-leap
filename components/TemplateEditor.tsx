@@ -1,7 +1,92 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import MaterialIcon from './MaterialIcon';
+
+// 模板-知识点映射配置组件
+function TemplateKnowledgeMapping({ templateId }: { templateId: string }) {
+  const [currentKnowledge, setCurrentKnowledge] = useState<{ id: string; name: string } | null>(null);
+
+  useEffect(() => {
+    // 获取当前关联的知识点
+    fetch(`/api/admin/templates/${templateId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.success?.data?.knowledge) {
+          setCurrentKnowledge(data.data.knowledge);
+        }
+      });
+  }, [templateId]);
+
+  const handleExport = async () => {
+    const res = await fetch('/api/admin/templates/export');
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `template-knowledge-mapping-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/admin/templates/import', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert(`导入成功：更新 ${data.data.updated} 条`);
+        // 刷新关联的知识点
+        window.location.reload();
+      } else {
+        alert(`导入失败：${data.error}`);
+      }
+    } catch {
+      alert('导入失败');
+    }
+  };
+
+  return (
+    <div className="bg-surface-container-low rounded-2xl p-4 mb-4">
+      <h3 className="font-bold text-on-surface mb-3">关联配置</h3>
+
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-sm text-on-surface-variant">关联知识点:</span>
+        <span className="text-sm text-on-surface font-medium">
+          {currentKnowledge?.name || '未关联'}
+        </span>
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={handleExport}
+          className="px-3 py-1.5 text-sm bg-surface rounded-lg hover:bg-surface-container-high transition-colors"
+        >
+          导出映射
+        </button>
+
+        <label className="px-3 py-1.5 text-sm bg-surface rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer">
+          导入映射
+          <input
+            type="file"
+            accept=".csv"
+            onChange={handleImport}
+            className="hidden"
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
 
 interface TemplateEditorProps {
   template?: any;
@@ -109,6 +194,10 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ template, onSave, onCan
           JSON 编辑
         </button>
       </div>
+
+      {template?.id && (
+        <TemplateKnowledgeMapping templateId={template.id} />
+      )}
 
       {activeTab === 'form' ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
