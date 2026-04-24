@@ -14,7 +14,8 @@
     "db:studio": "prisma studio",
     "test": "playwright test",
     "test:headed": "playwright test --headed",
-    "test:report": "playwright show-report"
+    "test:report": "playwright show-report",
+    "test:unit": "jest"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -31,17 +32,22 @@
     "react-dom": "19.2.5",
     "recharts": "^3.8.1",
     "tailwind-merge": "^3.5.0",
-    "tesseract.js": "^7.0.0"
+    "tesseract.js": "^7.0.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@jest/globals": "^30.3.0",
     "@playwright/test": "^1.59.1",
+    "@types/jest": "^30.0.0",
     "@types/node": "^22.14.0",
     "@types/react": "19.2.14",
     "autoprefixer": "^10.4.21",
+    "jest": "^30.3.0",
     "node-fetch": "^3.3.2",
     "postcss": "^8.4.35",
     "prisma": "6.19.3",
     "tailwindcss": "^3.4.19",
+    "ts-jest": "^29.4.9",
     "typescript": "~5.8.2"
   }
 }
