@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { calculateProgress } from '@/lib/semester';
 
 // GET /api/user/progress - 获取用户进度计算
 export async function GET() {
@@ -16,10 +17,10 @@ export async function GET() {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
-        grade: true,
         selectedSubject: true,
         selectedTextbookId: true,
-        studyProgress: true,
+        semesterStart: true,
+        semesterEnd: true,
       },
     });
 
@@ -29,6 +30,12 @@ export async function GET() {
         { status: 400 }
       );
     }
+
+    // 计算基于时间的进度
+    const progressInfo = calculateProgress(
+      user.semesterStart ? new Date(user.semesterStart) : undefined,
+      user.semesterEnd ? new Date(user.semesterEnd) : undefined
+    );
 
     // 获取教材的所有章节
     const chapters = await prisma.chapter.findMany({
@@ -42,12 +49,12 @@ export async function GET() {
     });
 
     const totalChapters = chapters.length;
-    const progress = user.studyProgress ?? 0;
+    const progress = progressInfo.progress;
 
     // 根据进度计算当前章节
     const currentChapterIndex = Math.floor((progress / 100) * totalChapters);
     const currentChapter = chapters[Math.min(currentChapterIndex, totalChapters - 1)];
-    const completedChapters = Math.min(currentChapterIndex, totalChapters);
+    const completedChapters = Math.min(currentChapterIndex, totalChapters - 1);
 
     // 统计知识点数量
     const allKnowledgePoints = await prisma.knowledgePoint.count({
@@ -74,6 +81,7 @@ export async function GET() {
           chapterName: currentChapter.chapterName,
         } : null,
         progress,
+        progressMessage: progressInfo.message,
         completedChapters,
         totalChapters,
         enabledKnowledgeCount,
