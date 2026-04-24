@@ -67,7 +67,20 @@ export async function POST(req: NextRequest) {
     let affectedCount = 0;
 
     if (nodeType === 'chapter' && cascade) {
-      // 章节级联：获取章节下所有知识点
+      // 章节级联：先验证章节存在
+      const chapter = await prisma.chapter.findUnique({
+        where: { id: nodeId },
+        select: { id: true },
+      });
+
+      if (!chapter) {
+        return NextResponse.json(
+          { success: false, error: '章节不存在' },
+          { status: 404 }
+        );
+      }
+
+      // 获取章节下所有知识点
       const knowledgePoints = await prisma.knowledgePoint.findMany({
         where: {
           chapterId: nodeId,
@@ -77,37 +90,36 @@ export async function POST(req: NextRequest) {
         select: { id: true },
       });
 
-      // 批量操作知识点
-      if (enabled) {
-        // 批量创建（使用 upsert 处理重复）
-        for (const kp of knowledgePoints) {
-          await prisma.userEnabledKnowledge.upsert({
-            where: {
-              userId_nodeId: {
-                userId: session.user.id,
-                nodeId: kp.id,
-              },
-            },
-            create: {
-              userId: session.user.id,
-              nodeId: kp.id,
-              nodeType: 'point',
-            },
-            update: {},
-          });
-        }
-      } else {
-        // 批量删除
-        await prisma.userEnabledKnowledge.deleteMany({
-          where: {
-            userId: session.user.id,
-            nodeId: {
-              in: knowledgePoints.map((kp) => kp.id),
-            },
-          },
+      if (knowledgePoints.length === 0) {
+        return NextResponse.json({
+          success: true,
+          data: { affectedCount: 0 }
         });
       }
-      affectedCount = knowledgePoints.length;
+
+      const pointIds = knowledgePoints.map((kp) => kp.id);
+
+      if (enabled) {
+        // 批量创建：使用 createMany with skipDuplicates
+        await prisma.userEnabledKnowledge.createMany({
+          data: pointIds.map((id) => ({
+            userId: session.user.id,
+            nodeId: id,
+            nodeType: 'point' as const,
+          })),
+          skipDuplicates: true,
+        });
+        affectedCount = pointIds.length;
+      } else {
+        // 批量删除
+        const deleteResult = await prisma.userEnabledKnowledge.deleteMany({
+          where: {
+            userId: session.user.id,
+            nodeId: { in: pointIds },
+          },
+        });
+        affectedCount = deleteResult.count;
+      }
     } else {
       // 单节点操作
       if (enabled) {
@@ -125,15 +137,16 @@ export async function POST(req: NextRequest) {
           },
           update: {},
         });
+        affectedCount = 1;
       } else {
-        await prisma.userEnabledKnowledge.deleteMany({
+        const deleteResult = await prisma.userEnabledKnowledge.deleteMany({
           where: {
             userId: session.user.id,
             nodeId,
           },
         });
+        affectedCount = deleteResult.count;
       }
-      affectedCount = 1;
     }
 
     return NextResponse.json({
