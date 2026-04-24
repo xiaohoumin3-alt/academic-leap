@@ -39,7 +39,7 @@ export async function POST(
 
     await prisma.auditLog.create({
       data: {
-        userId: admin.userId,
+        userId: admin.id,
         action: 'deploy',
         entity: 'template',
         entityId: id,

@@ -12,7 +12,7 @@ export default defineConfig({
     ['json', { outputFile: 'test-results/results.json' }]
   ],
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:3001',
+    baseURL: process.env.BASE_URL || 'http://localhost:3000',
     storageState: process.env.STORAGE_STATE || 'e2e/storage-state.json',
     actionTimeout: 60000,
     navigationTimeout: 60000,

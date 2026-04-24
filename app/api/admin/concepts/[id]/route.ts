@@ -39,7 +39,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     });
     await prisma.auditLog.create({
       data: {
-        userId: admin.userId,
+        userId: admin.id,
         action: 'update',
         entity: 'concept',
         entityId: concept.id,
@@ -74,7 +74,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     await prisma.knowledgeConcept.delete({ where: { id } });
     await prisma.auditLog.create({
       data: {
-        userId: admin.userId,
+        userId: admin.id,
         action: 'delete',
         entity: 'concept',
         entityId: id,

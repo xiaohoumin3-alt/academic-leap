@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     }
 
     const existingAdmin = await prisma.admin.findUnique({
-      where: { userId: admin.userId }
+      where: { userId: admin.id }
     });
 
     if (!existingAdmin) {
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
 
     await prisma.auditLog.create({
       data: {
-        userId: admin.userId,
+        userId: admin.id,
         action: 'create',
         entity: 'template',
         entityId: template.id,

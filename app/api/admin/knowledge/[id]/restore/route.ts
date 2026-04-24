@@ -23,7 +23,7 @@ export async function POST(
 
     await prisma.auditLog.create({
       data: {
-        userId: admin.userId,
+        userId: admin.id,
         action: 'restore',
         entity: 'knowledge',
         entityId: id,

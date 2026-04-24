@@ -56,7 +56,7 @@ export async function POST(
 
     await prisma.auditLog.create({
       data: {
-        userId: admin.userId,
+        userId: admin.id,
         action: 'rollback',
         entity: 'template',
         entityId: id,

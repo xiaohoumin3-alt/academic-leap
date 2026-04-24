@@ -114,6 +114,31 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [difficultyLevel]);
 
+  // 获取用户已启用的知识点名称列表
+  const fetchEnabledKnowledgePoints = async (): Promise<Set<string>> => {
+    try {
+      const res = await fetch('/api/user/knowledge-tree');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.data?.chapters) {
+          const enabledNames = new Set<string>();
+          for (const chapter of data.data.chapters) {
+            for (const kp of chapter.knowledgePoints) {
+              if (kp.enabled) {
+                enabledNames.add(kp.name);
+              }
+            }
+          }
+          console.log('已启用的知识点:', Array.from(enabledNames));
+          return enabledNames;
+        }
+      }
+    } catch (e) {
+      console.warn('获取已启用知识点失败:', e);
+    }
+    return new Set<string>();
+  };
+
   // 生成本地题目 - 根据错题模式调整
   const generateLocalQuestion = (knowledgePoint = '一元一次方程'): Question => {
     const currentDifficulty = difficultyLevelRef.current;
@@ -177,25 +202,44 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
     let knowledgePoint = '一元一次方程'; // 默认值
 
     try {
-      const weakRes = await fetch('/api/analytics/knowledge');
+      // 并行获取薄弱知识点和已启用知识点
+      const [weakRes, enabledSet] = await Promise.all([
+        fetch('/api/analytics/knowledge'),
+        fetchEnabledKnowledgePoints(),
+      ]);
+
+      let allKnowledge: any[] = [];
       if (weakRes.ok) {
         const weakData = await weakRes.json();
-        const allKnowledge = weakData.knowledge || [];
+        allKnowledge = weakData.knowledge || [];
+      }
 
-        // 优先选择薄弱知识点（mastery < 50），如果没有薄弱知识点则从所有中选择
-        const weakPoints = allKnowledge.filter((k: any) => k.mastery < 50);
-        const poolToSelect = weakPoints.length > 0 ? weakPoints : allKnowledge;
+      // 过滤出已启用的知识点
+      let enabledKnowledge = allKnowledge;
+      if (enabledSet.size > 0) {
+        enabledKnowledge = allKnowledge.filter((k: any) => {
+          const kpName = typeof k === 'string' ? k : k.knowledgePoint;
+          return enabledSet.has(kpName);
+        });
+        console.log(`已启用知识点过滤: ${allKnowledge.length} -> ${enabledKnowledge.length}`);
+      }
 
-        if (poolToSelect.length > 0) {
-          const index = Math.floor(Math.random() * poolToSelect.length);
-          const selected = poolToSelect[index];
-          knowledgePoint = typeof selected === 'string'
-            ? selected
-            : selected.knowledgePoint || knowledgePoint;
-          console.log('可用知识点:', allKnowledge.map((k: any) => typeof k === 'string' ? k : k.knowledgePoint));
-          console.log('选择池:', poolToSelect.map((k: any) => typeof k === 'string' ? k : k.knowledgePoint));
-          console.log('使用知识点:', knowledgePoint);
-        }
+      // 优先选择薄弱知识点（mastery < 50），如果没有薄弱知识点则从已启用的所有中选择
+      const weakPoints = enabledKnowledge.filter((k: any) => k.mastery < 50);
+      const poolToSelect = weakPoints.length > 0 ? weakPoints : enabledKnowledge;
+
+      if (poolToSelect.length > 0) {
+        const index = Math.floor(Math.random() * poolToSelect.length);
+        const selected = poolToSelect[index];
+        knowledgePoint = typeof selected === 'string'
+          ? selected
+          : selected.knowledgePoint || knowledgePoint;
+        console.log('可用知识点:', allKnowledge.map((k: any) => typeof k === 'string' ? k : k.knowledgePoint));
+        console.log('已启用知识点:', enabledKnowledge.map((k: any) => typeof k === 'string' ? k : k.knowledgePoint));
+        console.log('选择池:', poolToSelect.map((k: any) => typeof k === 'string' ? k : k.knowledgePoint));
+        console.log('使用知识点:', knowledgePoint);
+      } else {
+        console.warn('没有已启用的知识点，使用默认值');
       }
     } catch (e) {
       console.warn('获取薄弱知识点失败，使用默认:', e);

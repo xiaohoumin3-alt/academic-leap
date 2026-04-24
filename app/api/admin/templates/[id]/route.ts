@@ -88,7 +88,7 @@ export async function PUT(
 
     await prisma.auditLog.create({
       data: {
-        userId: admin.userId,
+        userId: admin.id,
         action: 'update',
         entity: 'template',
         entityId: id,
@@ -145,7 +145,7 @@ export async function DELETE(
 
     await prisma.auditLog.create({
       data: {
-        userId: admin.userId,
+        userId: admin.id,
         action: 'delete',
         entity: 'template',
         entityId: id,
