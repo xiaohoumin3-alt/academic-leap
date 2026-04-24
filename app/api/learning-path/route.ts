@@ -1,7 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { getUserMastery } from '@/lib/learning-path/priority';
 
 /**
  * GET /api/learning-path
@@ -83,7 +82,47 @@ export async function GET(): Promise<NextResponse> {
 
     const kpMap = new Map(knowledgePoints.map((kp) => [kp.id, kp.name]));
 
-    // 5. Build roadmap with mastery and status
+    // 5. Batch fetch all userKnowledge records to avoid N+1 query
+    const allUserKnowledge = await prisma.userKnowledge.findMany({
+      where: { userId },
+      select: {
+        knowledgePoint: true,
+        mastery: true,
+      },
+    });
+
+    const masteryMap = new Map(
+      allUserKnowledge.map((uk) => [uk.knowledgePoint, uk.mastery])
+    );
+
+    // Fallback: Fetch latest assessment once for any missing mastery data
+    const latestAssessment = await prisma.assessment.findFirst({
+      where: { userId },
+      orderBy: { completedAt: 'desc' },
+      take: 1,
+      select: {
+        knowledgeData: true,
+      },
+    });
+
+    const assessmentMasteryMap = new Map<string, number>();
+    if (latestAssessment) {
+      try {
+        const knowledgeData = JSON.parse(latestAssessment.knowledgeData as string);
+        for (const [kpId, data] of Object.entries(knowledgeData)) {
+          if (data && typeof data === 'object' && 'mastery' in data) {
+            assessmentMasteryMap.set(kpId, (data as { mastery: number }).mastery);
+          }
+        }
+      } catch (error) {
+        console.warn(
+          `[learning-path] Failed to parse assessment knowledgeData for user ${userId}:`,
+          error
+        );
+      }
+    }
+
+    // 6. Build roadmap with mastery and status
     const roadmap: Array<{
       nodeId: string;
       name: string;
@@ -96,7 +135,8 @@ export async function GET(): Promise<NextResponse> {
 
     for (let i = 0; i < knowledgeNodes.length; i++) {
       const node = knowledgeNodes[i];
-      const mastery = await getUserMastery(userId, node.nodeId);
+      // Use cached mastery data instead of querying in loop
+      let mastery = masteryMap.get(node.nodeId) ?? assessmentMasteryMap.get(node.nodeId) ?? 0;
       const name = kpMap.get(node.nodeId) || '未知知识点';
 
       let status: 'completed' | 'current' | 'pending';

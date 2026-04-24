@@ -2,7 +2,6 @@ import { GET } from './route';
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
-import { getUserMastery } from '@/lib/learning-path/priority';
 
 // Mock dependencies
 jest.mock('@/lib/prisma', () => ({
@@ -19,15 +18,14 @@ jest.mock('@/lib/prisma', () => ({
     attempt: {
       findMany: jest.fn(),
     },
+    assessment: {
+      findFirst: jest.fn(),
+    },
   },
 }));
 
 jest.mock('@/lib/auth', () => ({
   auth: jest.fn(),
-}));
-
-jest.mock('@/lib/learning-path/priority', () => ({
-  getUserMastery: jest.fn(),
 }));
 
 describe('GET /api/learning-path', () => {
@@ -83,11 +81,19 @@ describe('GET /api/learning-path', () => {
       ];
       (prisma.knowledgePoint.findMany as jest.Mock).mockResolvedValue(mockKnowledgePoints);
 
-      (getUserMastery as jest.Mock)
-        .mockResolvedValueOnce(0.9) // kp1 - completed
-        .mockResolvedValueOnce(0.5); // kp2 - pending
+      // Mock userKnowledge batch data
+      (prisma.userKnowledge.findMany as jest.Mock).mockImplementation((args: any) => {
+        // If no lastPractice filter, return mastery data
+        if (!args?.where?.lastPractice) {
+          return Promise.resolve([
+            { knowledgePoint: 'kp1', mastery: 0.9 },
+            { knowledgePoint: 'kp2', mastery: 0.5 },
+          ]);
+        }
+        return Promise.resolve([]);
+      });
 
-      (prisma.userKnowledge.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.assessment.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.attempt.findMany as jest.Mock).mockResolvedValue([]);
 
       const response = await GET();
@@ -134,12 +140,20 @@ describe('GET /api/learning-path', () => {
       ];
       (prisma.knowledgePoint.findMany as jest.Mock).mockResolvedValue(mockKnowledgePoints);
 
-      (getUserMastery as jest.Mock)
-        .mockResolvedValueOnce(0.85) // kp1 - completed (>= 0.8)
-        .mockResolvedValueOnce(0.5)  // kp2 - current (first non-completed)
-        .mockResolvedValueOnce(0.3); // kp3 - pending
+      // Mock userKnowledge batch data
+      (prisma.userKnowledge.findMany as jest.Mock).mockImplementation((args: any) => {
+        // If no lastPractice filter, return mastery data
+        if (!args?.where?.lastPractice) {
+          return Promise.resolve([
+            { knowledgePoint: 'kp1', mastery: 0.85 },
+            { knowledgePoint: 'kp2', mastery: 0.5 },
+            { knowledgePoint: 'kp3', mastery: 0.3 },
+          ]);
+        }
+        return Promise.resolve([]);
+      });
 
-      (prisma.userKnowledge.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.assessment.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.attempt.findMany as jest.Mock).mockResolvedValue([]);
 
       const response = await GET();
@@ -174,8 +188,18 @@ describe('GET /api/learning-path', () => {
       ];
       (prisma.knowledgePoint.findMany as jest.Mock).mockResolvedValue(mockKnowledgePoints);
 
-      (getUserMastery as jest.Mock).mockResolvedValue(0.5);
-      (prisma.userKnowledge.findMany as jest.Mock).mockResolvedValue([]);
+      // Mock userKnowledge batch data
+      (prisma.userKnowledge.findMany as jest.Mock).mockImplementation((args: any) => {
+        // If no lastPractice filter, return mastery data
+        if (!args?.where?.lastPractice) {
+          return Promise.resolve([
+            { knowledgePoint: 'kp1', mastery: 0.5 },
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+
+      (prisma.assessment.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.attempt.findMany as jest.Mock).mockResolvedValue([]);
 
       const response = await GET();
@@ -207,7 +231,18 @@ describe('GET /api/learning-path', () => {
       const mockKnowledgePoints = [{ id: 'kp1', name: '知识点1' }];
       (prisma.knowledgePoint.findMany as jest.Mock).mockResolvedValue(mockKnowledgePoints);
 
-      (getUserMastery as jest.Mock).mockResolvedValue(0.5);
+      // Mock userKnowledge batch data
+      (prisma.userKnowledge.findMany as jest.Mock).mockImplementation((args: any) => {
+        // If no lastPractice filter, return mastery data
+        if (!args?.where?.lastPractice) {
+          return Promise.resolve([
+            { knowledgePoint: 'kp1', mastery: 0.5 },
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+
+      (prisma.assessment.findFirst as jest.Mock).mockResolvedValue(null);
 
       // Mock attempts from last 7 days - only return 2 recent attempts
       (prisma.attempt.findMany as jest.Mock).mockImplementation((args: any) => {
@@ -220,7 +255,6 @@ describe('GET /api/learning-path', () => {
         }
         return Promise.resolve([]);
       });
-      (prisma.userKnowledge.findMany as jest.Mock).mockResolvedValue([]);
 
       const response = await GET();
       const data = await response.json();
@@ -248,8 +282,6 @@ describe('GET /api/learning-path', () => {
       const mockKnowledgePoints = [{ id: 'kp1', name: '知识点1' }];
       (prisma.knowledgePoint.findMany as jest.Mock).mockResolvedValue(mockKnowledgePoints);
 
-      (getUserMastery as jest.Mock).mockResolvedValue(0.5);
-
       const now = new Date();
       const threeDaysAgo = new Date(now);
       threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
@@ -257,8 +289,14 @@ describe('GET /api/learning-path', () => {
       const tenDaysAgo = new Date(now);
       tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
 
-      // Mock userKnowledge - only return 2 mastered from last 7 days
+      // Mock userKnowledge - return different data based on query
       (prisma.userKnowledge.findMany as jest.Mock).mockImplementation((args: any) => {
+        // If no lastPractice filter, return mastery data
+        if (!args?.where?.lastPractice) {
+          return Promise.resolve([
+            { knowledgePoint: 'kp1', mastery: 0.5 },
+          ]);
+        }
         // If the query is filtering by lastPractice >= 7 days ago, only return recent ones
         if (args?.where?.lastPractice?.gte) {
           return Promise.resolve([
@@ -269,6 +307,8 @@ describe('GET /api/learning-path', () => {
         }
         return Promise.resolve([]);
       });
+
+      (prisma.assessment.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.attempt.findMany as jest.Mock).mockResolvedValue([]);
 
       const response = await GET();
@@ -303,12 +343,20 @@ describe('GET /api/learning-path', () => {
       ];
       (prisma.knowledgePoint.findMany as jest.Mock).mockResolvedValue(mockKnowledgePoints);
 
-      (getUserMastery as jest.Mock)
-        .mockResolvedValueOnce(0.85) // kp1 - completed
-        .mockResolvedValueOnce(0.5)  // kp2 - pending (weak)
-        .mockResolvedValueOnce(0.3); // kp3 - pending (weak)
+      // Mock userKnowledge batch data
+      (prisma.userKnowledge.findMany as jest.Mock).mockImplementation((args: any) => {
+        // If no lastPractice filter, return mastery data
+        if (!args?.where?.lastPractice) {
+          return Promise.resolve([
+            { knowledgePoint: 'kp1', mastery: 0.85 },
+            { knowledgePoint: 'kp2', mastery: 0.5 },
+            { knowledgePoint: 'kp3', mastery: 0.3 },
+          ]);
+        }
+        return Promise.resolve([]);
+      });
 
-      (prisma.userKnowledge.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.assessment.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.attempt.findMany as jest.Mock).mockResolvedValue([]);
 
       const response = await GET();
@@ -339,8 +387,18 @@ describe('GET /api/learning-path', () => {
       const mockKnowledgePoints = [{ id: 'kp1', name: '知识点1' }];
       (prisma.knowledgePoint.findMany as jest.Mock).mockResolvedValue(mockKnowledgePoints);
 
-      (getUserMastery as jest.Mock).mockResolvedValue(0.5);
-      (prisma.userKnowledge.findMany as jest.Mock).mockResolvedValue([]);
+      // Mock userKnowledge batch data
+      (prisma.userKnowledge.findMany as jest.Mock).mockImplementation((args: any) => {
+        // If no lastPractice filter, return mastery data
+        if (!args?.where?.lastPractice) {
+          return Promise.resolve([
+            { knowledgePoint: 'kp1', mastery: 0.5 },
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+
+      (prisma.assessment.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.attempt.findMany as jest.Mock).mockResolvedValue([]);
 
       const response = await GET();
