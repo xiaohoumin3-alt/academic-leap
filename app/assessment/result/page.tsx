@@ -58,9 +58,16 @@ const AssessmentResultContent: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [result, setResult] = useState<AssessmentResultData | null>(null);
   const [fetchingAnalysis, setFetchingAnalysis] = useState(false);
+  const [generatingPath, setGeneratingPath] = useState(false);
+  const [pathGenerated, setPathGenerated] = useState(false);
   const isRetry = searchParams.get('retry') === 'true';
   const initialDifficulty = parseInt(searchParams.get('difficulty') || '3', 10);
   const attemptId = searchParams.get('attemptId');
+
+  // 判断是否适合生成学习路径 (60-89分)
+  const canGeneratePath = result && result.score >= 60 && result.score < 90 && result.guidance;
+  // 判断是否需要重新测评
+  const needsRetyAssessment = result && (result.score < 60 || result.score >= 90);
 
   useEffect(() => {
     const loadAssessmentResult = async () => {
@@ -111,6 +118,26 @@ const AssessmentResultContent: React.FC = () => {
 
     loadAssessmentResult();
   }, [searchParams, router, attemptId]);
+
+  // 生成学习路径
+  const handleGenerateLearningPath = async () => {
+    setGeneratingPath(true);
+    try {
+      const res = await fetch('/api/learning-path/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assessmentId: attemptId || undefined })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPathGenerated(true);
+      }
+    } catch (error) {
+      console.error('生成学习路径失败:', error);
+    } finally {
+      setGeneratingPath(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -257,6 +284,71 @@ const AssessmentResultContent: React.FC = () => {
                 </span>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* 学习路径生成引导 (60-89分) */}
+        {canGeneratePath && !pathGenerated && (
+          <div className="bg-surface-container-low rounded-2xl p-4 mb-4">
+            <h3 className="font-bold text-on-surface mb-3 flex items-center gap-2">
+              <MaterialIcon icon="route" className="text-primary" style={{ fontSize: '20px' }} />
+              生成学习路径
+            </h3>
+            <p className="text-sm text-on-surface-variant mb-4">
+              根据你的测评结果，系统可以为你生成一个个性化的学习路径，按优先级引导你逐一掌握薄弱知识点。
+            </p>
+            <button
+              onClick={handleGenerateLearningPath}
+              disabled={generatingPath}
+              className="w-full py-3 rounded-xl font-medium bg-primary text-on-primary disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+            >
+              {generatingPath ? (
+                <>
+                  <div className="w-5 h-5 rounded-full border-2 border-on-primary border-t-transparent animate-spin" />
+                  生成中...
+                </>
+              ) : (
+                <>
+                  <MaterialIcon icon="auto_awesome" style={{ fontSize: '20px' }} />
+                  一键生成学习路径
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* 学习路径生成成功 */}
+        {canGeneratePath && pathGenerated && (
+          <div className="bg-success/10 rounded-2xl p-4 mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <MaterialIcon icon="check_circle" className="text-success" style={{ fontSize: '20px' }} />
+              <h3 className="font-bold text-on-surface">学习路径已生成</h3>
+            </div>
+            <p className="text-sm text-on-surface-variant mb-3">
+              系统已根据你的测评结果生成了个性化学习路径。
+            </p>
+            <button
+              onClick={() => router.push('/me')}
+              className="w-full py-3 rounded-xl font-medium bg-success text-on-success transition-colors flex items-center justify-center gap-2"
+            >
+              <MaterialIcon icon="route" style={{ fontSize: '20px' }} />
+              查看学习路径
+            </button>
+          </div>
+        )}
+
+        {/* 需要重新测评提示 (<60 或 >=90分) */}
+        {needsRetyAssessment && (
+          <div className="bg-warning/10 rounded-2xl p-4 mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <MaterialIcon icon="info" className="text-warning" style={{ fontSize: '20px' }} />
+              <h3 className="font-bold text-on-surface">测评结果说明</h3>
+            </div>
+            <p className="text-sm text-on-surface-variant">
+              {result.score < 60
+                ? '当前测评难度偏高，建议降低难度后重新测评，以获得更准确的学习路径推荐。'
+                : '当前测评难度偏低，建议提高难度后重新测评，挑战更高水平！'}
+            </p>
           </div>
         )}
 
