@@ -108,9 +108,9 @@ export function formatDateForInput(date: Date): string {
 /**
  * 解析日期输入
  */
-export function parseDateInput(input: string): Date | null {
+export function parseDateInput(input: string): Date | undefined {
   const match = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return null;
+  if (!match) return undefined;
 
   const [, year, month, day] = match;
   return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
