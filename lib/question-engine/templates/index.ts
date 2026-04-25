@@ -30,13 +30,13 @@ export const TEMPLATE_REGISTRY: Record<string, QuestionTemplate> = {
 /**
  * 根据知识点获取可用的模板KEY列表
  * 支持ID或名称查询
- * 查询优先级：直接ID匹配 > 名称匹配 > 概念匹配
+ * 查询优先级：概念ID匹配 > 概念名称匹配 > 知识点概念查找
  * 返回 TEMPLATE_REGISTRY 的 key（如 quadratic_vertex），而不是数据库 id
  */
 export async function getTemplateIdsByKnowledgePointId(
   knowledgePointIdOrName: string
 ): Promise<string[]> {
-  // 1. 直接匹配：Template.knowledgeId == knowledgePointId（使用 templateKey）
+  // 1. 直接匹配：Template.knowledgeId (conceptId) == input（使用 templateKey）
   const directTemplates = await prisma.template.findMany({
     where: {
       knowledgeId: knowledgePointIdOrName,
@@ -50,7 +50,7 @@ export async function getTemplateIdsByKnowledgePointId(
     return directTemplates.map(t => t.templateKey!).filter(Boolean);
   }
 
-  // 2. 名称匹配：通过知识点名称查找对应的模板（使用 templateKey）
+  // 2. 名称匹配：通过概念名称查找对应的模板（使用 templateKey）
   const nameTemplates = await prisma.template.findMany({
     where: {
       status: 'production',
@@ -66,7 +66,7 @@ export async function getTemplateIdsByKnowledgePointId(
     return nameTemplates.map(t => t.templateKey!).filter(Boolean);
   }
 
-  // 3. 概念匹配：获取该知识点的 conceptId，查找同学期的模板
+  // 3. 知识点概念查找：如果是知识点ID或名称，找到其对应的概念，然后查找模板
   const kp = await prisma.knowledgePoint.findFirst({
     where: {
       OR: [
@@ -82,9 +82,7 @@ export async function getTemplateIdsByKnowledgePointId(
       where: {
         status: 'production',
         templateKey: { not: null },
-        knowledge: {
-          conceptId: kp.conceptId
-        }
+        knowledgeId: kp.conceptId
       },
       select: { templateKey: true }
     });

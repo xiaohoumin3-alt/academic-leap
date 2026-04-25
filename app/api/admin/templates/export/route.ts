@@ -13,11 +13,7 @@ export async function GET() {
         status: { not: 'draft' }
       },
       include: {
-        knowledge: {
-          include: {
-            concept: true
-          }
-        }
+        knowledge: true
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -27,8 +23,7 @@ export async function GET() {
       'template_id',
       'template_name',
       'template_type',
-      'knowledge_point_id',
-      'knowledge_point_name',
+      'concept_id',
       'concept_name'
     ];
 
@@ -39,8 +34,7 @@ export async function GET() {
       escapeCSV(t.name || ''),
       escapeCSV(t.type),
       escapeCSV(t.knowledgeId || ''),
-      escapeCSV(t.knowledge?.name || ''),
-      escapeCSV(t.knowledge?.concept?.name || '')
+      escapeCSV(t.knowledge?.name || '')
     ]);
 
     // 构建 CSV

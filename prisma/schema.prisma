@@ -210,6 +210,7 @@ model KnowledgeConcept {
   updatedAt   DateTime  @updatedAt
 
   instances   KnowledgePoint[]
+  templates   Template[]        @relation("TemplateConcept")
 }
 
 // 教材版本
@@ -278,7 +279,6 @@ model KnowledgePoint {
   chapter     Chapter              @relation(fields: [chapterId], references: [id])
   concept     KnowledgeConcept     @relation(fields: [conceptId], references: [id])
   histories   KnowledgePointHistory[]
-  templates   Template[]
   userKnowledge UserKnowledge[]     // 反向关系
 }
 
@@ -314,7 +314,7 @@ model Template {
   publishedAt DateTime?
 
   creator     Admin     @relation(fields: [createdBy], references: [id])
-  knowledge   KnowledgePoint? @relation(fields: [knowledgeId], references: [id])
+  knowledge   KnowledgeConcept? @relation("TemplateConcept", fields: [knowledgeId], references: [id])
   qualities   QuestionQuality[]
   versions    TemplateVersion[]
 }
