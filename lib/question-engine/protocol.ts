@@ -140,6 +140,10 @@ export type ParamsSchema = Record<string, ParamConstraint>;
  */
 export interface QuestionTemplate {
   id: string;
+  /**
+   * 模板内部引用标识，对应 TEMPLATE_REGISTRY 的 key
+   * 注意：这是内部引用字符串（如 'quadratic_identify'），不是数据库外键
+   */
   knowledgePoint: string;
 
   // 1. 参数生成器（难度控制的关键）
