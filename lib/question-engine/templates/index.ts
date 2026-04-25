@@ -9,6 +9,7 @@ import { QuadraticVertexTemplate, QuadraticEvaluateTemplate } from './quadratic-
 import { PythagorasTemplate } from './pythagoras';
 import { ProbabilityTemplate, LinearEquationTemplate } from './probability';
 import { QuadraticIdentifyTemplate } from './chapter19/quadratic_identify';
+import { QuadraticDirectRootTemplate } from './chapter19/quadratic_direct_root';
 
 /**
  * 模板注册表
@@ -29,6 +30,7 @@ export const TEMPLATE_REGISTRY: Record<string, QuestionTemplate> = {
 
   // 一元二次方程（第19章）
   quadratic_identify: QuadraticIdentifyTemplate,
+  quadratic_direct_root: QuadraticDirectRootTemplate,
 };
 
 /**

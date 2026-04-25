@@ -184,6 +184,35 @@ export const DIFFICULTY_CONFIG: Record<string, Record<number, DifficultyLevelCon
       c: { type: 'int', min: -10, max: 10 },
     },
   },
+
+  // 一元二次方程直接开平方法（第19章）
+  quadratic_direct_root: {
+    1: {
+      a: { type: 'int', min: 1, max: 9 },           // 完全平方数：1, 4, 9
+      m: { type: 'int', min: 1, max: 1 },           // 仅 x² = a 形式
+      n: { type: 'int', min: 0, max: 0 },
+    },
+    2: {
+      a: { type: 'int', min: 1, max: 16 },          // 完全平方数：1, 4, 9, 16
+      m: { type: 'int', min: 1, max: 1 },           // 仅 x² = a 形式
+      n: { type: 'int', min: 0, max: 0 },
+    },
+    3: {
+      a: { type: 'int', min: 1, max: 25 },          // 完全平方数：1, 4, 9, 16, 25
+      m: { type: 'int', min: 1, max: 2 },           // 可能出现 (mx+n)² = a
+      n: { type: 'int', min: -4, max: 4 },
+    },
+    4: {
+      a: { type: 'int', min: 1, max: 36 },          // 完全平方数：1, 4, 9, 16, 25, 36
+      m: { type: 'int', min: 1, max: 3 },
+      n: { type: 'int', min: -6, max: 6 },
+    },
+    5: {
+      a: { type: 'int', min: 1, max: 49 },          // 完全平方数：1, 4, 9, 16, 25, 36, 49
+      m: { type: 'int', min: 1, max: 4 },
+      n: { type: 'int', min: -8, max: 8 },
+    },
+  },
 };
 
 /**
