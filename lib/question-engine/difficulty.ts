@@ -793,6 +793,44 @@ export const DIFFICULTY_CONFIG: Record<string, Record<number, DifficultyLevelCon
       height: { type: 'int', min: 10, max: 30 },
     },
   },
+
+  // 正方形性质计算（第18章）
+  square_property: {
+    1: {
+      side: { type: 'int', min: 2, max: 5 },        // 边长：2-5，简单
+    },
+    2: {
+      side: { type: 'int', min: 3, max: 8 },         // 边长：3-8
+    },
+    3: {
+      side: { type: 'int', min: 4, max: 12 },        // 边长：4-12
+    },
+    4: {
+      side: { type: 'int', min: 5, max: 15 },        // 边长：5-15
+    },
+    5: {
+      side: { type: 'int', min: 6, max: 20 },        // 边长：6-20
+    },
+  },
+
+  // 正方形判定（第18章）
+  square_verify: {
+    1: {
+      side: { type: 'int', min: 2, max: 5 },        // 边长：2-5
+    },
+    2: {
+      side: { type: 'int', min: 3, max: 8 },         // 边长：3-8
+    },
+    3: {
+      side: { type: 'int', min: 4, max: 12 },        // 边长：4-12
+    },
+    4: {
+      side: { type: 'int', min: 5, max: 15 },        // 边长：5-15
+    },
+    5: {
+      side: { type: 'int', min: 6, max: 20 },        // 边长：6-20
+    },
+  },
 };
 
 /**

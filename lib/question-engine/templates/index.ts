@@ -29,6 +29,8 @@ import { RhombusVerifyTemplate } from './chapter18/rhombus_verify';
 import { ParallelogramVerifyTemplate } from './chapter18/parallelogram_verify';
 import { RectanglePropertyTemplate } from './chapter18/rectangle_property';
 import { RectangleVerifyTemplate } from './chapter18/rectangle_verify';
+import { SquarePropertyTemplate } from './chapter18/square_property';
+import { SquareVerifyTemplate } from './chapter18/square_verify';
 
 /**
  * 模板注册表
@@ -77,6 +79,10 @@ export const TEMPLATE_REGISTRY: Record<string, QuestionTemplate> = {
   parallelogram_verify: ParallelogramVerifyTemplate,
   rectangle_property: RectanglePropertyTemplate,
   rectangle_verify: RectangleVerifyTemplate,
+
+  // 正方形（第18章）
+  square_property: SquarePropertyTemplate,
+  square_verify: SquareVerifyTemplate,
 };
 
 /**
