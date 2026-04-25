@@ -461,6 +461,93 @@ export const DIFFICULTY_CONFIG: Record<string, Record<number, DifficultyLevelCon
     },
   },
 
+  // 二次根式定义域（第16章）
+  sqrt_concept: {
+    1: {
+      a: { type: 'int', min: -5, max: 10 },         // 包含负数和无意义的数
+    },
+    2: {
+      a: { type: 'int', min: -10, max: 15 },
+    },
+    3: {
+      a: { type: 'int', min: -15, max: 20 },
+    },
+    4: {
+      a: { type: 'int', min: -20, max: 25 },
+    },
+    5: {
+      a: { type: 'int', min: -25, max: 30 },
+    },
+  },
+
+  // 最简二次根式（第16章）
+  sqrt_simplify: {
+    1: {
+      radicand: { type: 'int', min: 4, max: 36 },    // 小的合数，有完全平方因子
+      perfectSquare: { type: 'int', min: 1, max: 9 },
+      remaining: { type: 'int', min: 2, max: 10 },
+    },
+    2: {
+      radicand: { type: 'int', min: 4, max: 72 },
+      perfectSquare: { type: 'int', min: 1, max: 16 },
+      remaining: { type: 'int', min: 2, max: 15 },
+    },
+    3: {
+      radicand: { type: 'int', min: 8, max: 144 },
+      perfectSquare: { type: 'int', min: 1, max: 25 },
+      remaining: { type: 'int', min: 2, max: 20 },
+    },
+    4: {
+      radicand: { type: 'int', min: 12, max: 200 },
+      perfectSquare: { type: 'int', min: 1, max: 36 },
+      remaining: { type: 'int', min: 2, max: 25 },
+    },
+    5: {
+      radicand: { type: 'int', min: 16, max: 300 },
+      perfectSquare: { type: 'int', min: 1, max: 49 },
+      remaining: { type: 'int', min: 2, max: 30 },
+    },
+  },
+
+  // 二次根式性质 √(a²)=|a|（第16章）
+  sqrt_property: {
+    1: {
+      a: { type: 'int', min: 0, max: 10 },           // 非负整数，简单
+      varValue: { type: 'int', min: 0, max: 10 },
+      exprA: { type: 'int', min: 0, max: 5 },
+      exprB: { type: 'int', min: 0, max: 5 },
+      base: { type: 'int', min: 1, max: 10 },
+    },
+    2: {
+      a: { type: 'int', min: -10, max: 10 },         // 引入负数
+      varValue: { type: 'int', min: -10, max: 10 },
+      exprA: { type: 'int', min: -5, max: 5 },
+      exprB: { type: 'int', min: -5, max: 5 },
+      base: { type: 'int', min: 1, max: 15 },
+    },
+    3: {
+      a: { type: 'int', min: -15, max: 15 },
+      varValue: { type: 'int', min: -15, max: 15 },
+      exprA: { type: 'int', min: -8, max: 8 },
+      exprB: { type: 'int', min: -8, max: 8 },
+      base: { type: 'int', min: 1, max: 20 },
+    },
+    4: {
+      a: { type: 'int', min: -20, max: 20 },
+      varValue: { type: 'int', min: -20, max: 20 },
+      exprA: { type: 'int', min: -10, max: 10 },
+      exprB: { type: 'int', min: -10, max: 10 },
+      base: { type: 'int', min: 1, max: 25 },
+    },
+    5: {
+      a: { type: 'int', min: -25, max: 25 },
+      varValue: { type: 'int', min: -25, max: 25 },
+      exprA: { type: 'int', min: -15, max: 15 },
+      exprB: { type: 'int', min: -15, max: 15 },
+      base: { type: 'int', min: 1, max: 30 },
+    },
+  },
+
   // 二次根式乘法（第16章）
   sqrt_multiply: {
     1: {
