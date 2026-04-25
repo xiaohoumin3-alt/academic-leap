@@ -186,3 +186,9 @@ export interface Fraction {
   numerator: number;
   denominator: number;
 }
+
+/**
+ * v2 协议导出（向后兼容）
+ */
+export { AnswerMode } from './protocol-v2';
+export type { ExpectedAnswer, StepProtocolV2, QuestionProtocolV2, StepOptions, StepKeyboard, StepValidation, StepUI } from './protocol-v2';
