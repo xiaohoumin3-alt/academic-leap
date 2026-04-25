@@ -2,12 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { motion, AnimatePresence } from 'motion/react';
 import MaterialIcon from './MaterialIcon';
 import { StartingScoreCalibrationCard } from './StartingScoreCalibrationCard';
 import { BottomNavigation } from './BottomNavigation';
 import TabSwitcher, { TabValue } from './TabSwitcher';
 import GrowthAnalysisTab from './AnalyzePage/GrowthAnalysisTab';
+import LearningPathTab from './AnalyzePage/LearningPathTab';
 import PracticeStatsTab from './AnalyzePage/PracticeStatsTab';
+import HistoryModal from './AnalyzePage/HistoryModal';
+import MistakesModal from './AnalyzePage/MistakesModal';
 import { analyticsApi } from '../lib/api';
 import type {
   KnowledgeData,
@@ -39,6 +43,9 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
   const [selectedModule, setSelectedModule] = useState<KnowledgeData | null>(null);
   const [selectedTrainingModule, setSelectedTrainingModule] = useState<KnowledgeData | null>(null);
   const [activeTab, setActiveTab] = useState<TabValue>('growth');
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showMistakesModal, setShowMistakesModal] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'info' | 'error' } | null>(null);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -113,8 +120,10 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
       }
     } catch (error) {
       console.error('校准失败:', error);
-      // 可以在这里添加用户提示
-      alert('校准失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      setToast({
+        msg: '校准失败: ' + (error instanceof Error ? error.message : '未知错误'),
+        type: 'error',
+      });
     }
   };
 
@@ -194,24 +203,12 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
         </div>
       </div>
 
-      {/* 起始分校准提示 */}
-      {overview?.overview?.needsCalibration && overview?.overview?.calibratedStartingScore && (
-        <StartingScoreCalibrationCard
-          originalLowestScore={overview.overview.lowestScore}
-          newStartingScore={overview.overview.calibratedStartingScore}
-          currentScore={currentScore ?? overview?.overview?.averageScore ?? 0}
-          onConfirm={handleCalibration}
-          onDismiss={() => {
-            // 用户选择保持现状，不再提示（可选：记录到本地存储）
-          }}
-        />
-      )}
-
       {/* 页签切换器 */}
       <div className="mt-4">
         <TabSwitcher
           options={[
             { value: 'growth', label: '成长分析' },
+            { value: 'path', label: '学习路径' },
             { value: 'practice', label: '练习统计' },
           ]}
           value={activeTab}
@@ -220,7 +217,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
       </div>
 
       {/* 页签内容区域 */}
-      {activeTab === 'growth' ? (
+      {activeTab === 'growth' && (
         <GrowthAnalysisTab
           overview={overview?.overview}
           knowledgeData={knowledgeData}
@@ -230,7 +227,9 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
           currentScore={currentScore ?? overview?.overview?.averageScore ?? 0}
           onCalibration={handleCalibration}
         />
-      ) : (
+      )}
+      {activeTab === 'path' && <LearningPathTab />}
+      {activeTab === 'practice' && (
         <PracticeStatsTab
           overview={overview?.overview}
           trainingKnowledgeData={trainingKnowledgeData}
@@ -238,6 +237,8 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
           recommendations={recommendations}
           selectedTrainingModule={selectedTrainingModule}
           setSelectedTrainingModule={setSelectedTrainingModule}
+          onOpenHistory={() => setShowHistoryModal(true)}
+          onOpenMistakes={() => setShowMistakesModal(true)}
         />
       )}
 
@@ -249,7 +250,40 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
         <MaterialIcon icon="chevron_right" className="" style={{ fontSize: '24px' }} />
       </button>
     </div>
+
+    {/* 模态组件 */}
+    <HistoryModal
+      isOpen={showHistoryModal}
+      onClose={() => setShowHistoryModal(false)}
+    />
+    <MistakesModal
+      isOpen={showMistakesModal}
+      onClose={() => setShowMistakesModal(false)}
+    />
+
     <BottomNavigation />
+
+    {/* Toast 通知 */}
+    <AnimatePresence>
+      {toast && (
+        <motion.div
+          initial={{ y: -100, opacity: 0 }}
+          animate={{ y: 24, opacity: 1 }}
+          exit={{ y: -100, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+          className="fixed top-0 left-1/2 -translate-x-1/2 z-[100] bg-on-surface text-surface px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 font-bold border border-white/10"
+          onAnimationComplete={() => {
+            setTimeout(() => setToast(null), 3000);
+          }}
+        >
+          <MaterialIcon
+            icon={toast.type === 'success' ? 'check_circle' : toast.type === 'error' ? 'error' : 'info'}
+            className={`w-5 h-5 ${toast.type === 'success' ? 'text-primary' : toast.type === 'error' ? 'text-error' : 'text-info'}`}
+          />
+          {toast.msg}
+        </motion.div>
+      )}
+    </AnimatePresence>
     </>
   );
 };
