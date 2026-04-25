@@ -7,6 +7,19 @@
 
 import { StepProtocolV2, ExpectedAnswer } from './protocol-v2';
 import { JudgeResult, ErrorType } from './types/judge';
+import { ErrorType as ProtocolErrorType } from './protocol';
+
+/**
+ * 扩展的判题结果（包含 behaviorTag）
+ * 与 v1 判题结果格式兼容
+ */
+interface ExtendedJudgeResult {
+  isCorrect: boolean;
+  correctAnswer: string;
+  errorType: ProtocolErrorType | null;
+  behaviorTag: string;
+  hint?: string;
+}
 
 /**
  * 通用判题引擎 v2
@@ -15,36 +28,83 @@ export function judgeStepV2(
   step: StepProtocolV2,
   userInput: string,
   duration?: number
-): JudgeResult {
+): ExtendedJudgeResult {
   const { expectedAnswer } = step;
+
+  // 检测猜测（响应时间过快）
+  const isGuess = duration !== undefined && duration < 1000;
+
+  let baseResult: { isCorrect: boolean; correctAnswer: string; errorType: ErrorType | null; hint?: string };
 
   switch (expectedAnswer.type) {
     case 'number':
-      return judgeNumber(userInput, expectedAnswer);
+      baseResult = judgeNumber(userInput, expectedAnswer);
+      break;
     case 'string':
-      return judgeString(userInput, expectedAnswer);
+      baseResult = judgeString(userInput, expectedAnswer);
+      break;
     case 'coordinate':
-      return judgeCoordinate(userInput, expectedAnswer);
+      baseResult = judgeCoordinate(userInput, expectedAnswer);
+      break;
     case 'yes_no':
-      return judgeYesNo(userInput, expectedAnswer);
+      baseResult = judgeYesNo(userInput, expectedAnswer);
+      break;
     case 'choice':
-      return judgeChoice(userInput, expectedAnswer);
+      baseResult = judgeChoice(userInput, expectedAnswer);
+      break;
     case 'expression':
-      return judgeExpression(userInput, expectedAnswer);
+      baseResult = judgeExpression(userInput, expectedAnswer);
+      break;
     case 'multi_fill':
-      return judgeMultiFill(userInput, expectedAnswer);
+      baseResult = judgeMultiFill(userInput, expectedAnswer);
+      break;
     case 'order':
-      return judgeOrder(userInput, expectedAnswer);
+      baseResult = judgeOrder(userInput, expectedAnswer);
+      break;
     case 'match':
-      return judgeMatch(userInput, expectedAnswer);
+      baseResult = judgeMatch(userInput, expectedAnswer);
+      break;
     default:
-      return {
+      baseResult = {
         isCorrect: false,
         correctAnswer: '未知题型',
         errorType: 'system_error',
         hint: '题目配置错误，请联系管理员',
       };
   }
+
+  // 添加 behaviorTag，映射错误类型到 v1 协议
+  let behaviorTag = '未分类';
+  let finalErrorType: ProtocolErrorType | null = null;
+
+  if (baseResult.isCorrect) {
+    behaviorTag = isGuess ? '正确（可能猜测）' : '正确';
+  } else {
+    if (isGuess) {
+      behaviorTag = '猜测';
+      finalErrorType = 'guess';
+    } else if (baseResult.errorType === 'calculation_error') {
+      behaviorTag = '计算错误';
+      finalErrorType = 'calculation_error';
+    } else if (baseResult.errorType === 'concept_error') {
+      behaviorTag = '概念错误';
+      finalErrorType = 'concept_error';
+    } else if (baseResult.errorType === 'format_error') {
+      behaviorTag = '格式错误';
+      finalErrorType = 'format_error';
+    } else {
+      behaviorTag = '错误';
+      finalErrorType = 'concept_error'; // 默认为概念错误
+    }
+  }
+
+  return {
+    isCorrect: baseResult.isCorrect,
+    correctAnswer: baseResult.correctAnswer,
+    errorType: finalErrorType,
+    behaviorTag,
+    hint: baseResult.hint,
+  };
 }
 
 /**
@@ -53,7 +113,7 @@ export function judgeStepV2(
 function judgeNumber(
   userInput: string,
   expected: Extract<ExpectedAnswer, { type: 'number' }>
-): JudgeResult {
+): { isCorrect: boolean; correctAnswer: string; errorType: ErrorType | null; hint?: string } {
   const userNum = parseFloat(userInput.trim());
 
   if (isNaN(userNum)) {
@@ -83,7 +143,7 @@ function judgeNumber(
 function judgeString(
   userInput: string,
   expected: Extract<ExpectedAnswer, { type: 'string' }>
-): JudgeResult {
+): { isCorrect: boolean; correctAnswer: string; errorType: ErrorType | null; hint?: string } {
   const normalized = userInput.trim().toLowerCase();
   const expectedNormalized = expected.value.toLowerCase();
   const variants = (expected.variants || []).map(v => v.toLowerCase());
@@ -108,7 +168,7 @@ function judgeString(
 function judgeYesNo(
   userInput: string,
   expected: Extract<ExpectedAnswer, { type: 'yes_no' }>
-): JudgeResult {
+): { isCorrect: boolean; correctAnswer: string; errorType: ErrorType | null; hint?: string } {
   // UI 返回的是 "yes" 或 "no"（从按钮点击）
   const userBool = userInput === 'yes' || userInput === 'true';
   const expectedBool = expected.value;
@@ -127,7 +187,7 @@ function judgeYesNo(
 function judgeChoice(
   userInput: string,
   expected: Extract<ExpectedAnswer, { type: 'choice' }>
-): JudgeResult {
+): { isCorrect: boolean; correctAnswer: string; errorType: ErrorType | null; hint?: string } {
   const isCorrect = Array.isArray(expected.value)
     ? userInput.split(',').sort().join(',') === expected.value.sort().join(',')
     : userInput === expected.value;
@@ -146,7 +206,7 @@ function judgeChoice(
 function judgeCoordinate(
   userInput: string,
   expected: Extract<ExpectedAnswer, { type: 'coordinate' }>
-): JudgeResult {
+): { isCorrect: boolean; correctAnswer: string; errorType: ErrorType | null; hint?: string } {
   // 支持多种格式：(x, y)、[x, y]、x y
   const match = userInput.trim().match(/^[\[\(]?\s*([-\d.]+)\s*[,，]\s*([-\d.]+)\s*[\]\)]?$/);
 
@@ -181,7 +241,7 @@ function judgeCoordinate(
 function judgeExpression(
   userInput: string,
   expected: Extract<ExpectedAnswer, { type: 'expression' }>
-): JudgeResult {
+): { isCorrect: boolean; correctAnswer: string; errorType: ErrorType | null; hint?: string } {
   // 简化版：先做字符串比较，后续可接入数学表达式解析库
   const normalized = userInput.trim().replace(/\s+/g, '');
   const expectedNormalized = expected.value.trim().replace(/\s+/g, '');
@@ -207,7 +267,7 @@ function judgeExpression(
 function judgeMultiFill(
   userInput: string,
   expected: Extract<ExpectedAnswer, { type: 'multi_fill' }>
-): JudgeResult {
+): { isCorrect: boolean; correctAnswer: string; errorType: ErrorType | null; hint?: string } {
   // 假设用户输入用逗号或空格分隔
   const userValues = userInput.split(/[,，\s]+/).filter(v => v.trim());
 
@@ -253,7 +313,7 @@ function judgeMultiFill(
 function judgeOrder(
   userInput: string,
   expected: Extract<ExpectedAnswer, { type: 'order' }>
-): JudgeResult {
+): { isCorrect: boolean; correctAnswer: string; errorType: ErrorType | null; hint?: string } {
   const userOrder = userInput.split(/[,，\s]+/).filter(v => v.trim());
   const normalizedExpected = expected.value.map(v => v.toLowerCase());
   const normalizedUser = userOrder.map(v => v.toLowerCase());
@@ -276,7 +336,7 @@ function judgeOrder(
 function judgeMatch(
   userInput: string,
   expected: Extract<ExpectedAnswer, { type: 'match' }>
-): JudgeResult {
+): { isCorrect: boolean; correctAnswer: string; errorType: ErrorType | null; hint?: string } {
   // 支持多种格式：
   // "A1,B2,C3" - 紧凑格式（字母后跟数字）
   // "A:1,B:2,C:3" - 冒号分隔
