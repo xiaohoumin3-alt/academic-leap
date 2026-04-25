@@ -23,6 +23,39 @@ export enum StepType {
 
   // 概率统计
   COMPUTE_PROBABILITY = 'compute_probability',
+
+  // 二次根式 (Chapter 16)
+  COMPUTE_SQRT = 'compute_sqrt',
+  SIMPLIFY_SQRT = 'simplify_sqrt',
+  SQRT_PROPERTY = 'sqrt_property',
+  SQRT_MIXED = 'sqrt_mixed',
+
+  // 三角形判定 (Chapter 17)
+  VERIFY_RIGHT_ANGLE = 'verify_right_angle',
+
+  // 四边形判定与性质 (Chapter 18)
+  VERIFY_PARALLELOGRAM = 'verify_parallelogram',
+  VERIFY_RECTANGLE = 'verify_rectangle',
+  VERIFY_RHOMBUS = 'verify_rhombus',
+  VERIFY_SQUARE = 'verify_square',
+  COMPUTE_RECT_PROPERTY = 'compute_rect_property',
+  COMPUTE_RHOMBUS_PROPERTY = 'compute_rhombus_property',
+  COMPUTE_SQUARE_PROPERTY = 'compute_square_property',
+
+  // 一元二次方程 (Chapter 19)
+  IDENTIFY_QUADRATIC = 'identify_quadratic',
+  SOLVE_DIRECT_ROOT = 'solve_direct_root',
+  SOLVE_COMPLETE_SQUARE = 'solve_complete_square',
+  SOLVE_QUADRATIC_FORMULA = 'solve_quadratic_formula',
+  SOLVE_FACTORIZE = 'solve_factorize',
+  QUADRATIC_APPLICATION = 'quadratic_application',
+
+  // 数据分析 (Chapter 20)
+  COMPUTE_MEAN = 'compute_mean',
+  COMPUTE_MEDIAN = 'compute_median',
+  COMPUTE_MODE = 'compute_mode',
+  COMPUTE_VARIANCE = 'compute_variance',
+  COMPUTE_STDDEV = 'compute_stddev',
 }
 
 /**
