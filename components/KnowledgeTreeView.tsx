@@ -24,12 +24,16 @@ interface KnowledgeTreeViewProps {
   chapters: Chapter[];
   onToggle: (nodeId: string, nodeType: 'chapter' | 'point', enabled: boolean) => void;
   expandable?: boolean;
+  weights?: Record<string, number>;
+  onWeightChange?: (kpId: string, weight: number) => void;
 }
 
 export default function KnowledgeTreeView({
   chapters,
   onToggle,
   expandable = false,
+  weights = {},
+  onWeightChange,
 }: KnowledgeTreeViewProps) {
   const [expandedChapters, setExpandedChapters] = useState<Set<string>>(
     new Set(chapters.slice(0, 3).map(c => c.id)) // 默认展开前3个
@@ -128,6 +132,28 @@ export default function KnowledgeTreeView({
                     <span className="text-xs text-on-surface-variant bg-surface-container-low px-2 py-1 rounded-full">
                       {point.conceptName}
                     </span>
+                    {onWeightChange && (
+                      <div className="flex items-center gap-2 ml-2">
+                        <span className="text-xs text-on-surface-variant">权重</span>
+                        <input
+                          type="range"
+                          min="1"
+                          max="5"
+                          step="0.5"
+                          value={weights[point.id] ?? 3}
+                          onChange={(e) => {
+                            onWeightChange(point.id, parseFloat(e.target.value));
+                          }}
+                          className="w-16 h-1.5 bg-surface-container-high rounded-lg appearance-none cursor-pointer"
+                          style={{
+                            background: `linear-gradient(to right, var(--color-primary) 0%, var(--color-primary) ${((weights[point.id] ?? 3) - 1) / 4 * 100}%, var(--color-surface-container-high) ${((weights[point.id] ?? 3) - 1) / 4 * 100}%, var(--color-surface-container-high) 100%)`
+                          }}
+                        />
+                        <span className="text-xs text-on-surface-variant w-4 text-center">
+                          {weights[point.id] ?? 3}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

@@ -47,8 +47,26 @@ export default function LearningSettings({ onRefresh, embedded = false }: Learni
   // 学期设置对话框
   const [showSemesterDialog, setShowSemesterDialog] = useState(false);
 
+  // 权重管理状态
+  const [weights, setWeights] = useState<Record<string, number>>({});
+
   useEffect(() => {
     loadSettings();
+  }, []);
+
+  // 加载知识点权重
+  useEffect(() => {
+    const loadWeights = async () => {
+      const res = await fetch('/api/user/knowledge-weight');
+      if (res.ok) {
+        const data = await res.json();
+        const weightMap = Object.fromEntries(
+          data.data.map((kp: { id: string; name: string; weight: number }) => [kp.id, kp.weight])
+        );
+        setWeights(weightMap);
+      }
+    };
+    loadWeights();
   }, []);
 
   const loadSettings = async () => {
@@ -263,6 +281,19 @@ export default function LearningSettings({ onRefresh, embedded = false }: Learni
     }
   };
 
+  const handleWeightChange = async (kpId: string, weight: number) => {
+    setWeights(prev => ({ ...prev, [kpId]: weight }));
+    try {
+      await fetch('/api/user/knowledge-weight', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ knowledgePointId: kpId, weight })
+      });
+    } catch (error) {
+      console.error('更新权重失败:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className={embedded ? '' : 'bg-surface-container-low rounded-[2rem] p-6'}>
@@ -465,9 +496,20 @@ export default function LearningSettings({ onRefresh, embedded = false }: Learni
             <span className="text-on-surface-variant">
               {settings?.grade}年级 · {settings?.selectedSubject}
             </span>
-            <span className="text-sm text-on-surface-variant">
-              {treeData?.enabledCount || 0}/{treeData?.totalCount || 0} 知识点
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-on-surface-variant">
+                {treeData?.enabledCount || 0}/{treeData?.totalCount || 0} 知识点
+              </span>
+              {!isEditing && (
+                <button
+                  onClick={handleEnterEditMode}
+                  className="w-8 h-8 rounded-full hover:bg-surface-container-high flex items-center justify-center transition-colors"
+                  aria-label="编辑设置"
+                >
+                  <MaterialIcon icon="edit" className="text-on-surface-variant" style={{ fontSize: '18px' }} />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* 学习进度 */}
@@ -516,6 +558,8 @@ export default function LearningSettings({ onRefresh, embedded = false }: Learni
             chapters={treeData.chapters}
             onToggle={handleToggle}
             expandable={true}
+            weights={weights}
+            onWeightChange={handleWeightChange}
           />
         ) : (
           <div className="text-center py-8 text-on-surface-variant">
