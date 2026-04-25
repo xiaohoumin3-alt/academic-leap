@@ -13,42 +13,18 @@ import {
 } from 'recharts';
 import { cn } from '../../lib/utils';
 import MaterialIcon from '../MaterialIcon';
-
-interface KnowledgeData {
-  knowledgePoint: string;
-  mastery: number;
-  stability?: number;
-  status?: 'high' | 'medium' | 'low';
-}
-
-interface OverviewInner {
-  trainingAvgScore: number;
-  trainingCount: number;
-  trainingQuestions: number;
-  trainingCorrectRate: number;
-  trainingMinutes: number;
-}
-
-interface RecommendationsData {
-  insights?: {
-    achievements?: Array<{
-      name: string;
-      description: string;
-    }>;
-  };
-}
-
-interface TimelineData {
-  date: string;
-  count: number;
-  avgScore: number;
-}
+import type {
+  KnowledgeData,
+  OverviewInner,
+  RecommendationsData,
+  TimelineData,
+} from './types';
 
 interface PracticeStatsTabProps {
-  overview: OverviewInner;
+  overview: OverviewInner | null | undefined;
   trainingKnowledgeData: KnowledgeData[];
   timeline: TimelineData[];
-  recommendations: RecommendationsData;
+  recommendations: RecommendationsData | null;
   selectedTrainingModule: KnowledgeData | null;
   setSelectedTrainingModule: (module: KnowledgeData | null) => void;
 }
@@ -62,10 +38,10 @@ const PracticeStatsTab: React.FC<PracticeStatsTabProps> = ({
   setSelectedTrainingModule,
 }) => {
   const getPracticeStats = () => ({
-    avgScore: overview.trainingAvgScore || 0,
-    correctRate: overview.trainingCorrectRate || 0,
-    totalQuestions: overview.trainingQuestions || 0,
-    totalMinutes: overview.trainingMinutes || 0,
+    avgScore: overview?.trainingAvgScore || 0,
+    correctRate: overview?.trainingCorrectRate || 0,
+    totalQuestions: overview?.trainingQuestions || 0,
+    totalMinutes: overview?.trainingMinutes || 0,
   });
 
   const stats = getPracticeStats();

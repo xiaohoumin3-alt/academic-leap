@@ -12,45 +12,16 @@ import {
 import { cn } from '../../lib/utils';
 import MaterialIcon from '../MaterialIcon';
 import { StartingScoreCalibrationCard } from '../StartingScoreCalibrationCard';
-
-// 复用 AnalyzePage 中的类型定义
-interface KnowledgeData {
-  knowledgePoint: string;
-  mastery: number;
-  stability?: number;
-  status?: 'high' | 'medium' | 'low';
-}
-
-interface DiagnosticAttempt {
-  id: string;
-  score: number;
-  completedAt: string;
-}
-
-interface OverviewInner {
-  totalAttempts: number;
-  averageScore: number;
-  lowestScore: number;
-  diagnosticAttempts: DiagnosticAttempt[];
-  diagnosticDataReliability: 'high' | 'medium' | 'low';
-  diagnosticVolatilityRange: number;
-  needsCalibration: boolean;
-  calibratedStartingScore: number | null;
-  startingScoreCalibrated: boolean;
-}
-
-interface RecommendationsData {
-  recommendations?: Array<{
-    type: 'practice' | 'review' | 'challenge' | 'tip';
-    title: string;
-    description: string;
-  }>;
-}
+import type {
+  KnowledgeData,
+  OverviewInner,
+  RecommendationsData,
+} from './types';
 
 interface GrowthAnalysisTabProps {
-  overview: OverviewInner;
+  overview: OverviewInner | null | undefined;
   knowledgeData: KnowledgeData[];
-  recommendations: RecommendationsData;
+  recommendations: RecommendationsData | null;
   selectedModule: KnowledgeData | null;
   setSelectedModule: (module: KnowledgeData | null) => void;
   currentScore: number;
@@ -83,7 +54,7 @@ const GrowthAnalysisTab: React.FC<GrowthAnalysisTabProps> = ({
       {/* 起始分校准提示 */}
       {overview?.needsCalibration && overview?.calibratedStartingScore && (
         <StartingScoreCalibrationCard
-          originalLowestScore={overview.lowestScore}
+          originalLowestScore={overview.lowestScore ?? 0}
           newStartingScore={overview.calibratedStartingScore}
           currentScore={currentScore}
           onConfirm={onCalibration}
@@ -259,7 +230,7 @@ const GrowthAnalysisTab: React.FC<GrowthAnalysisTabProps> = ({
           <div className="space-y-3">
             {recommendations.recommendations.slice(0, 3).map((rec, index) => (
               <motion.div
-                key={index}
+                key={`${rec.type}-${rec.title}`}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: index * 0.1 }}

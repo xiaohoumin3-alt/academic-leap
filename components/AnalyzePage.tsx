@@ -1,86 +1,32 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
 import { useSession } from 'next-auth/react';
-import { cn } from '../lib/utils';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell
-} from 'recharts';
-import { analyticsApi } from '../lib/api';
 import MaterialIcon from './MaterialIcon';
 import { StartingScoreCalibrationCard } from './StartingScoreCalibrationCard';
 import { BottomNavigation } from './BottomNavigation';
+import TabSwitcher, { TabValue } from './TabSwitcher';
+import GrowthAnalysisTab from './AnalyzePage/GrowthAnalysisTab';
+import PracticeStatsTab from './AnalyzePage/PracticeStatsTab';
+import { analyticsApi } from '../lib/api';
+import type {
+  KnowledgeData,
+  OverviewInner,
+  RecommendationsData,
+  TimelineData,
+} from './AnalyzePage/types';
 
 interface AnalyzePageProps {
   onBack: () => void;
 }
 
-interface KnowledgeData {
-  knowledgePoint: string;
-  mastery: number;
-  stability?: number;
-  status?: 'high' | 'medium' | 'low';
-}
-
-interface DiagnosticAttempt {
-  id: string;
-  score: number;
-  completedAt: string;
-}
-
-interface OverviewInner {
-  totalAttempts: number;
-  completedAttempts: number;
-  averageScore: number;
-  lowestScore: number;
-  totalMinutes: number;
-  completionRate: number;
-  dataReliability: 'high' | 'medium' | 'low';
-  volatilityRange: number;
-  initialAssessmentCompleted: boolean;
-  initialAssessmentScore: number;
-  // Calibration fields
-  needsCalibration: boolean;
-  calibratedStartingScore: number | null;
-  startingScoreCalibrated: boolean;
-  // Stats for "My" page
-  totalQuestions: number;
-  correctRate: number;
-  // Growth story fields
-  diagnosticAttempts: DiagnosticAttempt[];
-  trainingAvgScore: number;
-  trainingCount: number;
-  // 练习专用统计
-  trainingQuestions: number;
-  trainingCorrectRate: number;
-  trainingMinutes: number;
-  // 诊断测评专用字段
-  diagnosticDataReliability: 'high' | 'medium' | 'low';
-  diagnosticVolatilityRange: number;
-  diagnosticAttemptsCount: number;
-  // 练习知识点掌握度
-  trainingKnowledgeMastery: Array<{ knowledgePoint: string; mastery: number; recentAccuracy?: number }>;
-}
-
 interface OverviewData {
   overview: OverviewInner;
-  dailyData: Array<{ date: string; count: number; avgScore: number }>;
+  dailyData: TimelineData[];
   topKnowledge: Array<{ knowledgePoint: string; mastery: number }>;
   success?: boolean;
   error?: string;
 }
-
-const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6'];
 
 const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
   const { data: session, status } = useSession();
@@ -88,10 +34,11 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [knowledgeData, setKnowledgeData] = useState<KnowledgeData[]>([]);
   const [trainingKnowledgeData, setTrainingKnowledgeData] = useState<KnowledgeData[]>([]);
-  const [timeline, setTimeline] = useState<any[]>([]);
-  const [recommendations, setRecommendations] = useState<any>(null);
+  const [timeline, setTimeline] = useState<TimelineData[]>([]);
+  const [recommendations, setRecommendations] = useState<RecommendationsData | null>(null);
   const [selectedModule, setSelectedModule] = useState<KnowledgeData | null>(null);
   const [selectedTrainingModule, setSelectedTrainingModule] = useState<KnowledgeData | null>(null);
+  const [activeTab, setActiveTab] = useState<TabValue>('growth');
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -138,45 +85,14 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
         setTrainingKnowledgeData(trainingTransformed);
       }
 
-      setRecommendations(recommendationsRes);
+      // Extract recommendations data from ApiResponse
+      setRecommendations(recommendationsRes as any);
     } catch (error) {
       console.error('加载分析数据失败:', error);
       // 不使用降级数据，保持空状态
     } finally {
       setLoading(false);
     }
-  };
-
-  // 计算成长故事数据
-  const getGrowthStoryData = (overview: OverviewData['overview']) => {
-    const diagnosticAttempts = overview?.diagnosticAttempts || [];
-
-    // 首次测评分数：直接使用第一次诊断测评记录（不会被后续测试覆盖）
-    const firstScore = diagnosticAttempts.length > 0
-      ? diagnosticAttempts[0].score
-      : null;
-
-    // 最近测评分数
-    const latestScore = diagnosticAttempts.length > 0
-      ? diagnosticAttempts[diagnosticAttempts.length - 1].score
-      : null;
-
-    // 提升值
-    const growth = (firstScore !== null && latestScore !== null && firstScore !== latestScore)
-      ? latestScore - firstScore
-      : null;
-
-    return { firstScore, latestScore, growth };
-  };
-
-  // 计算练习统计数据
-  const getPracticeStats = (overview: OverviewData['overview']) => {
-    return {
-      avgScore: overview?.trainingAvgScore || 0,
-      correctRate: overview?.trainingCorrectRate || 0,
-      totalQuestions: overview?.trainingQuestions || 0,
-      totalMinutes: overview?.trainingMinutes || 0,
-    };
   };
 
   const handleCalibration = async () => {
@@ -251,7 +167,10 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
   }
 
   // 使用真实数据 - 基于诊断测评计算当前分数
-  const { latestScore: currentScore } = getGrowthStoryData(overview?.overview);
+  const diagnosticAttempts = overview?.overview?.diagnosticAttempts || [];
+  const currentScore = diagnosticAttempts.length > 0
+    ? diagnosticAttempts[diagnosticAttempts.length - 1].score
+    : null;
 
   return (
     <>
@@ -288,388 +207,39 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
         />
       )}
 
-      {/* 上段：诊断测评数据 */}
-      <div className="space-y-8">
-        {/* 成长轨迹 */}
-        <section className="bg-surface-container-lowest rounded-[2rem] p-8 relative overflow-hidden ambient-shadow">
-        <div className="absolute -right-8 -top-8 w-40 h-40 bg-gradient-to-br from-primary/10 to-primary-container/10 rounded-full blur-3xl pointer-events-none"></div>
-
-        {(() => {
-          const { firstScore, latestScore, growth } = getGrowthStoryData(overview?.overview);
-          const hasData = firstScore !== null && latestScore !== null;
-
-          return (
-            <>
-              <div className="flex items-center justify-between mb-4 relative z-10">
-                <h3 className="text-xl font-display font-black text-on-surface">成长轨迹</h3>
-                <span className="text-[10px] px-3 py-1 bg-warning-container text-on-warning-container rounded-full font-bold">
-                  真实水平
-                </span>
-              </div>
-
-              {!hasData ? (
-                <div className="text-center py-8">
-                  <p className="text-on-surface-variant">完成诊断测评后查看成长轨迹</p>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-baseline justify-center gap-6 mb-6 relative z-10">
-                    <div className="text-center">
-                      <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">首次</p>
-                      <p className="text-3xl font-display font-black text-on-surface-variant">{firstScore}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-12 h-0.5 bg-surface-variant"></div>
-                      <MaterialIcon icon="chevron_right" className="text-outline-variant" style={{ fontSize: '20px' }} />
-                      <div className="w-12 h-0.5 bg-surface-variant"></div>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-[10px] font-bold text-primary uppercase mb-1">最近</p>
-                      <p className="text-4xl font-display font-black text-primary">{latestScore}</p>
-                    </div>
-                  </div>
-
-                  {growth !== null && growth !== 0 && (
-                    <div className="flex items-center justify-center gap-2 relative z-10">
-                      <div className={`flex items-center gap-1 px-4 py-2 rounded-full ${
-                        growth > 0 ? 'bg-success/20' : 'bg-error/20'
-                      }`}>
-                        <MaterialIcon
-                          icon={growth > 0 ? 'trending_up' : 'trending_down'}
-                          className={growth > 0 ? 'text-success' : 'text-error'}
-                          style={{ fontSize: '18px' }}
-                        />
-                        <span className={`text-base font-display font-black ${
-                          growth > 0 ? 'text-success' : 'text-error'
-                        }`}>
-                          {growth > 0 ? '+' : ''}{growth}分
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  <p className="text-center text-xs text-on-surface-variant mt-4">
-                    测评分数对比 · 真实反映学习进步
-                  </p>
-                </>
-              )}
-            </>
-          );
-        })()}
-      </section>
-
-      {/* 数据可信度和波动范围 */}
-      <section className="grid grid-cols-2 gap-6">
-        <div className="bg-surface-container-lowest rounded-[2rem] p-6 ambient-shadow">
-          <div className="flex items-center gap-3 mb-3">
-            <MaterialIcon icon="verified" className="text-primary" style={{ fontSize: '20px' }} />
-            <h4 className="text-sm font-bold text-on-surface-variant">数据可信度</h4>
-          </div>
-          <p className="text-lg font-display font-black text-primary">
-            {overview?.overview?.diagnosticDataReliability === 'high' ? '高'
-             : overview?.overview?.diagnosticDataReliability === 'medium' ? '中'
-             : overview?.overview?.diagnosticDataReliability ? '低' : '-'}
-            {overview?.overview?.diagnosticDataReliability && ` (${overview.overview.diagnosticAttemptsCount}次诊断测评)`}
-          </p>
-        </div>
-        <div className="bg-surface-container-lowest rounded-[2rem] p-6 ambient-shadow">
-          <div className="flex items-center gap-3 mb-3">
-            <MaterialIcon icon="show_chart" className="text-on-surface-variant" style={{ fontSize: '20px' }} />
-            <h4 className="text-sm font-bold text-on-surface-variant">波动范围</h4>
-          </div>
-          <p className="text-lg font-display font-black text-on-surface">
-            ±{overview?.overview?.diagnosticVolatilityRange ?? '-'} 分
-          </p>
-        </div>
-      </section>
-
-      {/* Knowledge Mastery Chart */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xl font-display font-black text-on-surface">知识掌握矩阵</h3>
-          <span className="text-xs font-bold text-on-surface-variant">点击查看详情</span>
-        </div>
-
-        {/* 空数据状态 */}
-        {(!knowledgeData || knowledgeData.length === 0) ? (
-          <div className="bg-surface-container-low rounded-3xl p-6 text-center">
-            <MaterialIcon icon="school" className="text-on-surface-variant mx-auto mb-2" style={{ fontSize: '48px' }} />
-            <p className="text-on-surface-variant">开始练习后将显示知识点掌握情况</p>
-          </div>
-        ) : (
-          <>
-            <div className="bg-surface-container-low rounded-3xl p-6">
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={knowledgeData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.1} />
-                    <XAxis
-                      dataKey="knowledgePoint"
-                      tick={{ fill: 'currentColor', fontSize: 12 }}
-                      stroke="currentColor"
-                      strokeOpacity={0.5}
-                    />
-                    <YAxis tick={{ fill: 'currentColor', fontSize: 12 }} stroke="currentColor" strokeOpacity={0.5} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'var(--color-surface-container)',
-                        border: '1px solid var(--color-outline-variant)',
-                        borderRadius: '12px',
-                      }}
-                    />
-                    <Bar
-                      dataKey="mastery"
-                      radius={[8, 8, 0, 0]}
-                      fill="var(--color-primary)"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Knowledge Items */}
-        <div className="grid grid-cols-2 gap-3">
-          {knowledgeData.map((item, index) => (
-            <motion.button
-              key={item.knowledgePoint}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
-              onClick={() => setSelectedModule(item)}
-              className={cn(
-                "p-4 rounded-2xl text-left transition-all",
-                selectedModule?.knowledgePoint === item.knowledgePoint
-                  ? "bg-primary-container text-on-primary-container scale-105"
-                  : "bg-surface-container hover:bg-surface-container-high"
-              )}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-bold">{item.knowledgePoint}</span>
-                <span className="text-lg font-display font-black">{item.mastery}%</span>
-              </div>
-              <div className="h-2 bg-surface-variant/30 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full bg-current"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${item.mastery}%` }}
-                  transition={{ delay: index * 0.05 + 0.2, duration: 0.5 }}
-                />
-              </div>
-            </motion.button>
-          ))}
-        </div>
-          </>
-        )}
-      </section>
+      {/* 页签切换器 */}
+      <div className="mt-4">
+        <TabSwitcher
+          options={[
+            { value: 'growth', label: '成长分析' },
+            { value: 'practice', label: '练习统计' },
+          ]}
+          value={activeTab}
+          onChange={setActiveTab}
+        />
       </div>
 
-      {/* 下段：练习数据 */}
-      <div className="space-y-8">
-        {/* 练习状态 */}
-        <section className="bg-surface-container-lowest rounded-[2rem] p-8">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-display font-black text-on-surface">练习状态</h3>
-            <span className="text-[10px] px-3 py-1 bg-secondary-container text-on-secondary-container rounded-full font-bold">
-              日常巩固
-            </span>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div className="text-center p-4 bg-surface-container rounded-2xl">
-              <p className="text-2xl font-display font-black text-secondary">
-                {(() => {
-                  const stats = getPracticeStats(overview?.overview);
-                  return stats.correctRate > 0 ? stats.correctRate + '%' : '-';
-                })()}
-              </p>
-              <p className="text-[10px] text-on-surface-variant mt-1">正确率</p>
-            </div>
-            <div className="text-center p-4 bg-surface-container rounded-2xl">
-              <p className="text-2xl font-display font-black text-secondary">
-                {(() => {
-                  const stats = getPracticeStats(overview?.overview);
-                  return stats.totalQuestions > 0 ? stats.totalQuestions : '-';
-                })()}
-              </p>
-              <p className="text-[10px] text-on-surface-variant mt-1">总题数</p>
-            </div>
-            <div className="text-center p-4 bg-surface-container rounded-2xl">
-              <p className="text-2xl font-display font-black text-secondary">
-                {(() => {
-                  const stats = getPracticeStats(overview?.overview);
-                  return stats.totalMinutes > 0 ? stats.totalMinutes : '-';
-                })()}
-              </p>
-              <p className="text-[10px] text-on-surface-variant mt-1">分钟</p>
-            </div>
-          </div>
-        </section>
-
-        {/* Weekly Progress Timeline */}
-      <section className="space-y-4">
-        <h3 className="text-xl font-display font-black text-on-surface">本周练习趋势</h3>
-        {!timeline || timeline.length === 0 ? (
-          <div className="bg-surface-container-low rounded-3xl p-6 text-center">
-            <MaterialIcon icon="timeline" className="text-on-surface-variant mx-auto mb-2" style={{ fontSize: '48px' }} />
-            <p className="text-on-surface-variant">开始练习后将显示练习趋势</p>
-          </div>
-        ) : (
-          <div className="bg-surface-container-low rounded-3xl p-6">
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={timeline}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.1} />
-                  <XAxis
-                  dataKey="date"
-                  tickFormatter={(date) => new Date(date).toLocaleDateString('zh-CN', { weekday: 'short' })}
-                  tick={{ fill: 'currentColor', fontSize: 10 }}
-                  stroke="currentColor"
-                  strokeOpacity={0.5}
-                />
-                <YAxis tick={{ fill: 'currentColor', fontSize: 12 }} stroke="currentColor" strokeOpacity={0.5} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'var(--color-surface-container)',
-                    border: '1px solid var(--color-outline-variant)',
-                    borderRadius: '12px',
-                  }}
-                  labelFormatter={(date) => new Date(date).toLocaleDateString('zh-CN', { weekday: 'long' })}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="avgScore"
-                  stroke="var(--color-primary)"
-                  strokeWidth={3}
-                  dot={{ fill: 'var(--color-primary)', r: 4 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        )}
-      </section>
-
-      {/* 知识练习分布 */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xl font-display font-black text-on-surface">知识练习分布</h3>
-          <span className="text-xs font-bold text-on-surface-variant">点击查看详情</span>
-        </div>
-
-        {/* 空数据状态 */}
-        {(!trainingKnowledgeData || trainingKnowledgeData.length === 0) ? (
-          <div className="bg-surface-container-low rounded-3xl p-6 text-center">
-            <MaterialIcon icon="school" className="text-on-surface-variant mx-auto mb-2" style={{ fontSize: '48px' }} />
-            <p className="text-on-surface-variant">开始练习后将显示知识点掌握情况</p>
-          </div>
-        ) : (
-          <>
-            <div className="bg-surface-container-low rounded-3xl p-6">
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={trainingKnowledgeData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.1} />
-                    <XAxis dataKey="knowledgePoint" tick={{ fontSize: 10 }} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
-                    <Tooltip
-                      formatter={(value) => [`${value}%`, '掌握度']}
-                      contentStyle={{ borderRadius: '12px', border: 'none' }}
-                    />
-                    <Bar
-                      dataKey="mastery"
-                      fill="var(--color-secondary)"
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Knowledge Items */}
-            <div className="grid grid-cols-2 gap-3">
-              {trainingKnowledgeData.map((item, index) => (
-                <motion.button
-                  key={item.knowledgePoint}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  onClick={() => setSelectedTrainingModule(item)}
-                  className={cn(
-                    "p-4 rounded-2xl text-left transition-all",
-                    selectedTrainingModule?.knowledgePoint === item.knowledgePoint
-                      ? "bg-secondary-container text-on-secondary-container scale-105"
-                      : "bg-surface-container hover:bg-surface-container-high"
-                  )}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-bold">{item.knowledgePoint}</span>
-                    <span className="text-lg font-display font-black">{item.mastery}%</span>
-                  </div>
-                  <div className="w-full bg-surface-variant rounded-full h-1.5">
-                    <div
-                      className="bg-secondary rounded-full h-1.5"
-                      style={{ width: `${item.mastery}%` }}
-                    />
-                  </div>
-                </motion.button>
-              ))}
-            </div>
-          </>
-        )}
-      </section>
-
-      {/* AI Recommendations */}
-      {recommendations?.recommendations && recommendations.recommendations.length > 0 && (
-        <section className="space-y-4">
-          <h3 className="text-xl font-display font-black text-on-surface">AI 学习建议</h3>
-          <div className="space-y-3">
-            {recommendations.recommendations.slice(0, 3).map((rec: any, index: number) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className="bg-surface-container-low rounded-2xl p-5 flex items-start gap-4"
-              >
-                <div className={cn(
-                  "p-2 rounded-full",
-                  rec.type === 'practice' && "bg-error-container text-on-error-container",
-                  rec.type === 'review' && "bg-warning-container text-on-warning-container",
-                  rec.type === 'challenge' && "bg-success-container text-on-success-container",
-                  rec.type === 'tip' && "bg-tertiary-container text-on-tertiary-container"
-                )}>
-                  {rec.type === 'practice' && <MaterialIcon icon="gps_fixed" className="" style={{ fontSize: '20px' }} />}
-                  {rec.type === 'review' && <MaterialIcon icon="history" className="" style={{ fontSize: '20px' }} />}
-                  {rec.type === 'challenge' && <MaterialIcon icon="bolt" className="" style={{ fontSize: '20px' }} />}
-                  {rec.type === 'tip' && <MaterialIcon icon="info" className="" style={{ fontSize: '20px' }} />}
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-on-surface mb-1">{rec.title}</h4>
-                  <p className="text-sm text-on-surface-variant">{rec.description}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </section>
+      {/* 页签内容区域 */}
+      {activeTab === 'growth' ? (
+        <GrowthAnalysisTab
+          overview={overview?.overview}
+          knowledgeData={knowledgeData}
+          recommendations={recommendations}
+          selectedModule={selectedModule}
+          setSelectedModule={setSelectedModule}
+          currentScore={currentScore ?? overview?.overview?.averageScore ?? 0}
+          onCalibration={handleCalibration}
+        />
+      ) : (
+        <PracticeStatsTab
+          overview={overview?.overview}
+          trainingKnowledgeData={trainingKnowledgeData}
+          timeline={timeline}
+          recommendations={recommendations}
+          selectedTrainingModule={selectedTrainingModule}
+          setSelectedTrainingModule={setSelectedTrainingModule}
+        />
       )}
-
-      {/* Achievement Badge - 只在有成就时显示 */}
-      {recommendations?.insights?.achievements && recommendations.insights.achievements.length > 0 && (
-        <section className="bg-gradient-to-br from-tertiary to-tertiary-container rounded-3xl p-8 relative overflow-hidden">
-          <div className="absolute inset-0 opacity-10">
-            <div className="absolute top-0 right-0 w-40 h-40 bg-white rounded-full blur-3xl"></div>
-            <div className="absolute bottom-0 left-0 w-32 h-32 bg-white rounded-full blur-3xl"></div>
-          </div>
-          <div className="relative z-10">
-            <p className="text-[10px] font-bold text-on-tertiary-container uppercase tracking-widest mb-1">成就解锁</p>
-            <h3 className="text-xl font-display font-black text-on-tertiary-container leading-tight">
-              获得"{recommendations.insights.achievements[0].name}"勋章！
-            </h3>
-            <p className="text-[10px] text-on-tertiary-container/60 mt-1">{recommendations.insights.achievements[0].description}</p>
-          </div>
-        </section>
-      )}
-      </div>
 
       <button
         onClick={onBack}
