@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll, jest } from '@jest/globals';
 
 // Mock Prisma
-const mockFindMany = jest.fn();
+const mockFindMany = jest.fn<() => Promise<unknown[]>>();
 jest.mock('@/lib/prisma', () => ({
   prisma: {
     skeleton: {
@@ -17,7 +17,7 @@ describe('GET /api/admin/factory/skeletons', () => {
   beforeAll(() => {
     mockFindMany.mockResolvedValue([
       { id: 'test_skeleton', stepType: 'COMPUTE_SQRT', name: '测试', status: 'pending' }
-    ]);
+    ] as unknown[]);
   });
 
   afterAll(() => {
@@ -35,16 +35,16 @@ describe('GET /api/admin/factory/skeletons', () => {
   });
 
   test('filters by status', async () => {
-    mockFindMany.mockResolvedValue([]);
+    mockFindMany.mockResolvedValue([] as unknown[]);
 
     const request = new NextRequest('http://localhost/api/admin/factory/skeletons?status=pending');
     const response = await GET(request);
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mockFindMany).toHaveBeenCalledWith({
+    expect((mockFindMany as jest.Mock).mock.calls[0]).toEqual([{
       where: { status: 'pending' },
       orderBy: { createdAt: 'desc' }
-    });
+    }]);
   });
 });
