@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MaterialIcon from '../../components/MaterialIcon';
 import { BottomNavigation } from '../../components/BottomNavigation';
-import LearningPathOverview from '@/components/LearningPathOverview';
-import WeeklyReportDialog from '@/components/WeeklyReportDialog';
 import LearningSettings from '@/components/LearningSettings';
 
 const DEFAULT_TARGET_SCORE = 90;
@@ -28,8 +26,6 @@ export default function MePage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
-  const [showWeeklyReport, setShowWeeklyReport] = useState(false);
-  const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
   // 获取用户信息和学习设置
@@ -145,75 +141,27 @@ export default function MePage() {
           )}
 
           {settings ? (
-            <>
-              <div className="bg-surface rounded-2xl p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm text-on-surface-variant">
-                    <MaterialIcon icon="school" style={{ fontSize: '18px' }} />
-                    <span>
-                      {settings.grade}年级 · {settings.selectedSubject || '未设置'}
-                      {settings.selectedTextbookId && ' | 目标 ' + (settings.targetScore || DEFAULT_TARGET_SCORE) + '分'}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => setSettingsExpanded(!settingsExpanded)}
-                    className="px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors flex items-center gap-1"
-                  >
-                    {settingsExpanded ? '收起' : '展开'}
-                    <MaterialIcon icon={settingsExpanded ? 'expand_less' : 'expand_more'} style={{ fontSize: '18px' }} />
-                  </button>
-                </div>
+            <div className="bg-surface rounded-2xl p-4">
+              <div className="flex items-center gap-2 text-sm text-on-surface-variant">
+                <MaterialIcon icon="school" style={{ fontSize: '18px' }} />
+                <span>
+                  {settings.grade}年级 · {settings.selectedSubject || '未设置'}
+                  {settings.selectedTextbookId && ' | 目标 ' + (settings.targetScore || DEFAULT_TARGET_SCORE) + '分'}
+                </span>
               </div>
-
-              {/* 内联学习设置 */}
-              {settingsExpanded && (
-                <div className="mt-4 -mx-2 -mb-2">
-                  <LearningSettings onRefresh={refreshSettings} embedded={true} />
-                </div>
-              )}
-            </>
+            </div>
           ) : (
             <button
-              onClick={() => setSettingsExpanded(true)}
               className="w-full py-3 rounded-xl bg-primary text-on-primary font-medium"
             >
               设置学习信息
             </button>
           )}
-        </div>
 
-        {/* 学习路径概览 */}
-        <div className="mb-6">
-          <LearningPathOverview
-            onShowWeeklyReport={() => setShowWeeklyReport(true)}
-          />
-        </div>
-
-        {/* 功能列表 */}
-        <div className="space-y-3">
-          <button onClick={() => router.push('/me/history')} className="w-full flex items-center gap-4 p-4 bg-surface-container-low rounded-2xl hover:bg-surface-container transition-colors">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-              <MaterialIcon icon="history" className="text-primary" style={{ fontSize: '22px' }} />
-            </div>
-            <span className="flex-1 text-left font-medium text-on-surface">练习记录</span>
-            <MaterialIcon icon="chevron_right" className="text-on-surface-variant" style={{ fontSize: '20px' }} />
-          </button>
-
-          <button onClick={() => router.push('/me/mistakes')} className="w-full flex items-center gap-4 p-4 bg-surface-container-low rounded-2xl hover:bg-surface-container transition-colors">
-            <div className="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center">
-              <MaterialIcon icon="bookmark" className="text-on-secondary-container" style={{ fontSize: '22px' }} />
-            </div>
-            <span className="flex-1 text-left font-medium text-on-surface">错题本</span>
-            <MaterialIcon icon="chevron_right" className="text-on-surface-variant" style={{ fontSize: '20px' }} />
-          </button>
-
-          <button onClick={() => router.push('/console')} className="w-full flex items-center gap-4 p-4 bg-surface-container-low rounded-2xl hover:bg-surface-container transition-colors">
-            <div className="w-10 h-10 rounded-full bg-tertiary-container flex items-center justify-center">
-              <MaterialIcon icon="settings" className="text-on-tertiary-container" style={{ fontSize: '22px' }} />
-            </div>
-            <span className="flex-1 text-left font-medium text-on-surface">设置</span>
-            <MaterialIcon icon="chevron_right" className="text-on-surface-variant" style={{ fontSize: '20px' }} />
-          </button>
+          {/* 学习设置（始终展开） */}
+          <div className="mt-4 -mx-2 -mb-2">
+            <LearningSettings onRefresh={refreshSettings} embedded={true} />
+          </div>
         </div>
 
         {/* 退出登录 */}
@@ -232,16 +180,6 @@ export default function MePage() {
       </div>
 
       <BottomNavigation />
-
-      {/* 周报弹窗 */}
-      <WeeklyReportDialog
-        isOpen={showWeeklyReport}
-        onClose={() => setShowWeeklyReport(false)}
-        onConfirmRecalibrate={() => {
-          // 重组后刷新页面
-          router.refresh();
-        }}
-      />
     </div>
   );
 }
