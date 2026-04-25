@@ -57,8 +57,8 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // 更新每个知识点的掌握度
-    for (const [knowledgePoint, stats] of knowledgeStats) {
+    // 更新每个知识点的掌握度（knowledgePoints 现在直接存储 id）
+    for (const [knowledgePointId, stats] of knowledgeStats) {
       // 获取该知识点最近的练习记录（从 attemptStep 通过 questionStep -> question 获取）
       const recentAttempts = await prisma.attempt.findMany({
         where: {
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
           if (kps) {
             try {
               const points = JSON.parse(kps);
-              if (points.includes(knowledgePoint)) {
+              if (points.includes(knowledgePointId)) {
                 totalSteps++;
                 if (s.isCorrect) totalCorrect++;
               }
@@ -104,9 +104,9 @@ export async function POST(req: NextRequest) {
         // 获取或创建用户知识点记录
         const existing = await prisma.userKnowledge.findUnique({
           where: {
-            userId_knowledgePoint: {
+            userId_knowledgePointId: {
               userId: session.user.id,
-              knowledgePoint,
+              knowledgePointId,
             },
           },
         });
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
           await prisma.userKnowledge.create({
             data: {
               userId: session.user.id,
-              knowledgePoint,
+              knowledgePointId,
               mastery,
               practiceCount: stats.total,
               lastPractice: new Date(),
