@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+// Threshold constants for mastery status
+const MASTERY_HIGH = 0.8;
+const MASTERY_MEDIUM = 0.5;
+
 // GET /api/analytics/overview - 学习概览数据
 export async function GET(req: NextRequest) {
   try {
@@ -76,6 +80,7 @@ export async function GET(req: NextRequest) {
           },
         },
       },
+      take: 1000, // Limit for performance
     });
 
     // 按知识点聚合
@@ -95,12 +100,25 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const trainingKnowledgeMasteryData = Array.from(trainingKpMap.values()).map(kp => ({
-      knowledgePoint: kp.name,
-      mastery: kp.total > 0 ? Math.round((kp.correct / kp.total) * 100) : 0,
-      recentAccuracy: kp.total > 0 ? Math.round((kp.correct / kp.total) * 100) : 0,
-      status: kp.total > 0 ? (kp.correct / kp.total >= 0.8 ? 'high' : kp.correct / kp.total >= 0.5 ? 'medium' : 'low') : 'pending',
-    }));
+    const trainingKnowledgeMasteryData = Array.from(trainingKpMap.values()).map(kp => {
+      const accuracy = kp.total > 0 ? Math.round((kp.correct / kp.total) * 100) : 0;
+      const ratio = kp.total > 0 ? kp.correct / kp.total : 0;
+      let status: 'high' | 'medium' | 'low' | 'pending';
+      if (kp.total === 0) {
+        status = 'pending';
+      } else if (ratio >= MASTERY_HIGH) {
+        status = 'high';
+      } else if (ratio >= MASTERY_MEDIUM) {
+        status = 'medium';
+      } else {
+        status = 'low';
+      }
+      return {
+        knowledgePoint: kp.name,
+        mastery: accuracy,
+        status,
+      };
+    });
 
     // 获取有效练习次数（已完成且有分数的，用于计算平均分）
     const completedAttempts = await prisma.attempt.count({
