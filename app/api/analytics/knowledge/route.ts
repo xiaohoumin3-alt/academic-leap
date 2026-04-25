@@ -33,19 +33,19 @@ export async function GET(req: NextRequest) {
       };
     }
 
+    // 使用 id 作为唯一标识，按 id 查询
     const activeKnowledgePoints = await prisma.knowledgePoint.findMany({
       where: knowledgePointWhere,
-      select: { name: true },
       orderBy: { weight: 'desc' },
     });
 
-    const activePointNames = activeKnowledgePoints.map((kp) => kp.name);
+    const activePointIds = activeKnowledgePoints.map((kp) => kp.id);
 
-    // 获取用户在这些知识点上的掌握度
+    // 获取用户在这些知识点上的掌握度（使用 id）
     const userKnowledge = await prisma.userKnowledge.findMany({
       where: {
         userId,
-        knowledgePoint: { in: activePointNames }, // 只查询活跃的知识点
+        knowledgePointId: { in: activePointIds },
       },
       orderBy: { mastery: 'asc' },
     });
@@ -58,6 +58,7 @@ export async function GET(req: NextRequest) {
     // 如果用户没有练习记录，返回所有活跃知识点供随机选择
     if (userKnowledge.length === 0) {
       knowledgeWithRecent = activeKnowledgePoints.map((kp) => ({
+        id: kp.id,
         knowledgePoint: kp.name,
         mastery: 0,
         practiceCount: 0,
@@ -69,11 +70,12 @@ export async function GET(req: NextRequest) {
       // 为每个活跃知识点创建记录（如果没有用户数据，使用默认值）
       knowledgeWithRecent = await Promise.all(
         activeKnowledgePoints.map(async (kp) => {
-          const uk = userKnowledge.find((u) => u.knowledgePoint === kp.name);
+          const uk = userKnowledge.find((u) => u.knowledgePointId === kp.id);
 
           if (!uk) {
             // 用户还没有这个知识点的记录
             return {
+              id: kp.id,
               knowledgePoint: kp.name,
               mastery: 0,
               practiceCount: 0,
@@ -98,6 +100,7 @@ export async function GET(req: NextRequest) {
           const recentAccuracy = recentSteps.length > 0 ? correctCount / recentSteps.length : 0;
 
           return {
+            id: kp.id,
             knowledgePoint: kp.name,
             mastery: Math.round(uk.mastery * 100),
             practiceCount: uk.practiceCount,
