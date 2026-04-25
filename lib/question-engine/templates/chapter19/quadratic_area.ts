@@ -336,7 +336,7 @@ export const QuadraticAreaTemplate: QuestionTemplate = {
             ui: {
               instruction: '根据面积差列出方程，展开后求x的系数',
               inputTarget: '方程中x的系数',
-              inputHint: `增加后的面积 - 原面积 = ${params.area}，即 (x + ${increase})² - x² = ${params.area}，展开后x的系数是多少？`,
+              inputHint: `增加后的面积 - 原面积 = ${params.area}，即 (x + ${increase})² - x² = ${params.area}，展开后x的系数是多少？（x²项会约掉）`,
             },
           },
           {
@@ -383,7 +383,7 @@ export const QuadraticAreaTemplate: QuestionTemplate = {
             ui: {
               instruction: '根据面积差列出方程，展开后求x的系数',
               inputTarget: '方程中x的系数',
-              inputHint: `原面积 - 减少后的面积 = ${params.area}，即 x² - (x - ${decrease})² = ${params.area}，展开后x的系数是多少？`,
+              inputHint: `原面积 - 减少后的面积 = ${params.area}，即 x² - (x - ${decrease})² = ${params.area}，展开后x的系数是多少？（x²项会约掉）`,
             },
           },
           {
