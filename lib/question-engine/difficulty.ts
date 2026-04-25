@@ -954,6 +954,83 @@ export const DIFFICULTY_CONFIG: Record<string, Record<number, DifficultyLevelCon
       height: { type: 'int', min: 5, max: 16 },
     },
   },
+
+  // 勾股定理折叠问题（第17章）
+  pythagoras_folding: {
+    1: {
+      a: { type: 'int', min: 3, max: 5 },
+      b: { type: 'int', min: 4, max: 6 },
+    },
+    2: {
+      a: { type: 'int', min: 4, max: 8 },
+      b: { type: 'int', min: 5, max: 10 },
+    },
+    3: {
+      a: { type: 'int', min: 5, max: 12 },
+      b: { type: 'int', min: 6, max: 15 },
+    },
+    4: {
+      a: { type: 'int', min: 6, max: 15 },
+      b: { type: 'int', min: 8, max: 20 },
+    },
+    5: {
+      a: { type: 'int', min: 8, max: 20 },
+      b: { type: 'int', min: 10, max: 25 },
+    },
+  },
+
+  // 勾股定理逆定理（第17章）
+  triangle_verify: {
+    1: {
+      side1: { type: 'int', min: 3, max: 5 },
+      side2: { type: 'int', min: 4, max: 6 },
+      side3: { type: 'int', min: 5, max: 8 },
+    },
+    2: {
+      side1: { type: 'int', min: 4, max: 8 },
+      side2: { type: 'int', min: 5, max: 10 },
+      side3: { type: 'int', min: 6, max: 12 },
+    },
+    3: {
+      side1: { type: 'int', min: 5, max: 12 },
+      side2: { type: 'int', min: 6, max: 15 },
+      side3: { type: 'int', min: 7, max: 18 },
+    },
+    4: {
+      side1: { type: 'int', min: 6, max: 15 },
+      side2: { type: 'int', min: 8, max: 20 },
+      side3: { type: 'int', min: 10, max: 25 },
+    },
+    5: {
+      side1: { type: 'int', min: 8, max: 20 },
+      side2: { type: 'int', min: 10, max: 25 },
+      side3: { type: 'int', min: 12, max: 30 },
+    },
+  },
+
+  // 勾股定理应用题（第17章）
+  pythagoras_word_problem: {
+    1: {
+      a: { type: 'int', min: 3, max: 5 },
+      b: { type: 'int', min: 4, max: 6 },
+    },
+    2: {
+      a: { type: 'int', min: 4, max: 8 },
+      b: { type: 'int', min: 5, max: 10 },
+    },
+    3: {
+      a: { type: 'int', min: 5, max: 12 },
+      b: { type: 'int', min: 6, max: 15 },
+    },
+    4: {
+      a: { type: 'int', min: 6, max: 15 },
+      b: { type: 'int', min: 8, max: 20 },
+    },
+    5: {
+      a: { type: 'int', min: 8, max: 20 },
+      b: { type: 'int', min: 10, max: 25 },
+    },
+  },
 };
 
 /**

@@ -34,6 +34,9 @@ import { SquareVerifyTemplate } from './chapter18/square_verify';
 import { QuadrilateralPerimeterTemplate } from './chapter18/quadrilateral_perimeter';
 import { QuadrilateralAreaTemplate } from './chapter18/quadrilateral_area';
 import { TrapezoidPropertyTemplate } from './chapter18/trapezoid_property';
+import { PythagorasFoldingTemplate } from './chapter17/pythagoras_folding';
+import { TriangleVerifyTemplate } from './chapter17/triangle_verify';
+import { PythagorasWordProblemTemplate } from './chapter17/pythagoras_word_problem';
 
 /**
  * 模板注册表
@@ -95,6 +98,15 @@ export const TEMPLATE_REGISTRY: Record<string, QuestionTemplate> = {
 
   // 梯形性质计算（第18章）
   trapezoid_property: TrapezoidPropertyTemplate,
+
+  // 勾股定理折叠问题（第17章）
+  pythagoras_folding: PythagorasFoldingTemplate,
+
+  // 勾股定理逆定理（第17章）
+  triangle_verify: TriangleVerifyTemplate,
+
+  // 勾股定理应用题（第17章）
+  pythagoras_word_problem: PythagorasWordProblemTemplate,
 };
 
 /**
