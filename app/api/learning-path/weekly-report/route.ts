@@ -99,16 +99,16 @@ export async function GET(req: NextRequest) {
       const userKnowledgeList = await prisma.userKnowledge.findMany({
         where: {
           userId: session.user.id,
-          knowledgePoint: { in: nodeIds }
+          knowledgePointId: { in: nodeIds }
         },
         select: {
-          knowledgePoint: true,
+          knowledgePointId: true,
           mastery: true
         }
       });
 
       const masteryMap = new Map(
-        userKnowledgeList.map(uk => [uk.knowledgePoint, uk.mastery])
+        userKnowledgeList.map(uk => [uk.knowledgePointId, uk.mastery])
       );
 
       // mastery < MASTERY_THRESHOLD 的为待加强
@@ -120,9 +120,9 @@ export async function GET(req: NextRequest) {
       for (const node of nodes) {
         const userKnowledge = await prisma.userKnowledge.findUnique({
           where: {
-            userId_knowledgePoint: {
+            userId_knowledgePointId: {
               userId: session.user.id,
-              knowledgePoint: node.nodeId
+              knowledgePointId: node.nodeId
             }
           }
         });

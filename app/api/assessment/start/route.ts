@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
           const queryDifficulty = retry ? startDifficulty : minDifficulty;
           const existingQuestions = await prisma.question.findMany({
             where: {
-              knowledgePoints: { contains: kp.name },
+              knowledgePoints: { contains: kp.id },
               difficulty: {
                 gte: queryDifficulty,
                 lte: retry ? queryDifficulty + 1 : maxDifficulty,

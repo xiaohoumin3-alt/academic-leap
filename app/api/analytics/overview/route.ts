@@ -231,6 +231,11 @@ export async function GET(req: NextRequest) {
     // 获取知识点掌握度
     const knowledge = await prisma.userKnowledge.findMany({
       where: { userId },
+      include: {
+        knowledgePoint: {
+          select: { name: true },
+        },
+      },
       orderBy: { mastery: "desc" },
       take: 5,
     });
@@ -422,8 +427,8 @@ export async function GET(req: NextRequest) {
       },
       dailyData,
       topKnowledge: knowledge.map(
-        (k: { knowledgePoint: string | null; mastery: number }) => ({
-          knowledgePoint: k.knowledgePoint || '',
+        (k: { knowledgePoint: { name: string }; mastery: number }) => ({
+          knowledgePoint: k.knowledgePoint.name,
           mastery: Math.round(k.mastery * 100),
         }),
       ),

@@ -67,9 +67,9 @@ export function generatePriorityReasons(input: PriorityFactorsInput): string[] {
 export async function getUserMastery(userId: string, knowledgePointId: string): Promise<number> {
   const userKnowledge = await prisma.userKnowledge.findUnique({
     where: {
-      userId_knowledgePoint: {
+      userId_knowledgePointId: {
         userId,
-        knowledgePoint: knowledgePointId
+        knowledgePointId: knowledgePointId
       }
     },
     select: {
@@ -108,9 +108,9 @@ export async function getUserMastery(userId: string, knowledgePointId: string): 
 export async function getDaysSincePractice(userId: string, knowledgePointId: string): Promise<number> {
   const userKnowledge = await prisma.userKnowledge.findUnique({
     where: {
-      userId_knowledgePoint: {
+      userId_knowledgePointId: {
         userId,
-        knowledgePoint: knowledgePointId
+        knowledgePointId: knowledgePointId
       }
     }
   });

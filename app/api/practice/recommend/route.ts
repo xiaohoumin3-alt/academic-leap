@@ -48,6 +48,11 @@ export async function GET(req: NextRequest) {
     // 获取用户知识点掌握情况
     const userKnowledge = await prisma.userKnowledge.findMany({
       where: { userId: session.user.id },
+      include: {
+        knowledgePoint: {
+          select: { name: true },
+        },
+      },
       orderBy: { mastery: 'asc' }, // 优先返回薄弱知识点
     });
 
@@ -70,8 +75,8 @@ export async function GET(req: NextRequest) {
     // 根据推荐难度查找题目
     const difficultyLevel = Math.min(5, Math.max(1, Math.round(difficultyMultiplier)));
 
-    // 查找该知识点的题目
-    const kpId = weakestKnowledge.id || '';
+    // 查找该知识点的题目（使用 knowledgePointId）
+    const kpId = weakestKnowledge.knowledgePointId;
     const questions = await prisma.question.findMany({
       where: {
         knowledgePoints: { contains: kpId },
@@ -101,11 +106,11 @@ export async function GET(req: NextRequest) {
           content: JSON.parse(q.content || '{}'),
           knowledgePoints: JSON.parse(q.knowledgePoints || '[]'),
         })),
-        focusKnowledge: weakestKnowledge.knowledgePoint,
+        focusKnowledge: weakestKnowledge.knowledgePoint.name,
         focusKnowledgeMastery: Math.round(weakestKnowledge.mastery * 100),
         recommendedLevel,
         recommendedDifficulty: difficultyMultiplier.toFixed(2),
-        reason: `您的【${weakestKnowledge.knowledgePoint}】掌握度为${Math.round(weakestKnowledge.mastery * 100)}%，建议重点练习`,
+        reason: `您的【${weakestKnowledge.knowledgePoint.name}】掌握度为${Math.round(weakestKnowledge.mastery * 100)}%，建议重点练习`,
         currentLevel: user.currentLevel,
       },
     });

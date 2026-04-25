@@ -108,10 +108,14 @@ export async function POST(req: NextRequest) {
     const knowledgePoints = await prisma.knowledgePoint.findMany({
       where: knowledgePointWhere,
       select: {
+        id: true,
         name: true,
         weight: true,
       },
     });
+
+    // Build name -> id map for UserKnowledge creation
+    const kpNameToId = new Map(knowledgePoints.map(kp => [kp.name, kp.id]));
 
     // 计算等效分
     const scoreResult = calculateEquivalentScore(answerRecords, knowledgePoints);
@@ -156,20 +160,23 @@ export async function POST(req: NextRequest) {
 
       // 初始化UserKnowledge记录
       for (const [kpName, level] of Object.entries(scoreResult.knowledgeLevels)) {
+        const kpId = kpNameToId.get(kpName);
+        if (!kpId) continue; // Skip if knowledge point not found
+
         const kpAnswers = answerRecords.filter(a => a.knowledgePoint === kpName);
         const correctCount = kpAnswers.filter(a => a.isCorrect).length;
         const mastery = kpAnswers.length > 0 ? correctCount / kpAnswers.length : 0;
 
         await tx.userKnowledge.upsert({
           where: {
-            userId_knowledgePoint: {
+            userId_knowledgePointId: {
               userId: session.user.id,
-              knowledgePoint: kpName,
+              knowledgePointId: kpId,
             },
           },
           create: {
             userId: session.user.id,
-            knowledgePoint: kpName,
+            knowledgePointId: kpId,
             mastery,
             practiceCount: kpAnswers.length,
           },

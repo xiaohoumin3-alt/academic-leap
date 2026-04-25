@@ -81,11 +81,11 @@ export async function POST(req: NextRequest) {
     const userKnowledgeRecords = await prisma.userKnowledge.findMany({
       where: {
         userId: session.user.id,
-        knowledgePoint: { in: knowledgePoints.map(kp => kp.id) }
+        knowledgePointId: { in: knowledgePoints.map(kp => kp.id) }
       }
     });
     const userKnowledgeMap = new Map(
-      userKnowledgeRecords.map(uk => [uk.knowledgePoint, uk])
+      userKnowledgeRecords.map(uk => [uk.knowledgePointId, uk])
     );
 
     // Batch fetch recent attempts (last 7 days)

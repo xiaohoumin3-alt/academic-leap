@@ -3,8 +3,20 @@ import { prisma } from '../lib/prisma';
 async function migrate() {
   console.log('开始迁移 UserKnowledge 数据...\n');
 
-  // 1. 获取所有 UserKnowledge 记录
-  const userKnowledgeRecords = await prisma.userKnowledge.findMany();
+  // 1. 获取所有 UserKnowledge 记录 (使用原始查询以访问旧的 knowledgePoint 字段)
+  const userKnowledgeRecords = await prisma.$queryRaw<Array<{
+    id: string;
+    userId: string;
+    knowledgePointId: string | null;
+    knowledgePoint: string;
+    mastery: number;
+    lastPractice: Date;
+    practiceCount: number;
+  }>>`
+    SELECT id, userId, knowledgePointId, knowledgePoint, mastery, lastPractice, practiceCount
+    FROM UserKnowledge
+  `;
+
   console.log('找到', userKnowledgeRecords.length, '条 UserKnowledge 记录\n');
 
   // 2. 获取 KnowledgePoint 映射 (name -> id)
@@ -18,9 +30,16 @@ async function migrate() {
 
   // 3. 迁移每条记录
   let successCount = 0;
+  let skipCount = 0;
   let failCount = 0;
 
   for (const record of userKnowledgeRecords) {
+    // 如果已有 knowledgePointId，跳过
+    if (record.knowledgePointId) {
+      skipCount++;
+      continue;
+    }
+
     const kpId = nameToId.get(record.knowledgePoint || '');
 
     if (kpId) {
@@ -39,19 +58,19 @@ async function migrate() {
   }
 
   console.log('\n========================================');
-  console.log(`迁移完成！成功: ${successCount}, 失败: ${failCount}`);
+  console.log(`迁移完成！成功: ${successCount}, 跳过: ${skipCount}, 失败: ${failCount}`);
   console.log('========================================\n');
 
-  // 4. 验证
-  const recordsWithId = await prisma.userKnowledge.findMany({
-    where: { knowledgePointId: { not: null } }
-  });
-  console.log('更新后有 knowledgePointId 的记录数:', recordsWithId.length);
+  // 4. 验证 (使用原始查询)
+  const recordsWithId = await prisma.$queryRaw<Array<{ count: number }>>`
+    SELECT COUNT(*) as count FROM UserKnowledge WHERE knowledgePointId IS NOT NULL
+  `;
+  console.log('更新后有 knowledgePointId 的记录数:', recordsWithId[0]?.count || 0);
 
-  const recordsWithoutId = await prisma.userKnowledge.findMany({
-    where: { knowledgePointId: null }
-  });
-  console.log('仍未有关PointId的记录数:', recordsWithoutId.length);
+  const recordsWithoutId = await prisma.$queryRaw<Array<{ count: number }>>`
+    SELECT COUNT(*) as count FROM UserKnowledge WHERE knowledgePointId IS NULL
+  `;
+  console.log('仍无 knowledgePointId 的记录数:', recordsWithoutId[0]?.count || 0);
 }
 
 migrate().catch(console.error);
