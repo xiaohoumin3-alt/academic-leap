@@ -213,6 +213,103 @@ export const DIFFICULTY_CONFIG: Record<string, Record<number, DifficultyLevelCon
       n: { type: 'int', min: -8, max: 8 },
     },
   },
+
+  // 一元二次方程配方法（第19章）
+  quadratic_complete_square: {
+    1: {
+      a: { type: 'int', min: 1, max: 1 },           // a固定为1，简化配方
+      b: { type: 'int', min: 2, max: 4, exclude: [0] },  // b为偶数，配方简单
+      c: { type: 'int', min: -3, max: 0 },          // c为负数或零
+    },
+    2: {
+      a: { type: 'int', min: 1, max: 1 },           // a固定为1
+      b: { type: 'int', min: 2, max: 6, exclude: [0] },  // b为偶数
+      c: { type: 'int', min: -5, max: 1 },
+    },
+    3: {
+      a: { type: 'int', min: 1, max: 2 },           // a可能为2
+      b: { type: 'int', min: 2, max: 8, exclude: [0] },  // b为偶数
+      c: { type: 'int', min: -8, max: 2 },
+    },
+    4: {
+      a: { type: 'int', min: 1, max: 3 },           // a可能为3
+      b: { type: 'int', min: -10, max: 10, exclude: [0] },  // b可能为奇数
+      c: { type: 'int', min: -10, max: 3 },
+    },
+    5: {
+      a: { type: 'int', min: 1, max: 4 },
+      b: { type: 'int', min: -12, max: 12, exclude: [0] },
+      c: { type: 'int', min: -12, max: 4 },
+    },
+  },
+
+  // 一元二次方程求根公式法（第19章）
+  quadratic_formula: {
+    1: {
+      a: { type: 'int', min: 1, max: 1 },           // a固定为1，简化计算
+      b: { type: 'int', min: -4, max: 4, exclude: [0] },
+      c: { type: 'int', min: -3, max: 3 },
+    },
+    2: {
+      a: { type: 'int', min: 1, max: 1 },           // a固定为1
+      b: { type: 'int', min: -6, max: 6, exclude: [0] },
+      c: { type: 'int', min: -5, max: 5 },
+    },
+    3: {
+      a: { type: 'int', min: 1, max: 2 },           // a可能为2
+      b: { type: 'int', min: -8, max: 8, exclude: [0] },
+      c: { type: 'int', min: -6, max: 6 },
+    },
+    4: {
+      a: { type: 'int', min: 1, max: 3 },
+      b: { type: 'int', min: -10, max: 10, exclude: [0] },
+      c: { type: 'int', min: -8, max: 8 },
+    },
+    5: {
+      a: { type: 'int', min: 1, max: 4 },
+      b: { type: 'int', min: -12, max: 12, exclude: [0] },
+      c: { type: 'int', min: -10, max: 10 },
+    },
+  },
+
+  // 一元二次方程因式分解法（第19章）
+  quadratic_factorize: {
+    1: {
+      a: { type: 'int', min: 1, max: 1 },           // a固定为1
+      b: { type: 'int', min: -5, max: 5 },          // b = p + q
+      c: { type: 'int', min: -6, max: 6 },          // c = p * q
+      p: { type: 'int', min: -3, max: 3 },          // 因式分解因子
+      q: { type: 'int', min: -3, max: 3 },
+    },
+    2: {
+      a: { type: 'int', min: 1, max: 1 },           // a固定为1
+      b: { type: 'int', min: -8, max: 8 },
+      c: { type: 'int', min: -12, max: 12 },
+      p: { type: 'int', min: -6, max: 6 },
+      q: { type: 'int', min: -6, max: 6 },
+    },
+    3: {
+      a: { type: 'int', min: 1, max: 1 },           // a固定为1
+      b: { type: 'int', min: -12, max: 12 },
+      c: { type: 'int', min: -20, max: 20 },
+      p: { type: 'int', min: -10, max: 10 },
+      q: { type: 'int', min: -10, max: 10 },
+    },
+    4: {
+      a: { type: 'int', min: 1, max: 2 },           // a可能为2
+      b: { type: 'int', min: -15, max: 15 },
+      c: { type: 'int', min: -25, max: 25 },
+      p: { type: 'int', min: -12, max: 12 },
+      q: { type: 'int', min: -12, max: 12 },
+    },
+    5: {
+      a: { type: 'int', min: 1, max: 3 },           // a可能为2或3
+      b: { type: 'int', min: -20, max: 20 },
+      c: { type: 'int', min: -30, max: 30 },
+      p: { type: 'int', min: -15, max: 15 },
+      q: { type: 'int', min: -15, max: 15 },
+    },
+  },
 };
 
 /**

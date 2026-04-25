@@ -10,6 +10,9 @@ import { PythagorasTemplate } from './pythagoras';
 import { ProbabilityTemplate, LinearEquationTemplate } from './probability';
 import { QuadraticIdentifyTemplate } from './chapter19/quadratic_identify';
 import { QuadraticDirectRootTemplate } from './chapter19/quadratic_direct_root';
+import { QuadraticFormulaTemplate } from './chapter19/quadratic_formula';
+import { QuadraticCompleteSquareTemplate } from './chapter19/quadratic_complete_square';
+import { QuadraticFactorizeTemplate } from './chapter19/quadratic_factorize';
 
 /**
  * 模板注册表
@@ -31,6 +34,9 @@ export const TEMPLATE_REGISTRY: Record<string, QuestionTemplate> = {
   // 一元二次方程（第19章）
   quadratic_identify: QuadraticIdentifyTemplate,
   quadratic_direct_root: QuadraticDirectRootTemplate,
+  quadratic_formula: QuadraticFormulaTemplate,
+  quadratic_complete_square: QuadraticCompleteSquareTemplate,
+  quadratic_factorize: QuadraticFactorizeTemplate,
 };
 
 /**
