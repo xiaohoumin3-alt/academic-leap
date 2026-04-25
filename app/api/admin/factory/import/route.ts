@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { importFromPreview } from '@/lib/template-factory/importer';
 import type { PreviewResult } from '@/lib/template-factory/preview-engine';
+import { auth } from '@/lib/auth';
 
 /**
  * POST /api/admin/factory/import
@@ -12,8 +13,7 @@ import type { PreviewResult } from '@/lib/template-factory/preview-engine';
  *   options: {
  *     createKnowledgePoints: boolean,
  *     createSkeletons: boolean,
- *     createTemplates: boolean,
- *     approvedBy: string
+ *     createTemplates: boolean
  *   }
  * }
  *
@@ -26,6 +26,15 @@ import type { PreviewResult } from '@/lib/template-factory/preview-engine';
  */
 export async function POST(request: NextRequest) {
   try {
+    // 认证检查
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({
+        success: false,
+        error: 'Unauthorized'
+      }, { status: 401 });
+    }
+
     const body = await request.json();
     const { preview, options } = body as {
       preview: PreviewResult;
@@ -33,7 +42,6 @@ export async function POST(request: NextRequest) {
         createKnowledgePoints: boolean;
         createSkeletons: boolean;
         createTemplates: boolean;
-        approvedBy: string;
       };
     };
 
@@ -41,6 +49,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: false,
         error: 'preview and options are required'
+      }, { status: 400 });
+    }
+
+    // 验证至少有一个选项被启用
+    if (!options.createSkeletons && !options.createTemplates && !options.createKnowledgePoints) {
+      return NextResponse.json({
+        success: false,
+        error: 'At least one create option must be enabled'
       }, { status: 400 });
     }
 

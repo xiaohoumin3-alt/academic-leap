@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseTextbook, parseQuestionBank } from '@/lib/template-factory/parsers';
 import { generatePreview } from '@/lib/template-factory/preview-engine';
+import { auth } from '@/lib/auth';
 
 /**
  * POST /api/admin/factory/preview
@@ -25,8 +26,32 @@ import { generatePreview } from '@/lib/template-factory/preview-engine';
  */
 export async function POST(request: NextRequest) {
   try {
+    // 认证检查
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({
+        success: false,
+        error: 'Unauthorized'
+      }, { status: 401 });
+    }
+
     const body = await request.json();
     const { textbookYaml, questionBankYaml } = body;
+
+    // 验证输入大小（防止过大输入）
+    const maxSize = 500 * 1024; // 500KB
+    if (textbookYaml && textbookYaml.length > maxSize) {
+      return NextResponse.json({
+        success: false,
+        error: '教材内容过大，最大500KB'
+      }, { status: 400 });
+    }
+    if (questionBankYaml && questionBankYaml.length > maxSize) {
+      return NextResponse.json({
+        success: false,
+        error: '题库内容过大，最大500KB'
+      }, { status: 400 });
+    }
 
     // 解析教材
     const textbookResult = textbookYaml
