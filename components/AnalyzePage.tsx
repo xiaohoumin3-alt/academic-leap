@@ -64,6 +64,12 @@ interface OverviewInner {
   trainingQuestions: number;
   trainingCorrectRate: number;
   trainingMinutes: number;
+  // 诊断测评专用字段
+  diagnosticDataReliability: 'high' | 'medium' | 'low';
+  diagnosticVolatilityRange: number;
+  diagnosticAttemptsCount: number;
+  // 练习知识点掌握度
+  trainingKnowledgeMastery: Array<{ knowledgePoint: string; mastery: number; recentAccuracy?: number }>;
 }
 
 interface OverviewData {
@@ -81,9 +87,11 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [knowledgeData, setKnowledgeData] = useState<KnowledgeData[]>([]);
+  const [trainingKnowledgeData, setTrainingKnowledgeData] = useState<KnowledgeData[]>([]);
   const [timeline, setTimeline] = useState<any[]>([]);
   const [recommendations, setRecommendations] = useState<any>(null);
   const [selectedModule, setSelectedModule] = useState<KnowledgeData | null>(null);
+  const [selectedTrainingModule, setSelectedTrainingModule] = useState<KnowledgeData | null>(null);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -117,6 +125,17 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
           status: k.mastery >= 80 ? 'high' : k.mastery >= 50 ? 'medium' : 'low' as const,
         }));
         setKnowledgeData(transformed);
+      }
+
+      // 转换练习知识点数据
+      if (overviewRes?.overview?.trainingKnowledgeMastery) {
+        const trainingTransformed = overviewRes.overview.trainingKnowledgeMastery.map((k: any) => ({
+          knowledgePoint: k.knowledgePoint,
+          mastery: k.mastery,
+          stability: k.recentAccuracy,
+          status: k.mastery >= 80 ? 'high' : k.mastery >= 50 ? 'medium' : 'low' as const,
+        }));
+        setTrainingKnowledgeData(trainingTransformed);
       }
 
       setRecommendations(recommendationsRes);
@@ -269,8 +288,10 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
         />
       )}
 
-      {/* Score Improvement Summary */}
-      <section className="bg-surface-container-lowest rounded-[2rem] p-8 relative overflow-hidden ambient-shadow">
+      {/* 上段：诊断测评数据 */}
+      <div className="space-y-8">
+        {/* 成长轨迹 */}
+        <section className="bg-surface-container-lowest rounded-[2rem] p-8 relative overflow-hidden ambient-shadow">
         <div className="absolute -right-8 -top-8 w-40 h-40 bg-gradient-to-br from-primary/10 to-primary-container/10 rounded-full blur-3xl pointer-events-none"></div>
 
         {(() => {
@@ -385,10 +406,10 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
             <h4 className="text-sm font-bold text-on-surface-variant">数据可信度</h4>
           </div>
           <p className="text-lg font-display font-black text-primary">
-            {overview?.overview?.dataReliability === 'high' ? '高'
-             : overview?.overview?.dataReliability === 'medium' ? '中'
-             : overview?.overview?.dataReliability ? '低' : '-'}
-            {overview?.overview?.dataReliability && ` (${overview.overview.totalAttempts}次练习)`}
+            {overview?.overview?.diagnosticDataReliability === 'high' ? '高'
+             : overview?.overview?.diagnosticDataReliability === 'medium' ? '中'
+             : overview?.overview?.diagnosticDataReliability ? '低' : '-'}
+            {overview?.overview?.diagnosticDataReliability && ` (${overview.overview.diagnosticAttemptsCount}次诊断测评)`}
           </p>
         </div>
         <div className="bg-surface-container-lowest rounded-[2rem] p-6 ambient-shadow">
@@ -397,7 +418,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
             <h4 className="text-sm font-bold text-on-surface-variant">波动范围</h4>
           </div>
           <p className="text-lg font-display font-black text-on-surface">
-            ±{overview?.overview?.volatilityRange ?? '-'} 分
+            ±{overview?.overview?.diagnosticVolatilityRange ?? '-'} 分
           </p>
         </div>
       </section>
@@ -480,8 +501,11 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
           </>
         )}
       </section>
+      </div>
 
-      {/* Weekly Progress Timeline */}
+      {/* 下段：练习数据 */}
+      <div className="space-y-8">
+        {/* Weekly Progress Timeline */}
       <section className="space-y-4">
         <h3 className="text-xl font-display font-black text-on-surface">本周练习趋势</h3>
         {!timeline || timeline.length === 0 ? (
@@ -522,6 +546,75 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
             </ResponsiveContainer>
           </div>
         </div>
+        )}
+      </section>
+
+      {/* 知识练习分布 */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-display font-black text-on-surface">知识练习分布</h3>
+          <span className="text-xs font-bold text-on-surface-variant">点击查看详情</span>
+        </div>
+
+        {/* 空数据状态 */}
+        {(!trainingKnowledgeData || trainingKnowledgeData.length === 0) ? (
+          <div className="bg-surface-container-low rounded-3xl p-6 text-center">
+            <MaterialIcon icon="school" className="text-on-surface-variant mx-auto mb-2" style={{ fontSize: '48px' }} />
+            <p className="text-on-surface-variant">开始练习后将显示知识点掌握情况</p>
+          </div>
+        ) : (
+          <>
+            <div className="bg-surface-container-low rounded-3xl p-6">
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={trainingKnowledgeData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.1} />
+                    <XAxis dataKey="knowledgePoint" tick={{ fontSize: 10 }} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
+                    <Tooltip
+                      formatter={(value) => [`${value}%`, '掌握度']}
+                      contentStyle={{ borderRadius: '12px', border: 'none' }}
+                    />
+                    <Bar
+                      dataKey="mastery"
+                      fill="var(--color-secondary)"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Knowledge Items */}
+            <div className="grid grid-cols-2 gap-3">
+              {trainingKnowledgeData.map((item, index) => (
+                <motion.button
+                  key={item.knowledgePoint}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  onClick={() => setSelectedTrainingModule(item)}
+                  className={cn(
+                    "p-4 rounded-2xl text-left transition-all",
+                    selectedTrainingModule?.knowledgePoint === item.knowledgePoint
+                      ? "bg-secondary-container text-on-secondary-container scale-105"
+                      : "bg-surface-container hover:bg-surface-container-high"
+                  )}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-bold">{item.knowledgePoint}</span>
+                    <span className="text-lg font-display font-black">{item.mastery}%</span>
+                  </div>
+                  <div className="w-full bg-surface-variant rounded-full h-1.5">
+                    <div
+                      className="bg-secondary rounded-full h-1.5"
+                      style={{ width: `${item.mastery}%` }}
+                    />
+                  </div>
+                </motion.button>
+              ))}
+            </div>
+          </>
         )}
       </section>
 
@@ -576,6 +669,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
           </div>
         </section>
       )}
+      </div>
 
       <button
         onClick={onBack}
