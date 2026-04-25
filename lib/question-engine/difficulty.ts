@@ -460,6 +460,83 @@ export const DIFFICULTY_CONFIG: Record<string, Record<number, DifficultyLevelCon
       maxVal: { type: 'int', min: 31, max: 60 },
     },
   },
+
+  // 二次根式乘法（第16章）
+  sqrt_multiply: {
+    1: {
+      a: { type: 'int', min: 1, max: 9 },           // 小的完全平方数
+      b: { type: 'int', min: 1, max: 9 },
+    },
+    2: {
+      a: { type: 'int', min: 1, max: 16 },          // 包含更多完全平方数
+      b: { type: 'int', min: 1, max: 16 },
+    },
+    3: {
+      a: { type: 'int', min: 1, max: 25 },
+      b: { type: 'int', min: 1, max: 25 },
+    },
+    4: {
+      a: { type: 'int', min: 2, max: 36 },
+      b: { type: 'int', min: 2, max: 36 },
+    },
+    5: {
+      a: { type: 'int', min: 2, max: 49 },
+      b: { type: 'int', min: 2, max: 49 },
+    },
+  },
+
+  // 二次根式除法（第16章）
+  sqrt_divide: {
+    1: {
+      a: { type: 'int', min: 1, max: 9 },           // 被除数：小的完全平方数
+      b: { type: 'int', min: 1, max: 4 },           // 除数：1, 2, 3, 4
+    },
+    2: {
+      a: { type: 'int', min: 1, max: 16 },
+      b: { type: 'int', min: 1, max: 9 },
+    },
+    3: {
+      a: { type: 'int', min: 1, max: 25 },
+      b: { type: 'int', min: 2, max: 16 },
+    },
+    4: {
+      a: { type: 'int', min: 2, max: 36 },
+      b: { type: 'int', min: 2, max: 25 },
+    },
+    5: {
+      a: { type: 'int', min: 2, max: 49 },
+      b: { type: 'int', min: 2, max: 36 },
+    },
+  },
+
+  // 二次根式加减混合运算（第16章）
+  sqrt_add_subtract: {
+    1: {
+      a: { type: 'int', min: 1, max: 3 },           // 第一个系数：1-3
+      b: { type: 'int', min: 2, max: 3 },           // 根号内：2-3（最简单的）
+      c: { type: 'int', min: 1, max: 3 },           // 第二个系数：1-3
+    },
+    2: {
+      a: { type: 'int', min: 1, max: 5 },
+      b: { type: 'int', min: 2, max: 7 },           // 扩大根号内范围
+      c: { type: 'int', min: 1, max: 5 },
+    },
+    3: {
+      a: { type: 'int', min: -3, max: 3 },          // 引入负数
+      b: { type: 'int', min: 2, max: 10 },
+      c: { type: 'int', min: -3, max: 3 },
+    },
+    4: {
+      a: { type: 'int', min: -5, max: 5 },          // 更大范围的系数
+      b: { type: 'int', min: 2, max: 15 },
+      c: { type: 'int', min: -5, max: 5 },
+    },
+    5: {
+      a: { type: 'int', min: -10, max: 10 },        // 最大范围的系数
+      b: { type: 'int', min: 2, max: 30 },
+      c: { type: 'int', min: -10, max: 10 },
+    },
+  },
 };
 
 /**

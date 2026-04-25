@@ -18,6 +18,9 @@ import { QuadraticAreaTemplate } from './chapter19/quadratic_area';
 import { CentralTendencyTemplate } from './chapter20/central_tendency';
 import { DataStddevTemplate } from './chapter20/data_stddev';
 import { DataVarianceTemplate } from './chapter20/data_variance';
+import { SqrtMultiplyTemplate } from './chapter16/sqrt_multiply';
+import { SqrtDivideTemplate } from './chapter16/sqrt_divide';
+import { SqrtAddSubtractTemplate } from './chapter16/sqrt_add_subtract';
 
 /**
  * 模板注册表
@@ -49,6 +52,11 @@ export const TEMPLATE_REGISTRY: Record<string, QuestionTemplate> = {
   central_tendency: CentralTendencyTemplate,
   data_stddev: DataStddevTemplate,
   data_variance: DataVarianceTemplate,
+
+  // 二次根式（第16章）
+  sqrt_multiply: SqrtMultiplyTemplate,
+  sqrt_divide: SqrtDivideTemplate,
+  sqrt_add_subtract: SqrtAddSubtractTemplate,
 };
 
 /**
