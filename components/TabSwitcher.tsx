@@ -4,7 +4,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 
-export type TabValue = 'growth' | 'practice';
+export type TabValue = 'growth' | 'path' | 'practice';
 
 export interface TabOption {
   value: TabValue;
