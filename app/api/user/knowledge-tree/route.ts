@@ -109,8 +109,8 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // 如果不展开，按进度裁剪
-    if (!expand && user.studyProgress !== undefined && user.studyProgress < 100) {
+    // 如果不展开，按进度裁剪（progress=0时显示所有章节，避免只显示空章节）
+    if (!expand && user.studyProgress !== undefined && user.studyProgress > 0 && user.studyProgress < 100) {
       const totalChapters = chapters.length;
       const maxChapterIndex = Math.ceil((user.studyProgress / 100) * totalChapters);
       chapters = chapters.slice(0, maxChapterIndex + 1);
