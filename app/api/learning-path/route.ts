@@ -50,7 +50,26 @@ export async function GET(): Promise<NextResponse> {
       );
     }
 
-    // 3. Parse knowledgeData
+    // 3. Get user's current textbook for filtering
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { selectedTextbookId: true }
+    });
+
+    // Get valid knowledge points in current textbook
+    let validKpIds = new Set<string>();
+    if (user?.selectedTextbookId) {
+      const validKps = await prisma.knowledgePoint.findMany({
+        where: {
+          chapter: { textbookId: user.selectedTextbookId },
+          deletedAt: null
+        },
+        select: { id: true }
+      });
+      validKpIds = new Set(validKps.map(kp => kp.id));
+    }
+
+    // 4. Parse knowledgeData and filter invalid nodes
     let knowledgeNodes: Array<{
       nodeId: string;
       priority: number;
@@ -60,7 +79,9 @@ export async function GET(): Promise<NextResponse> {
     }>;
 
     try {
-      knowledgeNodes = JSON.parse(activePath.knowledgeData);
+      const allNodes = JSON.parse(activePath.knowledgeData);
+      // Filter out nodes not in current textbook
+      knowledgeNodes = allNodes.filter((node: { nodeId: string }) => validKpIds.has(node.nodeId));
     } catch (error) {
       return NextResponse.json(
         { error: '学习路径数据格式错误' },
@@ -68,7 +89,14 @@ export async function GET(): Promise<NextResponse> {
       );
     }
 
-    // 4. Get knowledge point names for all nodes
+    if (knowledgeNodes.length === 0) {
+      return NextResponse.json(
+        { error: '未找到活跃的学习路径' },
+        { status: 404 }
+      );
+    }
+
+    // 5. Get knowledge point names for valid nodes
     const nodeIds = knowledgeNodes.map((node) => node.nodeId);
     const knowledgePoints = await prisma.knowledgePoint.findMany({
       where: {
@@ -83,7 +111,7 @@ export async function GET(): Promise<NextResponse> {
     const kpMap = new Map(knowledgePoints.map((kp) => [kp.id, kp.name]));
     const nameToIdMap = new Map(knowledgePoints.map((kp) => [kp.name, kp.id]));
 
-    // 5. Batch fetch all userKnowledge records to avoid N+1 query
+    // 6. Batch fetch all userKnowledge records to avoid N+1 query
     const allUserKnowledge = await prisma.userKnowledge.findMany({
       where: { userId },
       select: {
@@ -141,7 +169,7 @@ export async function GET(): Promise<NextResponse> {
       }
     }
 
-    // 6. Build roadmap with mastery and status
+    // 7. Build roadmap with mastery and status
     // 使用与生成路径相同的阈值 (0.9)，确保一致性
     const MASTERY_THRESHOLD = 0.9;
 
@@ -181,7 +209,7 @@ export async function GET(): Promise<NextResponse> {
       });
     }
 
-    // 7. Calculate weekly summary (natural week: Monday 00:00:00 to now)
+    // 8. Calculate weekly summary (natural week: Monday 00:00:00 to now)
     const now = new Date();
     const dayOfWeek = now.getDay();
     const startOfWeek = new Date(now);
@@ -238,12 +266,12 @@ export async function GET(): Promise<NextResponse> {
       }
     }
 
-    // Filter knowledge points with >= 3 practice attempts
+    // Filter knowledge points with >= 3 practice attempts AND in current textbook
     const practicedKnowledgePoints = Array.from(knowledgePointPracticeCount.entries())
-      .filter(([_, count]) => count >= 3)
+      .filter(([kp, count]) => count >= 3 && validKpIds.has(kp))
       .map(([kp]) => kp);
 
-    // Return unique knowledge point count
+    // Return unique knowledge point count (only from current textbook)
     const practicedCount = new Set(practicedKnowledgePoints).size;
 
     // 统计路径内已掌握的知识点（保持数据一致性）
@@ -264,15 +292,6 @@ export async function GET(): Promise<NextResponse> {
 
     // 8. Calculate currentIndex for path response
     const currentIndexValue = roadmap.findIndex(item => item.status === 'current');
-
-    // Debug log
-    console.log('[learning-path] Response:', {
-      userId,
-      roadmapLength: roadmap.length,
-      completedCount: masteredCount,
-      practicedKnowledgePoints,
-      roadmapItems: roadmap.map(r => ({ name: r.name, status: r.status, mastery: r.mastery }))
-    });
 
     // 9. Return response with cache disabled
     return NextResponse.json({

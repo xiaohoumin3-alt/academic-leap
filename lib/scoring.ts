@@ -40,6 +40,15 @@ export function calculateEquivalentScore(
   answers: AnswerRecord[],
   knowledgePoints: KnowledgePointInfo[]
 ): ScoreResult {
+  // Handle empty knowledge points array
+  if (knowledgePoints.length === 0) {
+    return {
+      score: 0,
+      range: [0, 0] as [number, number],
+      knowledgeLevels: {},
+    };
+  }
+
   // 计算每个知识点的掌握率和等级
   const knowledgeMasteries: Record<string, KnowledgeMastery> = {};
 
@@ -62,10 +71,16 @@ export function calculateEquivalentScore(
   let totalWeightedScore = 0;
   const totalWeights = knowledgePoints.reduce((sum, kp) => sum + kp.weight, 0);
 
+  // 当总权重为0时（所有权重未设置），使用均匀分布
+  const useEqualWeight = totalWeights === 0;
+  const equalWeight = useEqualWeight ? 1.0 / knowledgePoints.length : 0;
+
   for (const kp of knowledgePoints) {
     const mastery = knowledgeMasteries[kp.name]?.mastery ?? 0;
     // 权重归一化：(weight / totalWeights) × mastery × 100
-    totalWeightedScore += (kp.weight / totalWeights) * mastery * 100;
+    // 当 totalWeights 为 0 时，使用均匀权重
+    const normalizedWeight = useEqualWeight ? equalWeight : kp.weight / totalWeights;
+    totalWeightedScore += normalizedWeight * mastery * 100;
   }
 
   // 波动修正（2-5分，根据答题稳定度）
