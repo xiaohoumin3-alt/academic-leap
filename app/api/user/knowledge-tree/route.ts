@@ -142,12 +142,15 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    // 计算实际启用的知识点数（只计算当前教材中存在的知识点）
+    const enabledKpIds = new Set(chaptersData.flatMap(c => c.knowledgePoints).filter(kp => kp.enabled).map(kp => kp.id));
+
     return NextResponse.json({
       success: true,
       data: {
         textbook,
         chapters: chaptersData,
-        enabledCount: enabledIds.size,
+        enabledCount: enabledKpIds.size,
         totalCount: allKnowledgePoints,
       }
     });
