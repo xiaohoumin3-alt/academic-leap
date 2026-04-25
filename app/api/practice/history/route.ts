@@ -13,12 +13,22 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const limit = parseInt(searchParams.get('limit') || '20');
+    const mode = searchParams.get('mode');
+
+    // 构建查询条件
+    const where: { userId: string; completedAt: { not: null }; mode?: 'training' } = {
+      userId: session.user.id,
+      completedAt: { not: null },
+    };
+
+    // 仅在指定 mode=training 时过滤
+    if (mode === 'training') {
+      where.mode = 'training';
+    }
+    // mode 为 null 或其他值时返回全部记录
 
     const attempts = await prisma.attempt.findMany({
-      where: {
-        userId: session.user.id,
-        completedAt: { not: null },
-      },
+      where,
       orderBy: { completedAt: 'desc' },
       take: limit,
       include: {
