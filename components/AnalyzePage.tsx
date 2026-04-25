@@ -358,46 +358,6 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
         })()}
       </section>
 
-      {/* 练习统计 */}
-      <section className="bg-surface-container-lowest rounded-[2rem] p-8">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-display font-black text-on-surface">练习状态</h3>
-          <span className="text-[10px] px-3 py-1 bg-secondary-container text-on-secondary-container rounded-full font-bold">
-            日常巩固
-          </span>
-        </div>
-
-        <div className="grid grid-cols-3 gap-4">
-          <div className="text-center p-4 bg-surface-container rounded-2xl">
-            <p className="text-2xl font-display font-black text-secondary">
-              {(() => {
-                const stats = getPracticeStats(overview?.overview);
-                return stats.correctRate > 0 ? stats.correctRate + '%' : '-';
-              })()}
-            </p>
-            <p className="text-[10px] text-on-surface-variant mt-1">正确率</p>
-          </div>
-          <div className="text-center p-4 bg-surface-container rounded-2xl">
-            <p className="text-2xl font-display font-black text-secondary">
-              {(() => {
-                const stats = getPracticeStats(overview?.overview);
-                return stats.totalQuestions > 0 ? stats.totalQuestions : '-';
-              })()}
-            </p>
-            <p className="text-[10px] text-on-surface-variant mt-1">总题数</p>
-          </div>
-          <div className="text-center p-4 bg-surface-container rounded-2xl">
-            <p className="text-2xl font-display font-black text-secondary">
-              {(() => {
-                const stats = getPracticeStats(overview?.overview);
-                return stats.totalMinutes > 0 ? stats.totalMinutes : '-';
-              })()}
-            </p>
-            <p className="text-[10px] text-on-surface-variant mt-1">分钟</p>
-          </div>
-        </div>
-      </section>
-
       {/* 数据可信度和波动范围 */}
       <section className="grid grid-cols-2 gap-6">
         <div className="bg-surface-container-lowest rounded-[2rem] p-6 ambient-shadow">
@@ -505,6 +465,46 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
 
       {/* 下段：练习数据 */}
       <div className="space-y-8">
+        {/* 练习状态 */}
+        <section className="bg-surface-container-lowest rounded-[2rem] p-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-display font-black text-on-surface">练习状态</h3>
+            <span className="text-[10px] px-3 py-1 bg-secondary-container text-on-secondary-container rounded-full font-bold">
+              日常巩固
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center p-4 bg-surface-container rounded-2xl">
+              <p className="text-2xl font-display font-black text-secondary">
+                {(() => {
+                  const stats = getPracticeStats(overview?.overview);
+                  return stats.correctRate > 0 ? stats.correctRate + '%' : '-';
+                })()}
+              </p>
+              <p className="text-[10px] text-on-surface-variant mt-1">正确率</p>
+            </div>
+            <div className="text-center p-4 bg-surface-container rounded-2xl">
+              <p className="text-2xl font-display font-black text-secondary">
+                {(() => {
+                  const stats = getPracticeStats(overview?.overview);
+                  return stats.totalQuestions > 0 ? stats.totalQuestions : '-';
+                })()}
+              </p>
+              <p className="text-[10px] text-on-surface-variant mt-1">总题数</p>
+            </div>
+            <div className="text-center p-4 bg-surface-container rounded-2xl">
+              <p className="text-2xl font-display font-black text-secondary">
+                {(() => {
+                  const stats = getPracticeStats(overview?.overview);
+                  return stats.totalMinutes > 0 ? stats.totalMinutes : '-';
+                })()}
+              </p>
+              <p className="text-[10px] text-on-surface-variant mt-1">分钟</p>
+            </div>
+          </div>
+        </section>
+
         {/* Weekly Progress Timeline */}
       <section className="space-y-4">
         <h3 className="text-xl font-display font-black text-on-surface">本周练习趋势</h3>
