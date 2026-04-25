@@ -86,20 +86,20 @@ export const DIFFICULTY_CONFIG: Record<string, Record<number, DifficultyLevelCon
       b: { type: 'int', min: 4, max: 8 },
     },
     2: {
-      a: { type: 'int', min: 3, max: 8 },
-      b: { type: 'int', min: 4, max: 10 },
+      a: { type: 'int', min: 5, max: 10 },
+      b: { type: 'int', min: 6, max: 12 },
     },
     3: {
-      a: { type: 'int', min: 3, max: 10 },
-      b: { type: 'int', min: 4, max: 12 },
+      a: { type: 'int', min: 7, max: 14 },
+      b: { type: 'int', min: 8, max: 16 },
     },
     4: {
-      a: { type: 'int', min: 3, max: 12 },
-      b: { type: 'int', min: 4, max: 15 },
+      a: { type: 'int', min: 9, max: 18 },
+      b: { type: 'int', min: 10, max: 20 },
     },
     5: {
-      a: { type: 'int', min: 3, max: 15 },
-      b: { type: 'int', min: 4, max: 18 },
+      a: { type: 'int', min: 12, max: 24 },
+      b: { type: 'int', min: 13, max: 26 },
     },
   },
 
