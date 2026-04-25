@@ -27,6 +27,8 @@ interface PracticeStatsTabProps {
   recommendations: RecommendationsData | null;
   selectedTrainingModule: KnowledgeData | null;
   setSelectedTrainingModule: (module: KnowledgeData | null) => void;
+  onOpenHistory?: () => void;
+  onOpenMistakes?: () => void;
 }
 
 const PracticeStatsTab: React.FC<PracticeStatsTabProps> = ({
@@ -36,6 +38,8 @@ const PracticeStatsTab: React.FC<PracticeStatsTabProps> = ({
   recommendations,
   selectedTrainingModule,
   setSelectedTrainingModule,
+  onOpenHistory,
+  onOpenMistakes,
 }) => {
   const getPracticeStats = () => ({
     avgScore: overview?.trainingAvgScore || 0,
@@ -205,6 +209,31 @@ const PracticeStatsTab: React.FC<PracticeStatsTabProps> = ({
           </div>
         </section>
       )}
+
+      {/* 练习记录和错题本入口 */}
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={onOpenHistory}
+          className="bg-surface-container-low rounded-2xl p-4 text-left hover:bg-surface-container transition-colors"
+        >
+          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+            <MaterialIcon icon="history" className="text-primary" style={{ fontSize: '22px' }} />
+          </div>
+          <p className="font-medium text-on-surface mb-1">练习记录</p>
+          <p className="text-xs text-on-surface-variant">查看历史练习</p>
+        </button>
+
+        <button
+          onClick={onOpenMistakes}
+          className="bg-surface-container-low rounded-2xl p-4 text-left hover:bg-surface-container transition-colors"
+        >
+          <div className="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center mb-3">
+            <MaterialIcon icon="bookmark" className="text-on-secondary-container" style={{ fontSize: '22px' }} />
+          </div>
+          <p className="font-medium text-on-surface mb-1">错题本</p>
+          <p className="text-xs text-on-surface-variant">查看错题收藏</p>
+        </button>
+      </div>
     </div>
   );
 };
