@@ -18,11 +18,7 @@ interface WeeklySummary {
   weakCount: number;
 }
 
-interface LearningPathTabProps {
-  onNavigatePractice?: () => void;
-}
-
-export default function LearningPathTab({ onNavigatePractice }: LearningPathTabProps) {
+export default function LearningPathTab() {
   const [path, setPath] = useState<{ id: string; name: string; status: string; currentIndex: number } | null>(null);
   const [roadmap, setRoadmap] = useState<RoadmapItem[]>([]);
   const [weeklySummary, setWeeklySummary] = useState<WeeklySummary | null>(null);

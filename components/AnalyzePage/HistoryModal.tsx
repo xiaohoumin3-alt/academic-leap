@@ -15,6 +15,19 @@ interface Attempt {
     stepNumber: number;
     isCorrect: boolean;
     duration: number;
+    userAnswer?: string;
+    questionStep?: {
+      questionId?: string;
+      question?: {
+        id: string;
+        type: string;
+        difficulty: number;
+        content: any;
+        answer: string;
+        hint: string;
+        knowledgePoints: string;
+      };
+    };
   }>;
 }
 
@@ -26,6 +39,7 @@ interface HistoryModalProps {
 export default function HistoryModal({ isOpen, onClose }: HistoryModalProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
 
   useEffect(() => {
@@ -36,14 +50,19 @@ export default function HistoryModal({ isOpen, onClose }: HistoryModalProps) {
 
   const loadHistory = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/practice/history?mode=training&limit=100');
       const data = await res.json();
       if (data.attempts) {
         setAttempts(data.attempts);
       }
+      if (data.error) {
+        setError(data.error);
+      }
     } catch (err) {
       console.error('加载练习记录失败:', err);
+      setError('加载失败，请稍后重试');
     } finally {
       setLoading(false);
     }
@@ -110,6 +129,19 @@ export default function HistoryModal({ isOpen, onClose }: HistoryModalProps) {
                 <div className="flex flex-col items-center justify-center h-full gap-4">
                   <div className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
                   <p className="font-medium text-on-surface-variant">加载中...</p>
+                </div>
+              ) : error ? (
+                <div className="flex flex-col items-center justify-center h-full gap-4">
+                  <div className="w-20 h-20 rounded-full bg-error-container flex items-center justify-center">
+                    <MaterialIcon icon="error" className="text-on-error-container" style={{ fontSize: '40px' }} />
+                  </div>
+                  <p className="text-error">{error}</p>
+                  <button
+                    onClick={loadHistory}
+                    className="bg-primary text-on-primary rounded-full py-3 px-6 font-medium"
+                  >
+                    重试
+                  </button>
                 </div>
               ) : attempts.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full gap-4">
