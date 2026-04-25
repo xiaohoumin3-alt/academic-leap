@@ -164,6 +164,15 @@ export default function MePage() {
           </div>
         </div>
 
+        {/* 设置入口 */}
+        <button
+          onClick={() => router.push('/console')}
+          className="w-full py-4 text-on-surface font-medium hover:bg-surface-container-high rounded-2xl transition-colors flex items-center justify-center gap-2"
+        >
+          <MaterialIcon icon="settings" style={{ fontSize: '20px' }} />
+          设置
+        </button>
+
         {/* 退出登录 */}
         <button
           onClick={() => {
@@ -172,7 +181,7 @@ export default function MePage() {
               router.refresh();
             });
           }}
-          className="w-full mt-6 py-4 text-error font-medium hover:bg-error-container/10 rounded-2xl transition-colors flex items-center justify-center gap-2"
+          className="w-full mt-3 py-4 text-error font-medium hover:bg-error-container/10 rounded-2xl transition-colors flex items-center justify-center gap-2"
         >
           <MaterialIcon icon="logout" style={{ fontSize: '20px' }} />
           退出登录
