@@ -87,29 +87,17 @@ export async function GET(): Promise<NextResponse> {
     const allUserKnowledge = await prisma.userKnowledge.findMany({
       where: { userId },
       select: {
-        knowledgePoint: true,
+        knowledgePointId: true,
         mastery: true,
       },
     });
 
-    // Build mastery map with both ID and name lookup for backward compatibility
-    // NOTE: userKnowledge.knowledgePoint may store either ID or name (legacy data)
+    // Build mastery map using knowledgePointId (the new standard)
     const masteryMapById = new Map<string, number>();
-    const masteryMapByName = new Map<string, number>();
 
     for (const uk of allUserKnowledge) {
-      // Check if knowledgePoint is an ID (looks like a cuid) or a name
-      const isId = uk.knowledgePoint.startsWith('c') && uk.knowledgePoint.length >= 20;
-
-      if (isId) {
-        masteryMapById.set(uk.knowledgePoint, uk.mastery);
-      } else {
-        masteryMapByName.set(uk.knowledgePoint, uk.mastery);
-        // Also map by ID if we can find the corresponding ID
-        const id = nameToIdMap.get(uk.knowledgePoint);
-        if (id) {
-          masteryMapById.set(id, uk.mastery);
-        }
+      if (uk.knowledgePointId) {
+        masteryMapById.set(uk.knowledgePointId, uk.mastery);
       }
     }
 

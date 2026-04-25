@@ -127,16 +127,17 @@ model AttemptStep {
 
 // 用户知识点掌握
 model UserKnowledge {
-  id             String    @id @default(cuid())
-  userId         String
-  knowledgePoint String
-  mastery        Float     // 0-1 掌握度
-  lastPractice   DateTime  @default(now())
-  practiceCount  Int       @default(0)
+  id               String    @id @default(cuid())
+  userId           String
+  knowledgePointId String    // 外键，关联 KnowledgePoint.id
+  mastery          Float     // 0-1 掌握度
+  lastPractice     DateTime  @default(now())
+  practiceCount    Int       @default(0)
 
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  knowledgePoint   KnowledgePoint @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, knowledgePoint])
+  @@unique([userId, knowledgePointId])
 }
 
 // OCR识别任务
@@ -278,6 +279,7 @@ model KnowledgePoint {
   concept     KnowledgeConcept     @relation(fields: [conceptId], references: [id])
   histories   KnowledgePointHistory[]
   templates   Template[]
+  userKnowledge UserKnowledge[]     // 反向关系
 }
 
 // 知识点变更历史

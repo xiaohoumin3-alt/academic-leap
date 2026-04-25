@@ -422,8 +422,8 @@ export async function GET(req: NextRequest) {
       },
       dailyData,
       topKnowledge: knowledge.map(
-        (k: { knowledgePoint: string; mastery: number }) => ({
-          knowledgePoint: k.knowledgePoint,
+        (k: { knowledgePoint: string | null; mastery: number }) => ({
+          knowledgePoint: k.knowledgePoint || '',
           mastery: Math.round(k.mastery * 100),
         }),
       ),

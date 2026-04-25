@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
         title: '重点练习',
         description: `建议重点练习以下薄弱知识点：${weakKnowledge
           .slice(0, 3)
-          .map((k: { knowledgePoint: string }) => k.knowledgePoint)
+          .map((k: { knowledgePoint: string | null }) => k.knowledgePoint || '')
           .join('、')}`,
         priority: 1,
       });
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
         title: '巩固提升',
         description: `继续巩固以下知识点：${learningKnowledge
           .slice(0, 2)
-          .map((k: { knowledgePoint: string }) => k.knowledgePoint)
+          .map((k: { knowledgePoint: string | null }) => k.knowledgePoint || '')
           .join('、')}`,
         priority: 2,
       });
@@ -132,8 +132,8 @@ export async function GET(req: NextRequest) {
     }
 
     // 今日练习建议
-    const todayRecommendations = weakKnowledge.slice(0, 3).map((k: { knowledgePoint: string }) => ({
-      knowledgePoint: k.knowledgePoint,
+    const todayRecommendations = weakKnowledge.slice(0, 3).map((k: { knowledgePoint: string | null }) => ({
+      knowledgePoint: k.knowledgePoint || '',
       suggestedCount: 5,
       reason: '该知识点掌握度较低，需要重点练习',
     }));
@@ -142,8 +142,8 @@ export async function GET(req: NextRequest) {
       recommendations: recommendations.sort((a, b) => a.priority - b.priority),
       todayPractice: todayRecommendations,
       insights: {
-        weakPoints: weakKnowledge.map((k: { knowledgePoint: string }) => k.knowledgePoint),
-        strongPoints: knowledge.filter((k: { mastery: number }) => k.mastery >= 0.8).map((k: { knowledgePoint: string }) => k.knowledgePoint),
+        weakPoints: weakKnowledge.map((k: { knowledgePoint: string | null }) => k.knowledgePoint || ''),
+        strongPoints: knowledge.filter((k: { mastery: number }) => k.mastery >= 0.8).map((k: { knowledgePoint: string | null }) => k.knowledgePoint || ''),
         avgScore: Math.round(avgRecentScore),
         speedLevel: speedAnalysis.level,
       },

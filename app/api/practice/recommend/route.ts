@@ -71,9 +71,10 @@ export async function GET(req: NextRequest) {
     const difficultyLevel = Math.min(5, Math.max(1, Math.round(difficultyMultiplier)));
 
     // 查找该知识点的题目
+    const kpId = weakestKnowledge.id || '';
     const questions = await prisma.question.findMany({
       where: {
-        knowledgePoints: { contains: weakestKnowledge.knowledgePoint },
+        knowledgePoints: { contains: kpId },
       },
       take: 3, // 推荐3道题
     });
