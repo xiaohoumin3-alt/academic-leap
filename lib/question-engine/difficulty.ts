@@ -310,6 +310,74 @@ export const DIFFICULTY_CONFIG: Record<string, Record<number, DifficultyLevelCon
       q: { type: 'int', min: -15, max: 15 },
     },
   },
+
+  // 一元二次方程应用题 - 平均增长率（第19章）
+  quadratic_growth: {
+    1: {
+      r: { type: 'int', min: 5, max: 15 },          // 增长率 5%-15%
+      initialValue: { type: 'int', min: 100, max: 200 },  // 初值 100-200
+    },
+    2: {
+      r: { type: 'int', min: 8, max: 20 },          // 增长率 8%-20%
+      initialValue: { type: 'int', min: 100, max: 500 },  // 初值 100-500
+    },
+    3: {
+      r: { type: 'int', min: 10, max: 25 },         // 增长率 10%-25%
+      initialValue: { type: 'int', min: 100, max: 1000 }, // 初值 100-1000
+    },
+    4: {
+      r: { type: 'int', min: 12, max: 30 },         // 增长率 12%-30%
+      initialValue: { type: 'int', min: 200, max: 2000 }, // 初值 200-2000
+    },
+    5: {
+      r: { type: 'int', min: 15, max: 40 },         // 增长率 15%-40%
+      initialValue: { type: 'int', min: 500, max: 5000 }, // 初值 500-5000
+    },
+  },
+
+  // 一元二次方程面积应用题（第19章）
+  quadratic_area: {
+    1: {
+      width: { type: 'int', min: 2, max: 5 },              // 宽：2-5
+      length: { type: 'int', min: 3, max: 8 },             // 长：3-8
+      lengthRelation: { type: 'int', min: 2, max: 2 },     // 长是宽的2倍
+      side: { type: 'int', min: 3, max: 6 },               // 边长：3-6
+      increase: { type: 'int', min: 1, max: 2 },           // 增加1-2
+      decrease: { type: 'int', min: 1, max: 2 },           // 减少1-2
+    },
+    2: {
+      width: { type: 'int', min: 2, max: 8 },
+      length: { type: 'int', min: 4, max: 12 },
+      lengthRelation: { type: 'int', min: 2, max: 3 },     // 长是宽的2-3倍
+      side: { type: 'int', min: 4, max: 10 },
+      increase: { type: 'int', min: 1, max: 3 },
+      decrease: { type: 'int', min: 1, max: 3 },
+    },
+    3: {
+      width: { type: 'int', min: 3, max: 12 },
+      length: { type: 'int', min: 5, max: 18 },
+      lengthRelation: { type: 'int', min: 2, max: 4 },     // 长是宽的2-4倍
+      side: { type: 'int', min: 5, max: 15 },
+      increase: { type: 'int', min: 2, max: 4 },
+      decrease: { type: 'int', min: 2, max: 4 },
+    },
+    4: {
+      width: { type: 'int', min: 4, max: 15 },
+      length: { type: 'int', min: 6, max: 24 },
+      lengthRelation: { type: 'int', min: 2, max: 5 },     // 长是宽的2-5倍
+      side: { type: 'int', min: 6, max: 20 },
+      increase: { type: 'int', min: 2, max: 5 },
+      decrease: { type: 'int', min: 2, max: 5 },
+    },
+    5: {
+      width: { type: 'int', min: 5, max: 20 },
+      length: { type: 'int', min: 8, max: 30 },
+      lengthRelation: { type: 'int', min: 2, max: 6 },     // 长是宽的2-6倍
+      side: { type: 'int', min: 8, max: 25 },
+      increase: { type: 'int', min: 3, max: 6 },
+      decrease: { type: 'int', min: 3, max: 6 },
+    },
+  },
 };
 
 /**

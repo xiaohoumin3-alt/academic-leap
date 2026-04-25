@@ -13,6 +13,8 @@ import { QuadraticDirectRootTemplate } from './chapter19/quadratic_direct_root';
 import { QuadraticFormulaTemplate } from './chapter19/quadratic_formula';
 import { QuadraticCompleteSquareTemplate } from './chapter19/quadratic_complete_square';
 import { QuadraticFactorizeTemplate } from './chapter19/quadratic_factorize';
+import { QuadraticGrowthTemplate } from './chapter19/quadratic_growth';
+import { QuadraticAreaTemplate } from './chapter19/quadratic_area';
 
 /**
  * 模板注册表
@@ -37,6 +39,8 @@ export const TEMPLATE_REGISTRY: Record<string, QuestionTemplate> = {
   quadratic_formula: QuadraticFormulaTemplate,
   quadratic_complete_square: QuadraticCompleteSquareTemplate,
   quadratic_factorize: QuadraticFactorizeTemplate,
+  quadratic_growth: QuadraticGrowthTemplate,
+  quadratic_area: QuadraticAreaTemplate,
 };
 
 /**
