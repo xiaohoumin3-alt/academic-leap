@@ -24,6 +24,8 @@ import { SqrtPropertyTemplate } from './chapter16/sqrt_property';
 import { SqrtMultiplyTemplate } from './chapter16/sqrt_multiply';
 import { SqrtDivideTemplate } from './chapter16/sqrt_divide';
 import { SqrtAddSubtractTemplate } from './chapter16/sqrt_add_subtract';
+import { RhombusPropertyTemplate } from './chapter18/rhombus_property';
+import { RhombusVerifyTemplate } from './chapter18/rhombus_verify';
 
 /**
  * 模板注册表
@@ -63,6 +65,10 @@ export const TEMPLATE_REGISTRY: Record<string, QuestionTemplate> = {
   sqrt_multiply: SqrtMultiplyTemplate,
   sqrt_divide: SqrtDivideTemplate,
   sqrt_add_subtract: SqrtAddSubtractTemplate,
+
+  // 菱形（第18章）
+  rhombus_property: RhombusPropertyTemplate,
+  rhombus_verify: RhombusVerifyTemplate,
 };
 
 /**

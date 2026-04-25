@@ -624,6 +624,175 @@ export const DIFFICULTY_CONFIG: Record<string, Record<number, DifficultyLevelCon
       c: { type: 'int', min: -10, max: 10 },
     },
   },
+
+  // 菱形性质计算（第18章）
+  rhombus_property: {
+    1: {
+      side: { type: 'int', min: 3, max: 5 },           // 边长：3-5
+      diagonal1: { type: 'int', min: 4, max: 6 },      // 对角线1：4-6（偶数）
+      diagonal2: { type: 'int', min: 4, max: 6 },      // 对角线2：4-6（偶数）
+    },
+    2: {
+      side: { type: 'int', min: 4, max: 8 },
+      diagonal1: { type: 'int', min: 6, max: 10 },
+      diagonal2: { type: 'int', min: 6, max: 10 },
+    },
+    3: {
+      side: { type: 'int', min: 5, max: 10 },
+      diagonal1: { type: 'int', min: 8, max: 14 },
+      diagonal2: { type: 'int', min: 8, max: 14 },
+    },
+    4: {
+      side: { type: 'int', min: 6, max: 15 },
+      diagonal1: { type: 'int', min: 10, max: 20 },
+      diagonal2: { type: 'int', min: 10, max: 20 },
+    },
+    5: {
+      side: { type: 'int', min: 8, max: 20 },
+      diagonal1: { type: 'int', min: 12, max: 30 },
+      diagonal2: { type: 'int', min: 12, max: 30 },
+    },
+  },
+
+  // 菱形判定（第18章）
+  rhombus_verify: {
+    1: {
+      sideAB: { type: 'int', min: 3, max: 5 },        // 边长相等
+      sideBC: { type: 'int', min: 3, max: 5 },
+      sideCD: { type: 'int', min: 3, max: 5 },
+      sideDA: { type: 'int', min: 3, max: 5 },
+      isEqual: { type: 'int', min: 1, max: 1 },       // 四条边相等
+      parallelogram: { type: 'int', min: 1, max: 1 }, // 是平行四边形
+    },
+    2: {
+      sideAB: { type: 'int', min: 4, max: 7 },
+      sideBC: { type: 'int', min: 4, max: 7 },
+      sideCD: { type: 'int', min: 4, max: 7 },
+      sideDA: { type: 'int', min: 4, max: 7 },
+      isEqual: { type: 'int', min: 1, max: 1 },
+      parallelogram: { type: 'int', min: 1, max: 1 },
+    },
+    3: {
+      sideAB: { type: 'int', min: 5, max: 10 },
+      sideBC: { type: 'int', min: 5, max: 10 },
+      sideCD: { type: 'int', min: 5, max: 10 },
+      sideDA: { type: 'int', min: 5, max: 10 },
+      isEqual: { type: 'int', min: 1, max: 2 },       // 可能不相等
+      parallelogram: { type: 'int', min: 1, max: 1 },
+    },
+    4: {
+      sideAB: { type: 'int', min: 6, max: 15 },
+      sideBC: { type: 'int', min: 6, max: 15 },
+      sideCD: { type: 'int', min: 6, max: 15 },
+      sideDA: { type: 'int', min: 6, max: 15 },
+      isEqual: { type: 'int', min: 1, max: 2 },
+      parallelogram: { type: 'int', min: 1, max: 2 }, // 可能不是平行四边形
+    },
+    5: {
+      sideAB: { type: 'int', min: 8, max: 20 },
+      sideBC: { type: 'int', min: 8, max: 20 },
+      sideCD: { type: 'int', min: 8, max: 20 },
+      sideDA: { type: 'int', min: 8, max: 20 },
+      isEqual: { type: 'int', min: 0, max: 2 },       // 更多变化
+      parallelogram: { type: 'int', min: 0, max: 2 },
+    },
+  },
+
+  // 平行四边形判定（第18章）
+  parallelogram_verify: {
+    1: {
+      side1: { type: 'int', min: 3, max: 6 },
+      side2: { type: 'int', min: 4, max: 8 },
+      sideAB: { type: 'int', min: 3, max: 6 },
+      sideBC: { type: 'int', min: 4, max: 8 },
+      sideCD: { type: 'int', min: 3, max: 6 },
+      sideDA: { type: 'int', min: 4, max: 8 },
+    },
+    2: {
+      side1: { type: 'int', min: 4, max: 10 },
+      side2: { type: 'int', min: 5, max: 12 },
+      sideAB: { type: 'int', min: 4, max: 10 },
+      sideBC: { type: 'int', min: 5, max: 12 },
+      sideCD: { type: 'int', min: 4, max: 10 },
+      sideDA: { type: 'int', min: 5, max: 12 },
+    },
+    3: {
+      side1: { type: 'int', min: 5, max: 15 },
+      side2: { type: 'int', min: 6, max: 18 },
+      sideAB: { type: 'int', min: 5, max: 15 },
+      sideBC: { type: 'int', min: 6, max: 18 },
+      sideCD: { type: 'int', min: 5, max: 15 },
+      sideDA: { type: 'int', min: 6, max: 18 },
+    },
+    4: {
+      side1: { type: 'int', min: 6, max: 20 },
+      side2: { type: 'int', min: 8, max: 25 },
+      side3: { type: 'int', min: 4, max: 22 },
+      side4: { type: 'int', min: 6, max: 28 },
+      sideAB: { type: 'int', min: 6, max: 20 },
+      sideBC: { type: 'int', min: 8, max: 25 },
+      sideCD: { type: 'int', min: 6, max: 20 },
+      sideDA: { type: 'int', min: 8, max: 25 },
+    },
+    5: {
+      side1: { type: 'int', min: 8, max: 30 },
+      side2: { type: 'int', min: 10, max: 35 },
+      side3: { type: 'int', min: 5, max: 32 },
+      side4: { type: 'int', min: 8, max: 38 },
+      sideAB: { type: 'int', min: 8, max: 30 },
+      sideBC: { type: 'int', min: 10, max: 35 },
+      sideCD: { type: 'int', min: 8, max: 30 },
+      sideDA: { type: 'int', min: 10, max: 35 },
+    },
+  },
+
+  // 矩形性质计算（第18章）
+  rectangle_property: {
+    1: {
+      width: { type: 'int', min: 3, max: 5 },
+      height: { type: 'int', min: 4, max: 6 },
+    },
+    2: {
+      width: { type: 'int', min: 4, max: 8 },
+      height: { type: 'int', min: 5, max: 10 },
+    },
+    3: {
+      width: { type: 'int', min: 5, max: 12 },
+      height: { type: 'int', min: 6, max: 15 },
+    },
+    4: {
+      width: { type: 'int', min: 6, max: 16 },
+      height: { type: 'int', min: 8, max: 20 },
+    },
+    5: {
+      width: { type: 'int', min: 8, max: 24 },
+      height: { type: 'int', min: 10, max: 30 },
+    },
+  },
+
+  // 矩形判定（第18章）
+  rectangle_verify: {
+    1: {
+      width: { type: 'int', min: 3, max: 5 },
+      height: { type: 'int', min: 4, max: 6 },
+    },
+    2: {
+      width: { type: 'int', min: 4, max: 8 },
+      height: { type: 'int', min: 5, max: 10 },
+    },
+    3: {
+      width: { type: 'int', min: 5, max: 12 },
+      height: { type: 'int', min: 6, max: 15 },
+    },
+    4: {
+      width: { type: 'int', min: 6, max: 16 },
+      height: { type: 'int', min: 8, max: 20 },
+    },
+    5: {
+      width: { type: 'int', min: 8, max: 24 },
+      height: { type: 'int', min: 10, max: 30 },
+    },
+  },
 };
 
 /**
