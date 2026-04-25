@@ -155,6 +155,35 @@ export const DIFFICULTY_CONFIG: Record<string, Record<number, DifficultyLevelCon
       x: { type: 'int', min: -12, max: 12 },
     },
   },
+
+  // 一元二次方程识别（第19章）
+  quadratic_identify: {
+    1: {
+      a: { type: 'int', min: 1, max: 1 },           // a固定为1，降低难度
+      b: { type: 'int', min: -3, max: 3 },
+      c: { type: 'int', min: -2, max: 2 },
+    },
+    2: {
+      a: { type: 'int', min: 1, max: 1 },           // a固定为1
+      b: { type: 'int', min: -5, max: 5 },
+      c: { type: 'int', min: -4, max: 4 },
+    },
+    3: {
+      a: { type: 'int', min: 1, max: 2 },           // a开始变化
+      b: { type: 'int', min: -7, max: 7 },
+      c: { type: 'int', min: -6, max: 6 },
+    },
+    4: {
+      a: { type: 'int', min: 1, max: 3 },
+      b: { type: 'int', min: -10, max: 10 },
+      c: { type: 'int', min: -8, max: 8 },
+    },
+    5: {
+      a: { type: 'int', min: 1, max: 4 },
+      b: { type: 'int', min: -12, max: 12 },
+      c: { type: 'int', min: -10, max: 10 },
+    },
+  },
 };
 
 /**

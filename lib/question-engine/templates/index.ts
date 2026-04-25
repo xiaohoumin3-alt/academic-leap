@@ -8,6 +8,7 @@ import { QuestionTemplate } from '../protocol';
 import { QuadraticVertexTemplate, QuadraticEvaluateTemplate } from './quadratic-function';
 import { PythagorasTemplate } from './pythagoras';
 import { ProbabilityTemplate, LinearEquationTemplate } from './probability';
+import { QuadraticIdentifyTemplate } from './chapter19/quadratic_identify';
 
 /**
  * 模板注册表
@@ -25,6 +26,9 @@ export const TEMPLATE_REGISTRY: Record<string, QuestionTemplate> = {
 
   // 一元一次方程
   linear_equation: LinearEquationTemplate,
+
+  // 一元二次方程（第19章）
+  quadratic_identify: QuadraticIdentifyTemplate,
 };
 
 /**
