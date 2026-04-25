@@ -15,6 +15,9 @@ import { QuadraticCompleteSquareTemplate } from './chapter19/quadratic_complete_
 import { QuadraticFactorizeTemplate } from './chapter19/quadratic_factorize';
 import { QuadraticGrowthTemplate } from './chapter19/quadratic_growth';
 import { QuadraticAreaTemplate } from './chapter19/quadratic_area';
+import { CentralTendencyTemplate } from './chapter20/central_tendency';
+import { DataStddevTemplate } from './chapter20/data_stddev';
+import { DataVarianceTemplate } from './chapter20/data_variance';
 
 /**
  * 模板注册表
@@ -41,6 +44,11 @@ export const TEMPLATE_REGISTRY: Record<string, QuestionTemplate> = {
   quadratic_factorize: QuadraticFactorizeTemplate,
   quadratic_growth: QuadraticGrowthTemplate,
   quadratic_area: QuadraticAreaTemplate,
+
+  // 数据分析（第20章）
+  central_tendency: CentralTendencyTemplate,
+  data_stddev: DataStddevTemplate,
+  data_variance: DataVarianceTemplate,
 };
 
 /**

@@ -378,6 +378,88 @@ export const DIFFICULTY_CONFIG: Record<string, Record<number, DifficultyLevelCon
       decrease: { type: 'int', min: 3, max: 6 },
     },
   },
+
+  // 集中趋势测量（第20章）
+  central_tendency: {
+    1: {
+      count: { type: 'int', min: 5, max: 7 },        // 5-7个数据
+      value: { type: 'int', min: 1, max: 20 },       // 1-20的整数
+    },
+    2: {
+      count: { type: 'int', min: 7, max: 10 },       // 7-10个数据
+      value: { type: 'int', min: 1, max: 50 },       // 1-50的整数
+    },
+    3: {
+      count: { type: 'int', min: 10, max: 15 },      // 10-15个数据
+      value: { type: 'int', min: 1, max: 100 },      // 1-100的整数
+    },
+    4: {
+      count: { type: 'int', min: 15, max: 20 },      // 15-20个数据
+      value: { type: 'int', min: -50, max: 150 },    // -50到150的整数（包含负数）
+    },
+    5: {
+      count: { type: 'int', min: 20, max: 30 },      // 20-30个数据
+      value: { type: 'float', min: -100, max: 200 }, // -100到200的浮点数（一位小数）
+    },
+  },
+
+  // 数据分析 - 标准差（第20章）
+  data_stddev: {
+    1: {
+      count: { type: 'int', min: 5, max: 5 },       // 固定5个数据
+      minVal: { type: 'int', min: 1, max: 10 },     // 数值范围小
+      maxVal: { type: 'int', min: 11, max: 20 },
+    },
+    2: {
+      count: { type: 'int', min: 5, max: 7 },       // 5-7个数据
+      minVal: { type: 'int', min: 1, max: 15 },
+      maxVal: { type: 'int', min: 16, max: 30 },
+    },
+    3: {
+      count: { type: 'int', min: 6, max: 8 },       // 6-8个数据
+      minVal: { type: 'int', min: 1, max: 20 },
+      maxVal: { type: 'int', min: 21, max: 40 },
+    },
+    4: {
+      count: { type: 'int', min: 7, max: 10 },      // 7-10个数据
+      minVal: { type: 'int', min: 1, max: 25 },
+      maxVal: { type: 'int', min: 26, max: 50 },
+    },
+    5: {
+      count: { type: 'int', min: 8, max: 12 },      // 8-12个数据
+      minVal: { type: 'int', min: 1, max: 30 },
+      maxVal: { type: 'int', min: 31, max: 60 },
+    },
+  },
+
+  // 数据分析 - 方差（第20章）
+  data_variance: {
+    1: {
+      count: { type: 'int', min: 5, max: 5 },       // 固定5个数据
+      minVal: { type: 'int', min: 1, max: 10 },     // 数值范围小
+      maxVal: { type: 'int', min: 11, max: 20 },
+    },
+    2: {
+      count: { type: 'int', min: 5, max: 7 },       // 5-7个数据
+      minVal: { type: 'int', min: 1, max: 15 },
+      maxVal: { type: 'int', min: 16, max: 30 },
+    },
+    3: {
+      count: { type: 'int', min: 6, max: 8 },       // 6-8个数据
+      minVal: { type: 'int', min: 1, max: 20 },
+      maxVal: { type: 'int', min: 21, max: 40 },
+    },
+    4: {
+      count: { type: 'int', min: 7, max: 10 },      // 7-10个数据
+      minVal: { type: 'int', min: 1, max: 25 },
+      maxVal: { type: 'int', min: 26, max: 50 },
+    },
+    5: {
+      count: { type: 'int', min: 8, max: 12 },      // 8-12个数据
+      minVal: { type: 'int', min: 1, max: 30 },
+      maxVal: { type: 'int', min: 31, max: 60 },
+    },
+  },
 };
 
 /**
