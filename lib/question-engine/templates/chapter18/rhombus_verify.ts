@@ -72,7 +72,7 @@ export const RhombusVerifyTemplate: QuestionTemplate = {
   },
 
   render: (params) => {
-    const { sideAB, sideBC, sideCD, sideDA, isEqual, parallelogram } = params;
+    const { sideAB, sideBC, sideCD, sideDA } = params;
 
     return {
       title: `四边形 ABCD 为平行四边形，各边长度分别为 AB=${sideAB}, BC=${sideBC}, CD=${sideCD}, DA=${sideDA}。判断 ABCD 是否为菱形`,
