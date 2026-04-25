@@ -228,6 +228,43 @@ export function judgeStep(
       break;
     }
 
+    // ========== 数据分析（第20章）==========
+    case StepType.COMPUTE_MEAN: {
+      const { mean } = params;
+      const compare = compareNumber(userInput, mean, step.tolerance);
+      result = {
+        isCorrect: compare.isCorrect,
+        correctAnswer: formatNumber(mean),
+        errorType: compare.isCorrect ? null : compare.errorType,
+        hint: compare.isCorrect ? undefined : `平均数 = ${formatNumber(mean)}`,
+      };
+      break;
+    }
+
+    case StepType.COMPUTE_VARIANCE: {
+      const { variance } = params;
+      const compare = compareNumber(userInput, variance, step.tolerance);
+      result = {
+        isCorrect: compare.isCorrect,
+        correctAnswer: formatNumber(variance),
+        errorType: compare.isCorrect ? null : compare.errorType,
+        hint: compare.isCorrect ? undefined : `方差 = ${formatNumber(variance)}`,
+      };
+      break;
+    }
+
+    case StepType.COMPUTE_STDDEV: {
+      const { stddev } = params;
+      const compare = compareNumber(userInput, stddev, step.tolerance);
+      result = {
+        isCorrect: compare.isCorrect,
+        correctAnswer: formatNumber(stddev),
+        errorType: compare.isCorrect ? null : compare.errorType,
+        hint: compare.isCorrect ? undefined : `标准差 = √方差 = ${formatNumber(stddev)}`,
+      };
+      break;
+    }
+
     default:
       result = {
         isCorrect: false,
