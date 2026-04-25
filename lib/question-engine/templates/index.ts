@@ -31,6 +31,9 @@ import { RectanglePropertyTemplate } from './chapter18/rectangle_property';
 import { RectangleVerifyTemplate } from './chapter18/rectangle_verify';
 import { SquarePropertyTemplate } from './chapter18/square_property';
 import { SquareVerifyTemplate } from './chapter18/square_verify';
+import { QuadrilateralPerimeterTemplate } from './chapter18/quadrilateral_perimeter';
+import { QuadrilateralAreaTemplate } from './chapter18/quadrilateral_area';
+import { TrapezoidPropertyTemplate } from './chapter18/trapezoid_property';
 
 /**
  * 模板注册表
@@ -83,6 +86,15 @@ export const TEMPLATE_REGISTRY: Record<string, QuestionTemplate> = {
   // 正方形（第18章）
   square_property: SquarePropertyTemplate,
   square_verify: SquareVerifyTemplate,
+
+  // 四边形周长计算（第18章）
+  quadrilateral_perimeter: QuadrilateralPerimeterTemplate,
+
+  // 四边形面积计算（第18章）
+  quadrilateral_area: QuadrilateralAreaTemplate,
+
+  // 梯形性质计算（第18章）
+  trapezoid_property: TrapezoidPropertyTemplate,
 };
 
 /**

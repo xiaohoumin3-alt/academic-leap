@@ -831,6 +831,129 @@ export const DIFFICULTY_CONFIG: Record<string, Record<number, DifficultyLevelCon
       side: { type: 'int', min: 6, max: 20 },        // 边长：6-20
     },
   },
+
+  // 四边形周长计算（第18章）
+  quadrilateral_perimeter: {
+    1: {
+      length: { type: 'int', min: 3, max: 6 },
+      width: { type: 'int', min: 2, max: 5 },
+      side: { type: 'int', min: 2, max: 5 },
+      side1: { type: 'int', min: 3, max: 6 },
+      side2: { type: 'int', min: 2, max: 5 },
+    },
+    2: {
+      length: { type: 'int', min: 4, max: 10 },
+      width: { type: 'int', min: 3, max: 8 },
+      side: { type: 'int', min: 3, max: 8 },
+      side1: { type: 'int', min: 4, max: 10 },
+      side2: { type: 'int', min: 3, max: 8 },
+    },
+    3: {
+      length: { type: 'int', min: 5, max: 15 },
+      width: { type: 'int', min: 4, max: 12 },
+      side: { type: 'int', min: 4, max: 12 },
+      side1: { type: 'int', min: 5, max: 15 },
+      side2: { type: 'int', min: 4, max: 12 },
+    },
+    4: {
+      length: { type: 'int', min: 6, max: 20 },
+      width: { type: 'int', min: 5, max: 16 },
+      side: { type: 'int', min: 5, max: 15 },
+      side1: { type: 'int', min: 6, max: 20 },
+      side2: { type: 'int', min: 5, max: 16 },
+    },
+    5: {
+      length: { type: 'int', min: 8, max: 30 },
+      width: { type: 'int', min: 6, max: 24 },
+      side: { type: 'int', min: 6, max: 20 },
+      side1: { type: 'int', min: 8, max: 30 },
+      side2: { type: 'int', min: 6, max: 24 },
+    },
+  },
+
+  // 四边形面积计算（第18章）
+  quadrilateral_area: {
+    1: {
+      length: { type: 'int', min: 3, max: 6 },
+      width: { type: 'int', min: 2, max: 5 },
+      side: { type: 'int', min: 2, max: 5 },
+      base: { type: 'int', min: 4, max: 8 },
+      height: { type: 'int', min: 3, max: 6 },
+      diagonal1: { type: 'int', min: 4, max: 8 },
+      diagonal2: { type: 'int', min: 4, max: 6 },
+    },
+    2: {
+      length: { type: 'int', min: 4, max: 10 },
+      width: { type: 'int', min: 3, max: 8 },
+      side: { type: 'int', min: 3, max: 8 },
+      base: { type: 'int', min: 5, max: 12 },
+      height: { type: 'int', min: 4, max: 8 },
+      diagonal1: { type: 'int', min: 5, max: 12 },
+      diagonal2: { type: 'int', min: 4, max: 10 },
+    },
+    3: {
+      length: { type: 'int', min: 5, max: 15 },
+      width: { type: 'int', min: 4, max: 12 },
+      side: { type: 'int', min: 4, max: 12 },
+      base: { type: 'int', min: 6, max: 16 },
+      height: { type: 'int', min: 5, max: 12 },
+      diagonal1: { type: 'int', min: 6, max: 16 },
+      diagonal2: { type: 'int', min: 5, max: 14 },
+    },
+    4: {
+      length: { type: 'int', min: 6, max: 20 },
+      width: { type: 'int', min: 5, max: 16 },
+      side: { type: 'int', min: 5, max: 15 },
+      base: { type: 'int', min: 8, max: 20 },
+      height: { type: 'int', min: 6, max: 16 },
+      diagonal1: { type: 'int', min: 8, max: 20 },
+      diagonal2: { type: 'int', min: 6, max: 18 },
+    },
+    5: {
+      length: { type: 'int', min: 8, max: 30 },
+      width: { type: 'int', min: 6, max: 24 },
+      side: { type: 'int', min: 6, max: 20 },
+      base: { type: 'int', min: 10, max: 30 },
+      height: { type: 'int', min: 8, max: 24 },
+      diagonal1: { type: 'int', min: 10, max: 30 },
+      diagonal2: { type: 'int', min: 8, max: 26 },
+    },
+  },
+
+  // 梯形性质计算（第18章）
+  trapezoid_property: {
+    1: {
+      upperBase: { type: 'int', min: 3, max: 6 },
+      lowerBase: { type: 'int', min: 6, max: 12 },
+      midsegment: { type: 'int', min: 5, max: 9 },
+    },
+    2: {
+      upperBase: { type: 'int', min: 4, max: 10 },
+      lowerBase: { type: 'int', min: 8, max: 18 },
+      midsegment: { type: 'int', min: 6, max: 14 },
+    },
+    3: {
+      upperBase: { type: 'int', min: 5, max: 14 },
+      lowerBase: { type: 'int', min: 10, max: 24 },
+      midsegment: { type: 'int', min: 8, max: 19 },
+      leg: { type: 'int', min: 4, max: 10 },
+      height: { type: 'int', min: 3, max: 8 },
+    },
+    4: {
+      upperBase: { type: 'int', min: 6, max: 18 },
+      lowerBase: { type: 'int', min: 12, max: 30 },
+      midsegment: { type: 'int', min: 9, max: 24 },
+      leg: { type: 'int', min: 5, max: 14 },
+      height: { type: 'int', min: 4, max: 12 },
+    },
+    5: {
+      upperBase: { type: 'int', min: 8, max: 24 },
+      lowerBase: { type: 'int', min: 14, max: 40 },
+      midsegment: { type: 'int', min: 11, max: 32 },
+      leg: { type: 'int', min: 6, max: 18 },
+      height: { type: 'int', min: 5, max: 16 },
+    },
+  },
 };
 
 /**
