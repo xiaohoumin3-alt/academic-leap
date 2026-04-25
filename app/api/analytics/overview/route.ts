@@ -18,6 +18,90 @@ export async function GET(req: NextRequest) {
       where: { userId, completedAt: { not: null } },
     });
 
+    // ============ 诊断测评专用统计 ============
+    // 获取诊断测评次数（用于数据可信度和波动范围）
+    const diagnosticAttemptsCount = await prisma.attempt.count({
+      where: {
+        userId,
+        completedAt: { not: null },
+        mode: 'diagnostic',
+      },
+    });
+
+    // 计算诊断测评数据可信度（根据诊断测评次数）
+    const diagnosticDataReliability =
+      diagnosticAttemptsCount >= 3 ? "high"
+      : diagnosticAttemptsCount >= 2 ? "medium" : "low";
+
+    // 获取诊断测评分数（用于波动范围计算）
+    const diagnosticScoresQuery = await prisma.attempt.findMany({
+      where: {
+        userId,
+        completedAt: { not: null },
+        mode: 'diagnostic',
+      },
+      select: { score: true },
+      orderBy: { completedAt: 'desc' },
+      take: 5,
+    });
+
+    // 计算诊断测评波动范围
+    const diagnosticScores = diagnosticScoresQuery.map(a => a.score);
+    let diagnosticVolatilityRange = 0;
+    if (diagnosticScores.length > 1) {
+      const mean = diagnosticScores.reduce((a, b) => a + b, 0) / diagnosticScores.length;
+      diagnosticVolatilityRange = Math.round(
+        Math.sqrt(
+          diagnosticScores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / diagnosticScores.length
+        )
+      );
+    }
+
+    // ============ 练习知识点掌握情况 ============
+    // 获取练习知识点掌握情况（training 模式）
+    const trainingKnowledgeMastery = await prisma.attemptStep.findMany({
+      where: {
+        attempt: {
+          userId,
+          mode: 'training',
+          completedAt: { not: null },
+        },
+      },
+      include: {
+        questionStep: {
+          include: {
+            question: {
+              select: { knowledgePoints: true },
+            },
+          },
+        },
+      },
+    });
+
+    // 按知识点聚合
+    const trainingKpMap = new Map<string, { correct: number; total: number; name: string }>();
+    for (const step of trainingKnowledgeMastery) {
+      const kpJson = step.questionStep?.question?.knowledgePoints || '[]';
+      try {
+        const kpIds: string[] = JSON.parse(kpJson);
+        for (const kpId of kpIds) {
+          const existing = trainingKpMap.get(kpId) || { correct: 0, total: 0, name: kpId };
+          existing.total += 1;
+          if (step.isCorrect) existing.correct += 1;
+          trainingKpMap.set(kpId, existing);
+        }
+      } catch {
+        // Skip invalid JSON
+      }
+    }
+
+    const trainingKnowledgeMasteryData = Array.from(trainingKpMap.values()).map(kp => ({
+      knowledgePoint: kp.name,
+      mastery: kp.total > 0 ? Math.round((kp.correct / kp.total) * 100) : 0,
+      recentAccuracy: kp.total > 0 ? Math.round((kp.correct / kp.total) * 100) : 0,
+      status: kp.total > 0 ? (kp.correct / kp.total >= 0.8 ? 'high' : kp.correct / kp.total >= 0.5 ? 'medium' : 'low') : 'pending',
+    }));
+
     // 获取有效练习次数（已完成且有分数的，用于计算平均分）
     const completedAttempts = await prisma.attempt.count({
       where: {
@@ -311,6 +395,12 @@ export async function GET(req: NextRequest) {
         trainingQuestions: trainingQuestionsCount,
         trainingCorrectRate,
         trainingMinutes,
+        // 诊断测评专用统计
+        diagnosticAttemptsCount,
+        diagnosticDataReliability,
+        diagnosticVolatilityRange,
+        // 练习知识点数据
+        trainingKnowledgeMastery: trainingKnowledgeMasteryData,
       },
       dailyData,
       topKnowledge: knowledge.map(
