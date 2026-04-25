@@ -4,14 +4,19 @@
 
 ## 背景
 
-**问题:**
+### 现状问题
+
 - 模板创建依赖随机性和手工配置，容易出现状态不一致
 - 知识点和模板关联容易断裂
 - 无法批量可靠地扩展新章节
 - 每改一次就报错，系统脆弱
 
-**目标:**
-建立一个标准化的"模板工厂"系统，输入教材结构，输出符合规范的知识点+模板。
+### 解决思路
+
+- **业务级素材驱动** — 教材/题库作为主要输入源
+- **AI自动推导** — 从素材自动生成骨架和模板
+- **用户参与决策点** — 审核确认关键环节
+- **支持批量导入** — 一次解析，整章/全书生成
 
 ## 核心架构
 
@@ -20,244 +25,415 @@
 │                    模板工厂系统                              │
 ├─────────────────────────────────────────────────────────────┤
 │  输入层                                                       │
-│  ├── YAML 配置表（版本控制，可导入导出）                    │
-│  ├── 可视化编辑器（后台管理界面）                          │
-│  └── 教材文本解析器（AI 辅助）                             │
+│  ├── 教材导入器（章节 → 知识点结构）                        │
+│  ├── 题库导入器（题目 → 题型样本）                          │
+│  └── 可视化编辑器（引导式配置 + AI补全）                    │
 ├─────────────────────────────────────────────────────────────┤
 │  处理层                                                       │
-│  ├── 模板骨架库（通用步骤类型）                             │
+│  ├── 解析引擎（素材结构化）                                 │
+│  ├── 推导引擎（AI生成骨架/模板）                            │
 │  ├── 参数规格引擎（难度配置生成）                           │
 │  └── 验证器（输出质量检查）                                 │
 ├─────────────────────────────────────────────────────────────┤
 │  输出层                                                       │
-│  ├── 数据库（KnowledgeConcept, KnowledgePoint, Template）    │
-│  ├── 文件系统（templates/*.ts）                            │
-│  └── 部署包（seed + migration）                             │
+│  ├── 知识点体系（KnowledgeConcept + KnowledgePoint）         │
+│  ├── 骨架库（Skeleton）                                     │
+│  ├── 模板库（Template）                                     │
+│  └── 审核队列（pending → approved → production）            │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+**关键原则：**
+- 教材建立知识结构
+- 题库提供题型样本
+- AI从样本自动推导骨架和模板
+- 用户参与关键决策点（审核）
 
 ## 关键设计决策
 
 | 决策 | 方案 | 理由 |
 |------|------|------|
-| 模板状态 | 默认 `production` | 新模板默认可用，下线需显式处理 |
-| 模板粒度 | 分层抽象 | 骨架（通用逻辑）+ 参数规格（差异化） |
-| 数据存储 | 数据库存结构 + 文件系统存代码 | templateKey 作为关联键 |
-| 触发方式 | 批量 + 增量 + 全程预览 | 适配首次导入和后续扩展 |
+| 模板状态 | 默认 `pending`，审核后 `production` | 安全第一，AI生成需人工确认 |
+| 素材驱动 | 教材 + 题库 双轨输入 | 教材建结构，题库提供样本 |
+| AI辅助 | 全程补全/推荐/兜底 | 用户提供原料，AI承担重量 |
+| 批量支持 | 首次批量 + 增量扩展 | 适配首次导入和后续扩展 |
+| 多层预览 | 知识点 → 骨架 → 模板 → 变更 | 每步可干预，决策清晰 |
 
-## 设计细节
+## 输入层
 
-### 1. 输入层
+### 素材类型
 
-#### 1.1 YAML 配置表
+| 素材类型 | 说明 | 作用 |
+|----------|------|------|
+| **教材** | 章节结构、知识点列表 | 建立知识体系结构 |
+| **题库** | 题目样本（含答案、难度） | 提供题型模式，生成骨架和模板 |
 
+### 导入模式
+
+**模式A：仅教材导入**
+```
+教材解析 → 知识点提取 → AI生成题型候选 → 用户确认 → 创建知识点结构
+```
+- 输出：知识点体系（无模板）
+- 模板需后续用题库生成
+
+**模式B：仅题库导入**
+```
+题库解析 → 知识点推断 → 骨架推导 → 模板生成 → 预览确认
+```
+- 输出：知识点 + 骨架 + 模板
+- 知识点从题目内容自动推断
+
+**模式C：教材 + 题库（推荐）**
+```
+教材建立结构 → 题库归类 → AI交叉验证 → 生成模板 → 预览确认
+```
+- 输出：完整的知识点 + 骨架 + 模板
+- 题库验证教材知识点的有效性
+
+### 素材格式
+
+**教材格式（YAML）**
 ```yaml
-# config/chapter16-sqrt.yaml
-chapter:
-  id: ch16-quadratic-radical
-  name: 第16章 二次根式
-  concepts:
-    - id: concept-quadratic-radical
-      name: 二次根式
-      category: 代数
-      weight: 5
-      knowledgePoints:
-        - id: kp16-1-definition
-          name: 二次根式的定义
-          templates:
-            - key: sqrt_concept
-              type: computation
-              stepTypes: [COMPUTE_SQRT]
-              difficulty:
-                min: 1
-                max: 5
-        - id: kp16-4-multiply
-          name: 二次根式的乘法法则
-          templates:
-            - key: sqrt_multiply
-              type: computation
-              stepTypes: [SQRT_MIXED]
-              difficulty:
-                min: 1
-                max: 5
+textbook:
+  grade: 8
+  subject: 数学
+  name: 人教版八年级下册
+  year: 2024
+
+chapters:
+  - number: 16
+    name: 二次根式
+    knowledgePoints:
+      - name: 二次根式的定义
+        weight: 3
+      - name: 二次根式的乘法法则
+        weight: 5
 ```
 
-#### 1.2 可视化编辑器
-
-后台管理界面：
-- 章节树形结构
-- 知识点拖拽排序
-- 模板类型下拉选择
-- 难度参数滑块配置
-- 预览窗口实时显示
-
-#### 1.3 教材文本解析器
-
-AI 辅助输入：
-- 粘贴教材章节文本
-- 定义解析规范（章节标题、知识点识别模式）
-- AI 生成结构化配置
-
-### 2. 处理层
-
-#### 2.1 模板骨架库
-
-通用步骤模式：
-- `COMPUTE_*` - 计算类
-- `VERIFY_*` - 判定类
-- `SOLVE_*` - 解方程类
-
-骨架定义：
-```typescript
-// lib/template-factory/skeletons/compute-sqrt.ts
-import { QuestionTemplate, StepType } from '../protocol';
-
-export const ComputeSqrtSkeleton: Omit<QuestionTemplate, 'id' | 'knowledgePoint'> = {
-  name: '计算二次根式',
-  stepTypes: ['COMPUTE_SQRT'],
-  generateParams: (level: number) => {
-    return { radicand: Math.floor(Math.random() * 100) + 1 };
-  },
-  buildSteps: (params) => [{
-    stepId: 's1',
-    type: StepType.COMPUTE_SQRT,
-    inputType: 'numeric',
-    keyboard: 'numeric',
-    answerType: 'number',
-    ui: {
-      instruction: '计算二次根式的值',
-      inputTarget: '√a 的值',
-      inputHint: '输入数字',
-    },
-  }],
-  render: (params) => ({
-    title: `计算 √${params.radicand} 的值`,
-    description: '二次根式计算',
-    context: '二次根式定义：√a (a ≥ 0)',
-  }),
-};
+**题库格式（YAML）**
+```yaml
+questions:
+  - content: "求√144的值"
+    difficulty: 1
+    answer: 12
+    stepType: COMPUTE_SQRT
+    knowledgePoint: "二次根式的定义"
+  - content: "化简√50"
+    difficulty: 3
+    answer: "5√2"
+    stepType: SIMPLIFY_SQRT
+    knowledgePoint: "最简二次根式"
 ```
 
-#### 2.2 参数规格引擎
+### 可视化编辑器
 
-难度配置生成：
+编辑器功能：
+- 粘贴教材文本 → AI解析提取章节结构
+- 上传题库文件 → AI解析提取题目
+- 查看解析结果 → 用户确认/修改
+- 预览生成的知识点/骨架/模板
+
+AI辅助策略：
+- **输入不足时** → 推荐常用骨架/模板
+- **解析失败时** → 给出最接近选项
+- **不确定时** → 列出多个选项让用户选
+
+## 处理层
+
+### 解析引擎
+
+**职责：** 将素材（教材/题库）解析为结构化数据
+
+| 功能 | 说明 |
+|------|------|
+| 教材解析 | 提取章节、知识点、权重 |
+| 题库解析 | 提取题目内容、答案、难度、stepType |
+| 结构验证 | 检测格式错误、必填项缺失 |
+
+### 推导引擎
+
+**职责：** 从结构化数据推导骨架和模板
+
+**骨架推导流程：**
+```
+题目样本 → 识别stepType → 提取通用模式 → 生成骨架代码
+```
+
+**模板推导流程：**
+```
+知识点 + 关联题目 → 确定模板参数 → 生成模板代码
+```
+
+**参数规格推导流程：**
+```
+难度标记的题目 → 分析参数范围 → 生成难度配置
+```
+
+### 参数规格引擎
+
+**输入：** 难度分布（从题库提取）
+
+**输出：** 每个难度级别的参数范围
+
 ```typescript
-// lib/template-factory/param-engine.ts
-import { ParamConstraint } from '../protocol';
-
-export function generateDifficultyConfig(
-  min: number,
-  max: number,
-  step: number = 2
-): Record<number, Record<string, ParamConstraint>> {
-  const levels = {};
-  for (let i = 1; i <= 5; i++) {
-    levels[i] = {
-      value: { type: 'int', min: min + (i - 1) * step, max: max + (i - 1) * step }
-    };
-  }
-  return levels;
+interface DifficultyConfig {
+  level: number;
+  constraints: Array<{
+    param: string;
+    type: 'int' | 'perfect_square' | 'range' | 'special';
+    min?: number;
+    max?: number;
+    values?: number[];  // special类型使用
+  }>;
 }
 ```
 
-#### 2.3 验证器
+### 验证器
 
-输出质量检查：
+**检查项：**
 - StepType 枚举值有效性
-- 难度配置完整性（1-5 级别）
-- 数据库外键关联验证
-- 代码语法检查
+- 参数范围完整性（1-5级）
+- 数据库外键关联正确
+- 骨架代码语法正确
+- 模板代码语法正确
+- 知识点-骨架-模板关联完整
 
-### 3. 输出层
+## 输出层
 
-#### 3.1 数据库结构
+### 数据库结构
 
+**骨架（Skeleton）**
 ```prisma
-// Template 扩展字段
-model Template {
-  // ... existing fields
-  status           String    @default("production")  // 默认 production
-  templateSkeleton String?   // 关联骨架 ID
-  paramSpec       Json?      // 难度参数规格
+model Skeleton {
+  id          String   @id  // 如 "compute_sqrt"
+  stepType    String   // 如 "COMPUTE_SQRT"
+  name        String   // 中文名，如 "计算二次根式"
+  config      Json     // 输入类型、键盘类型、验证规则
+  status      String   @default("pending")  // pending | approved | production
+  source      String   // "ai_generated" | "manual"
+  createdAt   DateTime @default(now())
+  approvedBy  String?
 }
 ```
 
-#### 3.2 文件系统
-
-```
-lib/question-engine/templates/
-├── _factory/              # 工厂生成区域
-│   ├── chapter16/
-│   │   ├── sqrt_concept.ts
-│   │   └── sqrt_multiply.ts
-│   └── chapter19/
-├── _skeletons/            # 骨架定义
-│   ├── compute-sqrt.ts
-│   └── verify-quadrilateral.ts
-└── index.ts                # 自动注册
-```
-
-#### 3.3 部署包
-
-一键部署脚本：
-```bash
-pnpm factory:deploy --config config/chapter16-sqrt.yaml
+**模板（Template）**
+```prisma
+model Template {
+  id          String   @id
+  name        String
+  knowledgeId String?  // 关联知识概念
+  skeletonIds Json     // 关联的骨架 ID 列表
+  paramSpec   Json?    // 难度参数规格
+  status      String   @default("production")
+  source      String   // "yaml_import" | "ai_generated" | "manual"
+  createdAt   DateTime @default(now())
+}
 ```
 
-执行内容：
-1. 解析 YAML 配置
-2. 创建/更新数据库记录
-3. 生成模板代码文件
-4. 运行 Prisma migrate
-5. 运行 seed
+**知识点**
+```prisma
+model KnowledgePoint {
+  id        String   @id
+  chapterId String
+  conceptId String
+  name      String
+  weight    Int
 
-### 4. 预览确认流程
-
-```
-用户输入（YAML/UI）
-       ↓
-   工厂解析（不写入）
-       ↓
-   生成预览：
-   - 知识点树预览
-   - 模板代码预览
-   - 数据库变更预览
-       ↓
-   用户确认 ✓
-       ↓
-   写入数据库 + 生成代码
-       ↓
-   可选：回滚
+  // 关联
+  chapter   Chapter  @relation(fields: [chapterId], references: [id])
+  concept   KnowledgeConcept @relation(fields: [conceptId], references: [id])
+  templates Template[]
+}
 ```
 
-### 5. 触发方式
+### 审核流程
 
-| 场景 | 方式 | 说明 |
-|------|------|------|
-| 首次导入教材 | 批量生成 | 指定章节范围，一键生成 |
-| 后续扩展 | 增量添加 | 指定父概念和模板类型 |
-| 调试/测试 | 预览模式 | 不写入，仅预览 |
+```
+AI生成 → pending → 人工审核 → approved → 自动同步 → production
+
+审核检查项：
+- 骨架逻辑是否正确
+- 模板参数是否合理
+- 是否与现有内容冲突
+```
+
+### 版本管理
+
+每个实体记录：
+- 创建时间
+- 更新时间
+- 来源（教材导入/题库导入/手动创建）
+- 审核历史
+
+## 预览确认流程
+
+### 多层级预览
+
+```
+用户输入素材
+      ↓
+┌─────────────────────────────────────────┐
+│  Level 1: 知识点预览                      │
+│  - 章节结构树                            │
+│  - 知识点列表及权重                      │
+│  - 知识点间关系                          │
+└─────────────────────────────────────────┘
+      ↓
+┌─────────────────────────────────────────┐
+│  Level 2: 骨架预览                       │
+│  - 推导出的骨架列表                      │
+│  - 每个骨架的stepType、配置              │
+│  - 骨架使用频次                          │
+└─────────────────────────────────────────┘
+      ↓
+┌─────────────────────────────────────────┐
+│  Level 3: 模板预览                       │
+│  - 模板列表及关联的知识点/骨架            │
+│  - 参数规格配置                          │
+│  - 生成示例题目                          │
+└─────────────────────────────────────────┘
+      ↓
+┌─────────────────────────────────────────┐
+│  Level 4: 变更预览                       │
+│  - 新增内容                              │
+│  - 更新内容                              │
+│  - 冲突检测                              │
+└─────────────────────────────────────────┘
+      ↓
+   用户确认
+      ↓
+   写入数据库
+```
+
+### 即时预览
+
+每个层级支持：
+- 展开/折叠
+- 单项修改
+- 删除不需要的项
+- 添加遗漏的项
+
+### 回滚机制
+
+- 保存预览快照
+- 支持选择历史版本回滚
+- 回滚后保留历史记录
+
+## 触发方式
+
+### 首次导入（批量生成）
+
+**场景：** 新教材首次导入系统
+
+**流程：**
+```
+1. 选择素材类型（教材 / 题库 / 教材+题库）
+2. 上传或粘贴素材
+3. AI解析素材
+4. 多层级预览（知识点 → 骨架 → 模板）
+5. 用户审核并确认
+6. 写入数据库
+```
+
+**支持范围：**
+- 单章节
+- 多章节
+- 整本教材
+
+### 后续扩展（增量添加）
+
+**场景：** 已有教材基础上增加内容
+
+**流程：**
+```
+1. 选择扩展类型
+   - 新增章节
+   - 新增知识点
+   - 新增题目
+2. 导入新素材
+3. AI关联已有内容
+4. 冲突检测（重复/矛盾）
+5. 用户确认关联
+6. 更新数据库
+```
+
+**自动关联策略：**
+- 新题目 → 自动匹配已有知识点（AI推荐 + 用户确认）
+- 新知识点 → 自动建议归属章节
+- 新章节 → 自动合并到已有教材结构
+
+### 即时生成
+
+**场景：** 日常练习，无需保存模板
+
+**流程：**
+```
+1. 选择知识点
+2. 选择难度级别
+3. AI即时生成题目
+4. 使用后丢弃（不写入模板库）
+```
+
+### 触发方式对比
+
+| 场景 | 触发 | 输出 | 是否写入模板库 |
+|------|------|------|---------------|
+| 首次导入 | 批量选择章节 | 完整的知识点+骨架+模板 | 是 |
+| 增量扩展 | 选择性导入 | 更新的知识点+骨架+模板 | 是 |
+| 即时生成 | 单次选择 | 单道题目 | 否 |
 
 ## 实施计划
 
-### Phase 1: 基础框架
-- 创建模板骨架库
-- 实现 YAML 配置解析器
-- 实现参数规格引擎
+### Phase 1: 基础设施
 
-### Phase 2: 后台管理
-- 可视化编辑器
-- 预览功能
-- 批量生成 UI
+**目标：** 建立核心框架
 
-### Phase 3: 部署集成
-- 部署包生成器
-- 回滚机制
-- CI/CD 集成
+- 设计并创建数据库模型（Skeleton, Template, KnowledgePoint）
+- 实现素材解析器（教材解析器、题库解析器）
+- 建立骨架模板系统
+- 实现审核队列
+
+### Phase 2: AI推导引擎
+
+**目标：** 实现自动推导能力
+
+- 实现stepType识别
+- 实现骨架代码生成
+- 实现模板参数推导
+- 实现参数规格生成
+- 实现冲突检测
+
+### Phase 3: 引导式编辑器
+
+**目标：** 实现可视化编辑界面
+
+- 实现素材上传/粘贴界面
+- 实现多层级预览界面
+- 实现用户确认/修改功能
+- 实现审核管理界面
+
+### Phase 4: 批量导入
+
+**目标：** 实现批量导入能力
+
+- 实现YAML批量导入
+- 实现章节批量选择
+- 实现预览批量确认
+
+### Phase 5: 优化与扩展
+
+**目标：** 提升用户体验
+
+- 实现回滚机制
+- 实现历史版本管理
+- 实现冲突自动解决建议
+- 性能优化
 
 ## 预期收益
 
-- **可靠性:** 默认 production，消除随机状态
-- **可扩展性:** 新章节可批量导入
-- **可维护性:** 配置即代码，版本控制
-- **可视化:** 后台管理降低出错门槛
+- **可靠性:** AI生成 + 人工审核，消除随机状态
+- **可扩展性:** 批量导入新章节，模板自动生成
+- **可维护性:** 素材即配置，版本控制
+- **可视化:** 编辑器降低出错门槛
+- **自助式:** 用户提供原料，AI自动推导
