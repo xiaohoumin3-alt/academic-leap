@@ -83,6 +83,9 @@ export function judgeStepV2(
     if (isGuess) {
       behaviorTag = '猜测';
       finalErrorType = 'guess';
+    } else if (baseResult.errorType === 'system_error') {
+      behaviorTag = '系统错误';
+      finalErrorType = 'system_error';
     } else if (baseResult.errorType === 'calculation_error') {
       behaviorTag = '计算错误';
       finalErrorType = 'calculation_error';

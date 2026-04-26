@@ -3,6 +3,9 @@
  * 唯一真相源：不存"题目文本"，只存结构+参数+规则
  */
 
+// Import v2 types for use in QuestionTemplate
+import type { StepProtocolV2 } from './protocol-v2';
+
 /**
  * Step类型枚举（原子化，禁止自由发挥）
  * 所有知识点能力最终映射到这些原子类型
@@ -80,7 +83,8 @@ export type ErrorType =
   | 'calculation_error'  // 计算错误：数值不对但方法对
   | 'concept_error'      // 概念错误：公式用错
   | 'format_error'       // 格式错误：如坐标格式不对
-  | 'guess';             // 猜测：响应时间过快
+  | 'guess'              // 猜测：响应时间过快
+  | 'system_error';      // 系统错误：未知题型/配置错误
 
 /**
  * 步骤协议
@@ -136,7 +140,7 @@ export interface ParamConstraint {
 export type ParamsSchema = Record<string, ParamConstraint>;
 
 /**
- * 题目模板接口
+ * 题目模板接口（支持 v1 和 v2 协议）
  */
 export interface QuestionTemplate {
   id: string;
@@ -149,8 +153,8 @@ export interface QuestionTemplate {
   // 1. 参数生成器（难度控制的关键）
   generateParams: (level: number) => Record<string, number>;
 
-  // 2. 步骤构建器（结构定义）
-  buildSteps: (params: Record<string, number>) => StepProtocol[];
+  // 2. 步骤构建器（结构定义，支持 v1 和 v2 协议）
+  buildSteps: (params: Record<string, number>) => StepProtocol[] | StepProtocolV2[];
 
   // 3. 渲染器（表达层，AI可参与）
   render: (params: Record<string, number>) => {
