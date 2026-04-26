@@ -26,6 +26,7 @@ import { ABTesting } from './ab-testing';
 import { registerABTestingRoutes } from './ab-routes';
 import { registerExplanationRoutes } from './explanation-routes';
 import { PrismaStore } from './store.prisma';
+import { calibrateProbability, DEFAULT_CALIBRATION, findOptimalTemperature, calculateBrierScoreWithTemperature } from './explanation/calibration';
 
 // ============================================================
 // Types
@@ -75,7 +76,9 @@ interface StudentHistory {
 // ============================================================
 
 class PredictionModel {
-  private version = '1.0.0';
+  private version = '1.0.1'; // Updated for calibration
+  private temperature: number = DEFAULT_CALIBRATION.temperature;
+  private predictionHistory: Array<{ prediction: number; actual?: boolean }> = [];
 
   /**
    * 核心预测函数
@@ -85,6 +88,9 @@ class PredictionModel {
    * 其中：
    * - ability: 学生能力（从历史估计）
    * - difficulty: 题目难度
+   *
+   * 应用温度缩放校准以优化 Brier Score
+   * 仅在样本量充足时应用校准，避免对小样本过度调整
    */
   predict(
     studentHistory: StudentHistory,
@@ -99,15 +105,65 @@ class PredictionModel {
 
     // P(correct) = 1 / (1 + exp(-(theta - beta)))
     const logit = theta - beta;
-    const probability = 1 / (1 + Math.exp(-logit));
+    const rawProbability = 1 / (1 + Math.exp(-logit));
 
-    // 3. 置信度（基于样本量）
+    // 3. 仅在样本量充足时应用校准
+    // 样本量 < 10 时不校准，避免对小样本过度调整
+    let finalProbability = rawProbability;
+    if (ability.sampleSize >= 10) {
+      const calibrated = calibrateProbability(rawProbability, { temperature: this.temperature });
+      finalProbability = calibrated.calibratedProbability;
+    }
+
+    // 4. 置信度（基于样本量）
     const confidence = Math.min(0.95, 0.5 + ability.sampleSize * 0.045);
 
+    // 记录预测用于后续校准
+    this.predictionHistory.push({ prediction: finalProbability });
+
+    // 限制历史长度
+    if (this.predictionHistory.length > 1000) {
+      this.predictionHistory = this.predictionHistory.slice(-500);
+    }
+
     return {
-      probability: Math.max(0.05, Math.min(0.95, probability)),
+      probability: Math.max(0.05, Math.min(0.95, finalProbability)),
       confidence
     };
+  }
+
+  /**
+   * 更新校准温度
+   */
+  updateCalibrationTemperature(predictions: number[], actuals: number[]): void {
+    this.temperature = findOptimalTemperature(predictions, actuals);
+  }
+
+  /**
+   * 获取当前温度
+   */
+  getTemperature(): number {
+    return this.temperature;
+  }
+
+  /**
+   * 获取预测历史
+   */
+  getPredictionHistory(): Array<{ prediction: number; actual?: boolean }> {
+    return this.predictionHistory;
+  }
+
+  /**
+   * 计算当前校准后的 Brier Score
+   */
+  calculateCurrentBrierScore(): number | null {
+    const completed = this.predictionHistory.filter(p => p.actual !== undefined);
+    if (completed.length < 10) return null;
+
+    const predictions = completed.map(p => p.prediction);
+    const actuals = completed.map(p => p.actual ? 1 : 0);
+
+    return calculateBrierScoreWithTemperature(predictions, actuals, this.temperature);
   }
 
   /**

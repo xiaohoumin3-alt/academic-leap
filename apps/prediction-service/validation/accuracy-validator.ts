@@ -16,7 +16,7 @@ import path from 'path';
 // 1. 配置
 // ============================================================
 
-const DB_PATH = path.join(__dirname, '../../../prisma/dev.db');
+const DB_PATH = process.env.DB_PATH || '/Users/seanxx/academic-leap/academic-leap/prisma/dev.db';
 const PREDICTION_SERVICE_URL = process.env.PREDICTION_SERVICE_URL || 'http://localhost:3001';
 
 // ============================================================
@@ -81,7 +81,7 @@ async function validatePredictionAccuracy(): Promise<ValidationResult> {
   console.log('📈 估计学生能力...');
 
   // 从历史数据估计学生能力（简单平均）
-  const studentAbilities = new Map<number, number>();
+  const studentAbilities = new Map<string, number>();
 
   for (const attempt of attempts) {
     if (!studentAbilities.has(attempt.studentId)) {
@@ -167,25 +167,84 @@ async function validatePredictionAccuracy(): Promise<ValidationResult> {
   const accuracy = correctPredictions / totalPredictions;
   const brierScore = totalBrierScore / totalPredictions;
 
-  // 5. 调用远程 Prediction Service（如果有）
+  // 5. 调用 Prediction Service 获取校准后的预测
   console.log('🌐 调用 Prediction Service...\n');
 
-  let remoteAccuracy = 0;
-  let remoteResults = 0;
+  let serviceBrierScore = 0;
+  let serviceCorrectPredictions = 0;
+  let serviceTotal = 0;
 
   try {
-    const response = await fetch(`${PREDICTION_SERVICE_URL}/predict/batch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentId: 'stu1', count: 5 })
-    });
+    // 首先，向 Prediction Service 注册学生历史数据
+    console.log('📝 注册学生历史数据到 Prediction Service...\n');
+    const studentHistoryMap = new Map<string, any[]>();
 
-    if (response.ok) {
-      console.log('✅ Prediction Service 可用\n');
-    } else {
-      console.log('⚠️ Prediction Service 不可用，跳过远程验证\n');
+    // 按学生分组收集历史
+    for (const attempt of attempts) {
+      if (!studentHistoryMap.has(attempt.studentId)) {
+        studentHistoryMap.set(attempt.studentId, []);
+      }
+      studentHistoryMap.get(attempt.studentId)!.push({
+        questionId: attempt.questionId,
+        correct: attempt.correct === 1,
+        difficulty: attempt.difficulty / 100
+      });
     }
-  } catch {
+
+    // 向服务注册反馈
+    for (const [studentId, history] of studentHistoryMap) {
+      for (const item of history) {
+        await fetch(`${PREDICTION_SERVICE_URL}/feedback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentId,
+            questionId: item.questionId,
+            correct: item.correct,
+            difficulty: item.difficulty,
+            knowledgeNodes: ['general']
+          })
+        });
+      }
+    }
+    console.log(`已注册 ${studentHistoryMap.size} 个学生的历史数据\n`);
+
+    // 现在进行预测验证
+    console.log('🔮 使用 Prediction Service 进行预测验证...\n');
+    for (const attempt of attempts) {
+      const response = await fetch(`${PREDICTION_SERVICE_URL}/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: attempt.studentId,
+          questionFeatures: {
+            difficulty: attempt.difficulty / 100,
+            discrimination: 0.8,
+            knowledgeNodes: ['general']
+          }
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const predicted = data.predictions[0].probability;
+        const actualCorrect = attempt.correct === 1;
+        const actual = actualCorrect ? 1 : 0;
+
+        serviceBrierScore += Math.pow(predicted - actual, 2);
+        if ((predicted > 0.5) === actualCorrect) {
+          serviceCorrectPredictions++;
+        }
+        serviceTotal++;
+      }
+    }
+
+    if (serviceTotal > 0) {
+      console.log(`✅ Prediction Service 校准后验证 (n=${serviceTotal})\n`);
+      console.log(`   校准后准确率: ${(serviceCorrectPredictions / serviceTotal * 100).toFixed(1)}%`);
+      console.log(`   校准后 Brier Score: ${(serviceBrierScore / serviceTotal).toFixed(3)}\n`);
+    }
+  } catch (err) {
     console.log('⚠️ Prediction Service 不可用，跳过远程验证\n');
   }
 
@@ -198,6 +257,19 @@ async function validatePredictionAccuracy(): Promise<ValidationResult> {
   console.log(`Brier Score: ${brierScore.toFixed(3)}`);
   console.log(`目标准确率: > 70%`);
   console.log(`目标 Brier: < 0.2`);
+
+  // 显示校准后结果
+  if (serviceTotal > 0) {
+    const calibratedBrier = serviceBrierScore / serviceTotal;
+    const calibratedAccuracy = serviceCorrectPredictions / serviceTotal;
+    console.log(`\n📊 温度缩放校准后:`);
+    console.log(`   准确率: ${(calibratedAccuracy * 100).toFixed(1)}%`);
+    console.log(`   Brier Score: ${calibratedBrier.toFixed(3)}`);
+    if (calibratedBrier < brierScore) {
+      console.log(`   ✅ 校准改善 Brier Score: ${((brierScore - calibratedBrier) * 1000).toFixed(1)}‰`);
+    }
+  }
+
   console.log(`\n结果: ${accuracy > 0.5 ? '✅ 预测优于随机' : '❌ 预测无效'} ${accuracy > 0.7 ? '(超出目标)' : ''}`);
 
   console.log('\n--- 校准曲线 ---');
