@@ -12,6 +12,12 @@ import {
 } from '../lib/adaptive-difficulty';
 import { BehaviorBadge, DifficultyChange, useDifficultyNotification } from './BehaviorFeedback';
 import MaterialIcon from './MaterialIcon';
+import { getErrorHint } from './question-input/error-messages';
+import { AnswerMode } from '@/lib/question-engine/protocol-v2';
+import { detectProtocolVersion } from '@/lib/question-engine/migrate';
+import type { StepProtocolV2 } from '@/lib/question-engine/protocol-v2';
+import { YesNoInput, ChoiceInput, NumberInput } from './ExercisePage/v2-inputs';
+import PredictionBadge from './PredictionBadge';
 
 export interface ExerciseResult {
   score: number;
@@ -344,6 +350,113 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
     return step || null;
   };
 
+  // 类型守卫：检查步骤是否为 v2 协议
+  const isStepProtocolV2 = (step: any): step is StepProtocolV2 => {
+    return step && typeof step === 'object' && 'answerMode' in step && 'expectedAnswer' in step;
+  };
+
+  // v2 协议步骤渲染函数
+  const renderStepInput = (
+    step: any,
+    stepValue: string,
+    onValueChange: (val: string) => void,
+    onSubmit: (directValue?: string) => void  // 接受 directValue 参数
+  ) => {
+    // 使用类型守卫安全检查
+    if (isStepProtocolV2(step)) {
+      const status = stepsResults[activeStep] as 'correct' | 'error' | null;
+
+      switch (step.answerMode) {
+        case AnswerMode.YES_NO:
+          return (
+            <YesNoInput
+              value={stepValue}
+              yesLabel={step.options?.yes || '是'}
+              noLabel={step.options?.no || '否'}
+              onYes={() => {
+                // 直接传递值给 checkAnswer，避免状态更新延迟
+                onSubmit('yes');
+              }}
+              onNo={() => {
+                // 直接传递值给 checkAnswer，避免状态更新延迟
+                onSubmit('no');
+              }}
+              disabled={isSubmitting.current}
+            />
+          );
+
+        case AnswerMode.MULTIPLE_CHOICE:
+          return (
+            <ChoiceInput
+              value={stepValue}
+              options={step.options?.choices || {}}
+              onSelect={(val) => {
+                // 直接传递值给 checkAnswer，避免状态更新延迟
+                onSubmit(val);
+              }}
+              disabled={isSubmitting.current}
+              status={status}
+            />
+          );
+
+        case AnswerMode.NUMBER:
+          return (
+            <NumberInput
+              value={stepValue}
+              onChange={onValueChange}
+              onSubmit={onSubmit}
+              disabled={isSubmitting.current}
+              status={status}
+            />
+          );
+
+        case AnswerMode.COORDINATE:
+          // 坐标输入使用普通的数字输入，但格式为 (x,y)
+          return (
+            <input
+              key={step.stepId}
+              type="text"
+              value={stepValue}
+              onChange={(e) => onValueChange(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && onSubmit()}
+              placeholder={step.ui.inputPlaceholder || '(x, y)'}
+              disabled={isSubmitting.current}
+              className={cn(
+                'w-64 px-6 py-4 text-center text-2xl font-bold rounded-2xl border-2 transition-all',
+                !status && 'bg-surface border-surface-variant text-on-surface',
+                status === 'correct' && 'bg-primary-container border-primary text-on-primary-container',
+                status === 'error' && 'bg-error-container border-error text-on-error-container'
+              )}
+            />
+          );
+
+        case AnswerMode.TEXT_INPUT:
+        default:
+          // 使用原有的文本输入
+          return (
+            <input
+              key={step.stepId}
+              type="text"
+              value={stepValue}
+              onChange={(e) => onValueChange(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && onSubmit()}
+              placeholder={step.ui.inputPlaceholder || '输入答案'}
+              disabled={isSubmitting.current}
+              className={cn(
+                'w-64 px-6 py-4 text-center text-2xl font-bold rounded-2xl border-2 transition-all',
+                !status && 'bg-surface border-surface-variant text-on-surface',
+                status === 'correct' && 'bg-primary-container border-primary text-on-primary-container',
+                status === 'error' && 'bg-error-container border-error text-on-error-container'
+              )}
+            />
+          );
+      }
+    }
+
+    // v1 协议或未实现的 v2 模式：返回 null，使用原有输入方式
+    return null;
+  };
+
   // 根据当前步骤的 keyboard 配置获取键盘布局
   const getKeyboardLayout = () => {
     const currentStep = getCurrentStep();
@@ -411,17 +524,24 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
   };
 
   // 检查答案
-  const checkAnswer = async () => {
+  // directValue: 直接传入的答案值（用于选择题/判断题，避免状态更新延迟）
+  const checkAnswer = async (directValue?: string) => {
     // 防止重复提交
     if (isSubmitting.current) {
       console.log('checkAnswer: 已在提交中，跳过');
       return;
     }
 
-    const currentInput = inputs[`step${activeStep}`];
+    // 优先使用直接传入的值，否则从 inputs 状态读取
+    const currentInput = directValue || inputs[`step${activeStep}`];
     if (!currentInput?.trim()) {
       setFeedback('请输入答案');
       return;
+    }
+
+    // 如果是直接传入的值，同步更新 inputs 状态
+    if (directValue && !inputs[`step${activeStep}`]) {
+      setInputs(prev => ({ ...prev, [`step${activeStep}`]: directValue }));
     }
 
     isSubmitting.current = true;
@@ -465,8 +585,11 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
       if (response && response.success && response.isCorrect !== undefined) {
         isCorrect = response.isCorrect;
         behaviorTag = response.behaviorTag || calculateBehaviorTag(duration, isCorrect);
-        // 使用后端返回的 feedback 和 correctAnswer
-        feedback = response.feedback || (isCorrect ? '正确！' : '答案错误');
+        // 优先使用 errorType 获取结构化错误提示，否则使用后端返回的 feedback
+        const errorHint = (response as any).errorType
+          ? getErrorHint((response as any).errorType, (response as any).correctAnswer?.toString() || '')
+          : undefined;
+        feedback = errorHint || response.feedback || (isCorrect ? '正确！' : '答案错误');
       } else {
         // 不应该到达这里，但保留兜底逻辑
         console.warn('API 返回了意外的响应格式:', response);
@@ -1072,6 +1195,19 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
             <h3 className="text-2xl font-display font-black text-on-surface">
               {typeof currentQuestion?.content === 'string' ? currentQuestion.content : currentQuestion?.content?.title || '计算题'}
             </h3>
+            {currentQuestion?.content?.context && (
+              <p className="mt-3 text-lg text-on-surface-variant font-medium">
+                {currentQuestion.content.context}
+              </p>
+            )}
+            {/* 预测概率显示 */}
+            <div className="flex justify-center mt-4">
+              <PredictionBadge
+                questionDifficulty={currentQuestion?.difficulty ?? 0.5}
+                knowledgeNodes={currentQuestion?.knowledgePoints ?? ['general']}
+                className=""
+              />
+            </div>
           </div>
 
           {/* 步骤进度 */}
@@ -1165,33 +1301,49 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
 
               {/* 答案输入 */}
               <div className="relative flex flex-col items-center">
-                  <input
-                type="text"
-                value={inputs[`step${activeStep}`] || ''}
-                readOnly
-                className={cn(
-                  "w-64 px-6 py-4 text-center text-2xl font-bold rounded-2xl border-2 transition-all",
-                  !feedback && "bg-surface border-surface-variant text-on-surface",
-                  stepsResults[activeStep] === 'correct' && "bg-primary-container border-primary text-on-primary-container",
-                  stepsResults[activeStep] === 'error' && "bg-error-container border-error text-on-error-container"
-                )}
-                placeholder={currentStep.inputHint || '输入答案'}
-                  />
+                {/* v2 协议输入组件 */}
+                {(() => {
+                  const v2Input = renderStepInput(
+                    currentStep,
+                    inputs[`step${activeStep}`] || '',
+                    (val) => setInputs(prev => ({ ...prev, [`step${activeStep}`]: val })),
+                    checkAnswer
+                  );
+                  if (v2Input) {
+                    return (
+                      <>
+                        {v2Input}
+                        {/* 输入提示 */}
+                        {(currentStep as any).ui?.hint && !inputs[`step${activeStep}`] && (
+                          <p className="mt-2 text-xs text-on-surface-variant">
+                            {(currentStep as any).ui.hint}
+                          </p>
+                        )}
+                      </>
+                    );
+                  }
+                  // v1 协议：使用数字输入组件
+                  return (
+                    <>
+                      <NumberInput
+                        value={inputs[`step${activeStep}`] || ''}
+                        onChange={(val) => setInputs(prev => ({ ...prev, [`step${activeStep}`]: val }))}
+                        onSubmit={checkAnswer}
+                        disabled={isSubmitting.current}
+                        placeholder={currentStep.inputHint || '输入答案'}
+                        status={stepsResults[activeStep] as 'correct' | 'error' | null}
+                      />
+                    </>
+                  );
+                })()}
 
-                  {/* 输入提示 */}
-                  {currentStep.inputHint && !inputs[`step${activeStep}`] && (
-                <p className="mt-2 text-xs text-on-surface-variant">
-                  {currentStep.inputHint}
-                </p>
-                  )}
-
-                  {/* 行为标签 */}
-                  <BehaviorBadge
-                tag={stepTags[activeStep] as any}
-                show={!!stepTags[activeStep]}
-                position="top-right"
-                  />
-                </div>
+                {/* 行为标签 */}
+                <BehaviorBadge
+                  tag={stepTags[activeStep] as any}
+                  show={!!stepTags[activeStep]}
+                  position="top-right"
+                />
+              </div>
 
               {/* 反馈消息 */}
               {feedback && (
@@ -1234,7 +1386,11 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
         </div>
       </div>
 
-      {/* 虚拟键盘 */}
+      {/* 虚拟键盘 - v1 协议 或 v2 数字输入时显示 */}
+      {getCurrentStep() && (
+        (detectProtocolVersion(getCurrentStep()! as any) !== 'v2' ||
+         (currentStep as any).answerMode === AnswerMode.NUMBER)
+      ) && (
       <div className="p-6 pb-24 bg-surface">
         <div className="max-w-2xl mx-auto space-y-2">
           {/* 额外按钮行 - 只在有额外键时显示 */}
@@ -1282,6 +1438,7 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
           </div>
         </div>
       </div>
+      )}
 
       {/* 进度条 */}
       <div className="h-3 bg-surface-container-high rounded-full overflow-hidden">
