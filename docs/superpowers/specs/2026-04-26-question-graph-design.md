@@ -1,10 +1,8 @@
-# Question Graph 架构设计文档 v2.1
+# Question Graph 架构设计文档 v2.2
 
 **日期**: 2026-04-26
-**状态**: 第二轮架构评审后修订
+**状态**: 第三轮架构评审后修订（多节点归因）
 **作者**: AI + 用户头脑风暴 + 架构评审
-
-**关联文档**: `2026-04-26-cognitive-node-registry.md`（认知节点注册表）
 
 ---
 
@@ -590,6 +588,27 @@ function generateDynamicRecommendedPath(
 
 ---
 
+## 附录：v2.2 主要变更（多节点归因）
+
+| 变更 | 说明 | 理由 |
+|------|------|------|
+| **多节点归因** | nodeId → nodeContributions[] | 一个题目涉及多个认知节点 |
+| **依赖强度** | dependencies.strength: strong/weak | 强依赖：不会必错；弱依赖：可能对 |
+| **题目区分度** | 新增 discrimination 参数 | 简单题对置信度提升少 |
+| **基于类型的衰减率** | decayRate 基于节点类型 | 不同类型衰减速度不同 |
+| **结构影响权重** | heuristicGain 加入 structuralImpact | 影响下游节点多的更重要 |
+| **单一认知动作规则** | 节点粒度控制规则 | 防止节点定义失控 |
+| **Pattern级诊断** | 认知模式识别（会算不会用等） | 提供洞察而非数据堆 |
+| **覆盖唯一性检查** | 模板校验增加节点覆盖唯一性 | 防止重复覆盖同一节点 |
+
+**核心升级**：从 1:1 绑定升级为多节点归因，实现真正的认知诊断。
+
+**关联文档**：
+- `2026-04-26-cognitive-node-registry.md`（认知节点注册表）
+- `2026-04-26-multi-node-attribution.md`（多节点归因机制）
+
+---
+
 ## 附录：v2.1 主要变更
 
 | 变更 | 说明 | 理由 |
@@ -606,7 +625,9 @@ function generateDynamicRecommendedPath(
 
 ---
 
-**文档版本**: v2.1
+**文档版本**: v2.2
 **最后更新**: 2026-04-26
 **审查状态**: 待最终确认
-**关联文档**: `2026-04-26-cognitive-node-registry.md`
+**关联文档**: 
+- `2026-04-26-cognitive-node-registry.md`（认知节点注册表）
+- `2026-04-26-multi-node-attribution.md`（多节点归因机制）
