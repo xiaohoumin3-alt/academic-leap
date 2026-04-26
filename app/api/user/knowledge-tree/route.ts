@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
       include: {
         knowledgePoints: {
           where: {
-            OR: [{ deletedAt: null }, { deletedAt: '' }],
+            deletedAt: null,
             inAssess: true,
           },
           include: {
@@ -140,7 +140,7 @@ export async function GET(req: NextRequest) {
     const allKnowledgePoints = await prisma.knowledgePoint.count({
       where: {
         chapter: { textbookId: user.selectedTextbookId },
-        OR: [{ deletedAt: null }, { deletedAt: '' }],
+        deletedAt: null,
         inAssess: true,
       },
     });
@@ -159,8 +159,12 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: unknown) {
     console.error('获取知识点树错误:', error);
+    console.error('错误详情:', error instanceof Error ? error.message : String(error));
+    if (error instanceof Error && error.stack) {
+      console.error('堆栈:', error.stack);
+    }
     return NextResponse.json(
-      { success: false, error: '获取失败' },
+      { success: false, error: '获取失败', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }
