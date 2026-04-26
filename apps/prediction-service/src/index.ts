@@ -22,6 +22,10 @@
 
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
+import { ABTesting } from './ab-testing';
+import { registerABTestingRoutes } from './ab-routes';
+import { registerExplanationRoutes } from './explanation-routes';
+import { PrismaStore } from './store.prisma';
 
 // ============================================================
 // Types
@@ -252,6 +256,7 @@ class PredictionService {
   private fastify: FastifyInstance;
   private model: PredictionModel;
   private featureStore: FeatureStore;
+  public abTesting: ABTesting;
 
   constructor() {
     this.fastify = Fastify({
@@ -262,6 +267,7 @@ class PredictionService {
 
     this.model = new PredictionModel();
     this.featureStore = new FeatureStore();
+    this.abTesting = new ABTesting(new PrismaStore());
 
     this.setupRoutes();
   }
@@ -270,6 +276,20 @@ class PredictionService {
     // CORS
     this.fastify.register(cors, {
       origin: true
+    });
+
+    // A/B Testing routes
+    registerABTestingRoutes(this.fastify, this.abTesting);
+
+    // Explanation routes (Layer 2)
+    registerExplanationRoutes(this.fastify, async (studentId: string) => {
+      const history = await this.featureStore.getStudentHistory(studentId);
+      return history.recentAnswers.map(a => ({
+        correct: a.correct,
+        timestamp: a.timestamp,
+        knowledgeNodes: ['general'],
+        difficulty: a.difficulty
+      }));
     });
 
     // Health check
