@@ -99,7 +99,10 @@ export async function GET(req: NextRequest) {
       orderBy: { chapterNumber: 'asc' },
       include: {
         knowledgePoints: {
-          where: { deletedAt: null, inAssess: true },
+          where: {
+            OR: [{ deletedAt: null }, { deletedAt: '' }],
+            inAssess: true,
+          },
           include: {
             concept: {
               select: { id: true, name: true },
@@ -137,7 +140,7 @@ export async function GET(req: NextRequest) {
     const allKnowledgePoints = await prisma.knowledgePoint.count({
       where: {
         chapter: { textbookId: user.selectedTextbookId },
-        deletedAt: null,
+        OR: [{ deletedAt: null }, { deletedAt: '' }],
         inAssess: true,
       },
     });
