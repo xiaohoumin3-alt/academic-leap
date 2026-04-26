@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getTemplateIdByKnowledgePointId, getTemplate, QuestionProtocol } from '@/lib/question-engine';
+import { getTemplateIdByKnowledgePointId, getTemplate, QuestionProtocol, StepProtocol } from '@/lib/question-engine';
 import { renderQuestion } from '@/lib/question-engine/render';
+import { detectProtocolVersion } from '@/lib/question-engine/migrate';
+import { StepProtocolV2 } from '@/lib/question-engine/protocol-v2';
+
+// Union type for questions that may use either v1 or v2 protocol
+type QuestionProtocolUnion = Omit<QuestionProtocol, 'steps'> & {
+  steps: Array<StepProtocol | StepProtocolV2>;
+};
 
 /**
  * 生成单个题目
@@ -10,7 +17,7 @@ async function generateSingleQuestion(
   knowledgePoint: string,
   difficulty: number,
   renderStyle: 'standard' | 'guided' | 'gamified' | 'story'
-): Promise<QuestionProtocol> {
+): Promise<QuestionProtocolUnion> {
   // 1. 根据知识点获取模板ID
   const templateId = await getTemplateIdByKnowledgePointId(knowledgePoint);
 
@@ -40,7 +47,7 @@ async function generateSingleQuestion(
     templateId,
     difficultyLevel: difficulty,
     params,
-    steps,
+    steps: steps as StepProtocol[],  // Template may return v1 or v2, cast for compatibility
     content,
     meta: {
       version: '1.0',
@@ -49,7 +56,8 @@ async function generateSingleQuestion(
   };
 
   // 7. AI增强渲染（可选）
-  return renderQuestion(question, renderStyle);
+  const renderedQuestion = await renderQuestion(question, renderStyle);
+  return renderedQuestion as QuestionProtocolUnion;
 }
 
 // POST /api/questions/generate - 使用模板引擎生成题目
@@ -78,7 +86,7 @@ export async function POST(req: NextRequest) {
 
   try {
     // 生成题目（数据库驱动）
-    const questions: QuestionProtocol[] = [];
+    const questions: QuestionProtocolUnion[] = [];
 
     for (let i = 0; i < count; i++) {
       const question = await generateSingleQuestion(
@@ -110,32 +118,54 @@ export async function POST(req: NextRequest) {
             isAI: renderStyle !== 'standard', // 非标准风格使用了AI
             templateId: q.templateId,
             params: JSON.stringify(q.params),
-            stepTypes: JSON.stringify(q.steps.map(s => s.type)),
+            stepTypes: JSON.stringify(q.steps.map(s => 'type' in s ? s.type : (s as StepProtocolV2).answerMode)),
           },
         });
 
         // 创建 QuestionStep 并获取返回的 id
+        // 检测协议版本
+        const isV2Protocol = q.steps.length > 0 && detectProtocolVersion(q.steps[0]) === 'v2';
+
         const createdSteps = await Promise.all(
           q.steps.map(async (step) => {
             const stepNumber = parseInt(step.stepId.replace('s', ''));
+            const ui = (step as any).ui || {};
+
+            // v2 协议：保存完整 expectedAnswer
+            const stepAnswer = isV2Protocol && 'expectedAnswer' in step
+              ? JSON.stringify({
+                  expectedAnswer: (step as StepProtocolV2).expectedAnswer,
+                })
+              : JSON.stringify({
+                  instruction: ui.instruction || '',
+                  inputTarget: ui.inputTarget || '',
+                  inputHint: ui.inputHint || '',
+                  inputType: (step as StepProtocol).inputType,
+                  keyboard: (step as StepProtocol).keyboard,
+                  tolerance: (step as StepProtocol).tolerance,
+                  type: (step as StepProtocol).type,
+                });
+
             const created = await prisma.questionStep.create({
               data: {
                 questionId: question.id,
                 stepNumber,
-                expression: step.ui.instruction,
-                answer: '',
-                hint: step.ui.inputHint,
-                type: step.type,
-                inputType: step.inputType,
-                keyboard: step.keyboard,
-                tolerance: step.tolerance,
+                expression: ui.instruction || '',
+                answer: stepAnswer,
+                hint: ui.inputHint || '',
+                type: isV2Protocol ? 'v2' : ((step as StepProtocol).type as string),
+                inputType: isV2Protocol ? 'numeric' : ((step as StepProtocol).inputType || 'numeric'),
+                keyboard: isV2Protocol ? 'numeric' : ((step as StepProtocol).keyboard || 'numeric'),
+                tolerance: isV2Protocol ? undefined : (step as StepProtocol).tolerance,
               },
             });
-            // 返回带 id 的步骤信息，用于前端提交时关联
+
             return {
               ...step,
               id: created.id,
               stepNumber,
+              ui,
+              isV2: isV2Protocol,
             };
           })
         );
