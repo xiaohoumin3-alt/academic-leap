@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { judgeStep } from '@/lib/question-engine';
+import { judgeStepV2 } from '@/lib/question-engine/judge-v2';
 import { calculateBehaviorTag } from '@/lib/adaptive-difficulty';
+import type { StepProtocolV2 } from '@/lib/question-engine/protocol-v2';
 
 // POST /api/questions/verify - 使用判题引擎批改答案
 export async function POST(req: NextRequest) {
@@ -64,25 +66,50 @@ export async function POST(req: NextRequest) {
     const params = JSON.parse(question.params || '{}');
     const stepType = step.type as any;
 
-    // 使用判题引擎进行判题（结构驱动，100%可靠）
-    const result = judgeStep(
-      {
+    // 检测协议版本：v2 协议的 type 字段为 'v2' 且 answer 包含 expectedAnswer
+    const stepAnswer = JSON.parse(step.answer || '{}');
+    const isV2 = step.type === 'v2' || 'expectedAnswer' in stepAnswer;
+
+    let result;
+
+    if (isV2 && stepAnswer.expectedAnswer) {
+      // v2 协议：构建 StepProtocolV2
+      const v2Step: StepProtocolV2 = {
         stepId: `s${stepNumber}`,
-        type: stepType,
-        inputType: (step.inputType as any) || 'numeric',
-        keyboard: (step.keyboard as any) || 'numeric',
-        answerType: 'number',
-        tolerance: step.tolerance ?? undefined,
+        answerMode: (stepAnswer as any).answerMode || 'text',
         ui: {
           instruction: step.expression,
-          inputTarget: '',
-          inputHint: step.hint || '',
+          inputPlaceholder: '',
+          hint: step.hint || '',
         },
-      },
-      params,
-      userAnswer,
-      duration
-    );
+        expectedAnswer: stepAnswer.expectedAnswer,
+        keyboard: step.keyboard
+          ? { type: step.keyboard as any, extraKeys: [] }
+          : undefined,
+        options: (stepAnswer as any).options,
+      };
+      result = judgeStepV2(v2Step, userAnswer, duration);
+    } else {
+      // v1 协议：使用原有逻辑
+      result = judgeStep(
+        {
+          stepId: `s${stepNumber}`,
+          type: stepType,
+          inputType: (step.inputType as any) || 'numeric',
+          keyboard: (step.keyboard as any) || 'numeric',
+          answerType: 'number',
+          tolerance: step.tolerance ?? undefined,
+          ui: {
+            instruction: step.expression,
+            inputTarget: '',
+            inputHint: step.hint || '',
+          },
+        },
+        params,
+        userAnswer,
+        duration
+      );
+    }
 
     // 返回判题结果，包含correctAnswer
     return NextResponse.json({
