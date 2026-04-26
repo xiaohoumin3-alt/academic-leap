@@ -4,7 +4,7 @@ export interface PredictionClientConfig {
 }
 
 export interface PredictRequest {
-  studentId: number;
+  studentId: string;  // 改为 string 与服务层一致
   questionFeatures: {
     difficulty: number;
     knowledgeNodes: string[];
@@ -12,7 +12,7 @@ export interface PredictRequest {
 }
 
 export interface PredictResponse {
-  studentId: number;
+  studentId: string;  // 改为 string 与服务层一致
   predictions: Array<{
     questionId: string;
     probability: number;

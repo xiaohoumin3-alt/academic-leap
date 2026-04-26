@@ -11,14 +11,7 @@ const nextConfig = {
   experimental: {
     turbo: undefined, // 禁用Turbopack
   },
-  typescript: {
-    // 忽略验证和独立服务的类型检查
-    ignoreBuildErrors: true,
-  },
-  eslint: {
-    // 忽略 ESLint 检查
-    ignoreDuringBuilds: true,
-  },
+  // TypeScript 和 ESLint 检查已启用，确保代码质量
 };
 
 module.exports = nextConfig;

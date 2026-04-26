@@ -4,7 +4,7 @@
  * 基于 Prediction Service 的 IRT 模型预测
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import MaterialIcon from './MaterialIcon';
 
 interface PredictionBadgeProps {
@@ -95,18 +95,46 @@ const PredictionBadge: React.FC<PredictionBadgeProps> = ({
 }) => {
   const [prediction, setPrediction] = useState<PredictionResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    const loadPrediction = async () => {
-      setIsLoading(true);
+  const loadPrediction = useCallback(async () => {
+    // 取消之前的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
+    setIsLoading(true);
+    try {
       const result = await fetchPrediction(studentId, questionDifficulty, knowledgeNodes);
       setPrediction(result);
+    } catch {
+      // 请求被取消或出错
+    } finally {
       setIsLoading(false);
-    };
-
-    // 只在客户端加载
-    loadPrediction();
+    }
   }, [studentId, questionDifficulty, knowledgeNodes]);
+
+  useEffect(() => {
+    // 防抖 300ms
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = setTimeout(() => {
+      loadPrediction();
+    }, 300);
+
+    // 清理
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [loadPrediction]);
 
   // 难度标签颜色
   const difficultyColor = questionDifficulty <= 0.3

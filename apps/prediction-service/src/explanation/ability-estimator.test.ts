@@ -1,8 +1,15 @@
 /**
  * Ability Estimator Tests
+ *
+ * Tests use IRT ability scale [-2, 2]
+ * Conversion: ability_irt = (correct_rate - 0.5) * 4
+ * - 100% correct → ability = 2
+ * - 0% correct → ability = -2
+ * - 50% correct → ability = 0
+ * - Default (insufficient) → ability = 0
  */
 
-import { describe, test, expect } from '@jest/globals';
+import { describe, test, expect } from 'vitest';
 import {
   estimateAbility,
   estimateAllAbilities,
@@ -17,11 +24,11 @@ describe('estimateAbility', () => {
   const dayMs = 24 * 60 * 60 * 1000;
 
   describe('insufficient data (less than 3 answers)', () => {
-    test('returns default ability of 0.5 with zero answers', () => {
+    test('returns default ability of 0 (IRT average) with zero answers', () => {
       const result = estimateAbility([], nodeId);
 
       expect(result.nodeId).toBe(nodeId);
-      expect(result.ability).toBe(0.5);
+      expect(result.ability).toBe(0);  // IRT average
       expect(result.sampleSize).toBe(0);
       expect(result.confidence).toBe(0.1);
       expect(result.lastUpdated).toBeCloseTo(Date.now(), -3);
@@ -35,7 +42,7 @@ describe('estimateAbility', () => {
       const result = estimateAbility(answers, nodeId);
 
       expect(result.nodeId).toBe(nodeId);
-      expect(result.ability).toBe(0.5);
+      expect(result.ability).toBe(0);  // IRT average
       expect(result.sampleSize).toBe(1);
       expect(result.confidence).toBe(0.1);
     });
@@ -49,14 +56,14 @@ describe('estimateAbility', () => {
       const result = estimateAbility(answers, nodeId);
 
       expect(result.nodeId).toBe(nodeId);
-      expect(result.ability).toBe(0.5);
+      expect(result.ability).toBe(0);  // IRT average
       expect(result.sampleSize).toBe(2);
       expect(result.confidence).toBe(0.1);
     });
   });
 
-  describe('calculates ability correctly with enough data', () => {
-    test('calculates 100% correct rate', () => {
+  describe('calculates ability correctly with enough data (IRT scale)', () => {
+    test('calculates 100% correct rate → ability = 2', () => {
       const answers: Answer[] = [
         { correct: true, timestamp: now, knowledgeNodes: [nodeId] },
         { correct: true, timestamp: now, knowledgeNodes: [nodeId] },
@@ -66,12 +73,12 @@ describe('estimateAbility', () => {
       const result = estimateAbility(answers, nodeId);
 
       expect(result.nodeId).toBe(nodeId);
-      expect(result.ability).toBe(1.0);
+      expect(result.ability).toBe(2);  // 100% → (1 - 0.5) * 4 = 2
       expect(result.sampleSize).toBe(3);
       expect(result.confidence).toBeCloseTo(0.15, 1);
     });
 
-    test('calculates 0% correct rate', () => {
+    test('calculates 0% correct rate → ability = -2', () => {
       const answers: Answer[] = [
         { correct: false, timestamp: now, knowledgeNodes: [nodeId] },
         { correct: false, timestamp: now, knowledgeNodes: [nodeId] },
@@ -80,11 +87,11 @@ describe('estimateAbility', () => {
 
       const result = estimateAbility(answers, nodeId);
 
-      expect(result.ability).toBe(0.0);
+      expect(result.ability).toBe(-2);  // 0% → (0 - 0.5) * 4 = -2
       expect(result.sampleSize).toBe(3);
     });
 
-    test('calculates 50% correct rate', () => {
+    test('calculates 50% correct rate → ability = 0', () => {
       const answers: Answer[] = [
         { correct: true, timestamp: now, knowledgeNodes: [nodeId] },
         { correct: false, timestamp: now, knowledgeNodes: [nodeId] },
@@ -94,7 +101,7 @@ describe('estimateAbility', () => {
 
       const result = estimateAbility(answers, nodeId);
 
-      expect(result.ability).toBe(0.5);
+      expect(result.ability).toBe(0);  // 50% → (0.5 - 0.5) * 4 = 0
       expect(result.sampleSize).toBe(4);
     });
 
@@ -108,9 +115,9 @@ describe('estimateAbility', () => {
 
       const result = estimateAbility(answers, nodeId);
 
-      // 3 answers are for node_1, all with correct=true
+      // 3 answers are for node_1, all with correct=true → ability = 2
       expect(result.sampleSize).toBe(3);
-      expect(result.ability).toBe(1.0);
+      expect(result.ability).toBe(2);
     });
   });
 
@@ -126,9 +133,8 @@ describe('estimateAbility', () => {
 
       const result = estimateAbility(answers, nodeId);
 
-      // The ability should be close to 1.0 because recent answers dominate
-      // due to exponential decay with 30-day half-life
-      expect(result.ability).toBeGreaterThan(0.8);
+      // The ability should be close to 2 (100%) because recent answers dominate
+      expect(result.ability).toBeGreaterThan(1.5);
     });
 
     test('old answers have lower weight', () => {
@@ -143,8 +149,7 @@ describe('estimateAbility', () => {
       const result = estimateAbility(answers, nodeId);
 
       // The ability should be lower due to recent wrong answer
-      // Even though historically 2/3 were correct
-      expect(result.ability).toBeLessThan(0.6);
+      expect(result.ability).toBeLessThan(0.5);
     });
 
     test('custom decay half-life affects weighting', () => {
@@ -211,7 +216,7 @@ describe('estimateAllAbilities', () => {
 
     expect(profile.studentId).toBe('student_1');
     expect(profile.abilities).toEqual([]);
-    expect(profile.overallAbility).toBe(0.5);
+    expect(profile.overallAbility).toBe(0);  // IRT average
     expect(profile.totalAnswers).toBe(0);
     expect(profile.recentCorrectRate).toBe(0.5);
   });
@@ -236,7 +241,7 @@ describe('estimateAllAbilities', () => {
     expect(math2Ability?.sampleSize).toBe(2);
   });
 
-  test('calculates weighted overall ability', () => {
+  test('calculates weighted overall ability (IRT scale)', () => {
     const answers: Answer[] = [
       { correct: true, timestamp: now, knowledgeNodes: ['weak_node'] },
       { correct: true, timestamp: now, knowledgeNodes: ['weak_node'] },
@@ -250,10 +255,11 @@ describe('estimateAllAbilities', () => {
 
     const profile = estimateAllAbilities(answers, 'student_1');
 
-    // weak_node: 75% correct, strong_node: 100% correct
-    // overall should be weighted by confidence
-    expect(profile.overallAbility).toBeGreaterThan(0.75);
-    expect(profile.overallAbility).toBeLessThan(1.0);
+    // weak_node: 75% correct → (0.75 - 0.5) * 4 = 1.0
+    // strong_node: 100% correct → (1 - 0.5) * 4 = 2.0
+    // Overall should be weighted by confidence (both have same sample size)
+    expect(profile.overallAbility).toBeGreaterThan(1.0);
+    expect(profile.overallAbility).toBeLessThan(2.0);
   });
 
   test('calculates recent correct rate from last 20 answers', () => {

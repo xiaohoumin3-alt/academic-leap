@@ -2,6 +2,7 @@
  * Explanation Generator Module
  *
  * Generates human-readable explanations for prediction results.
+ * Uses IRT ability scale [-2, 2] internally, converts to [0, 1] for display.
  */
 
 export interface Explanation {
@@ -20,36 +21,50 @@ export interface Explanation {
 export interface GenerateExplanationInput {
   predictionProbability: number;
   predictionConfidence: number;
-  studentAbility: number;
+  studentAbility: number;  // IRT scale [-2, 2]
   studentAbilityProfile: {
-    overallAbility: number;
+    overallAbility: number;  // IRT scale [-2, 2]
     abilities: Array<{ nodeId: string; ability: number; confidence: number }>;
     totalAnswers: number;
     recentCorrectRate: number;
   };
   questionFeatures: {
-    difficulty: number;
+    difficulty: number;  // [0, 1]
     knowledgeNodes: string[];
   };
 }
 
 /**
+ * Convert IRT ability [-2, 2] to probability scale [0, 1] for display
+ */
+function irtToProbability(ability: number): number {
+  return 1 / (1 + Math.exp(-ability));
+}
+
+/**
  * Generate the primary reason explanation based on prediction probability,
  * student ability, and question difficulty.
+ *
+ * @param probability - Predicted probability [0, 1]
+ * @param ability - Student ability in IRT scale [-2, 2]
+ * @param difficulty - Question difficulty [0, 1]
  */
 export function generatePrimaryReason(
   probability: number,
   ability: number,
   difficulty: number
 ): string {
+  // Convert ability to probability scale for intuitive comparison
+  const abilityProb = irtToProbability(ability);
+
   if (probability > 0.7) {
-    if (ability > difficulty + 0.2) {
-      return `学生能力(${ability.toFixed(2)})高于题目难度(${difficulty.toFixed(2)})，预测正确概率较高`;
+    if (abilityProb > difficulty + 0.2) {
+      return `学生能力(${Math.round(abilityProb * 100)}%)高于题目难度(${Math.round(difficulty * 100)}%)，预测正确概率较高`;
     }
     return `基于历史表现，预测该生在此类题目上有较好的正确率`;
   } else if (probability < 0.4) {
-    if (ability < difficulty - 0.1) {
-      return `学生能力(${ability.toFixed(2)})低于题目难度(${difficulty.toFixed(2)})，预测正确概率较低`;
+    if (abilityProb < difficulty - 0.1) {
+      return `学生能力(${Math.round(abilityProb * 100)}%)低于题目难度(${Math.round(difficulty * 100)}%)，预测正确概率较低`;
     }
     return `历史数据显示该生在此难度区间正确率不高`;
   }
@@ -58,10 +73,11 @@ export function generatePrimaryReason(
 
 /**
  * Generate supporting factors based on student ability profile and question features.
+ * Abilities are in IRT scale [-2, 2], convert to [0, 1] for display.
  */
 export function generateSupportingFactors(
   profile: {
-    overallAbility: number;
+    overallAbility: number;  // IRT scale [-2, 2]
     abilities: Array<{ nodeId: string; ability: number; confidence: number }>;
     totalAnswers: number;
     recentCorrectRate: number;
@@ -83,8 +99,9 @@ export function generateSupportingFactors(
     questionFeatures.knowledgeNodes.includes(a.nodeId)
   );
   if (relevantAbilities.length > 0) {
-    const avgAbility = relevantAbilities.reduce((s, a) => s + a.ability, 0) / relevantAbilities.length;
-    factors.push(`相关知识点平均能力：${(avgAbility * 100).toFixed(0)}%`);
+    const avgAbilityIRT = relevantAbilities.reduce((s, a) => s + a.ability, 0) / relevantAbilities.length;
+    const avgAbilityProb = irtToProbability(avgAbilityIRT);
+    factors.push(`相关知识点平均能力：${Math.round(avgAbilityProb * 100)}%`);
   }
 
   return factors;
@@ -119,10 +136,13 @@ export function generateExplanation(input: GenerateExplanationInput): Explanatio
     '解释仅供参考，不影响预测决策'
   ];
 
+  // Confidence: normalize IRT ability to [0, 1] for confidence calculation
+  const normalizedAbility = Math.abs(studentAbility / 2);
+
   return {
     primaryReason,
     supportingFactors,
-    confidence: predictionConfidence * studentAbilityProfile.overallAbility,
+    confidence: predictionConfidence * normalizedAbility,
     caveats,
     metadata: {
       predictionProbability,
