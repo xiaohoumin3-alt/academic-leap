@@ -27,11 +27,18 @@ export async function GET(req: NextRequest) {
     };
 
     // 如果用户已选择教材，只获取该教材的知识点
-    if (user?.selectedTextbookId) {
-      knowledgePointWhere.chapter = {
-        textbookId: user.selectedTextbookId,
-      };
+    // 如果没有选择教材，返回空列表（要求用户先选择教材）
+    if (!user?.selectedTextbookId) {
+      return NextResponse.json({
+        knowledge: [],
+        summary: { total: 0, mastered: 0, learning: 0, weak: 0 },
+        requireTextbookSelection: true,
+      });
     }
+
+    knowledgePointWhere.chapter = {
+      textbookId: user.selectedTextbookId,
+    };
 
     // 使用 id 作为唯一标识，按 id 查询
     const activeKnowledgePoints = await prisma.knowledgePoint.findMany({

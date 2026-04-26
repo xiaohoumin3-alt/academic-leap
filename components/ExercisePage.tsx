@@ -145,9 +145,16 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
           console.log('已启用的知识点:', Array.from(enabledNames));
           return enabledNames;
         }
+      } else if (res.status === 400) {
+        // 用户未选择教材
+        console.warn('用户未选择教材');
+        throw new Error('REQUIRE_TEXTBOOK_SELECTION');
       }
     } catch (e) {
       console.warn('获取已启用知识点失败:', e);
+      if (e instanceof Error && e.message === 'REQUIRE_TEXTBOOK_SELECTION') {
+        throw e; // 重新抛出，让上层处理
+      }
     }
     return new Set<string>();
   };
@@ -218,13 +225,30 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
       // 并行获取薄弱知识点和已启用知识点
       const [weakRes, enabledSet] = await Promise.all([
         fetch('/api/analytics/knowledge'),
-        fetchEnabledKnowledgePoints(),
+        fetchEnabledKnowledgePoints().catch(e => {
+          if (e instanceof Error && e.message === 'REQUIRE_TEXTBOOK_SELECTION') {
+            // 用户未选择教材，返回空 Set
+            return new Set<string>();
+          }
+          throw e;
+        }),
       ]);
 
       let allKnowledge: any[] = [];
+      let requireTextbookSelection = false;
+
       if (weakRes.ok) {
         const weakData = await weakRes.json();
         allKnowledge = weakData.knowledge || [];
+        requireTextbookSelection = weakData.requireTextbookSelection || false;
+      }
+
+      // 如果用户未选择教材，显示提示
+      if (requireTextbookSelection || (allKnowledge.length === 0 && enabledSet.size === 0)) {
+        setFeedback('请先选择教材和知识点，再开始练习');
+        setIsLoading(false);
+        isLoadingQuestion.current = false;
+        return;
       }
 
       // 过滤出已启用的知识点

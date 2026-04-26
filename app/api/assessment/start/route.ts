@@ -39,11 +39,21 @@ export async function POST(req: NextRequest) {
         grade: true,
         targetScore: true,
         currentLevel: true,
+        selectedTextbookId: true,  // 添加教材检查
       },
     });
 
     if (!user) {
       return NextResponse.json({ error: '用户不存在' }, { status: 404 });
+    }
+
+    // 检查用户是否选择了教材（retry模式除外，因为已选择过教材的用户可以重新测评）
+    if (!user.selectedTextbookId && !retry) {
+      return NextResponse.json({
+        success: false,
+        error: '请先选择教材',
+        requireTextbookSelection: true,
+      }, { status: 400 });
     }
 
     // 如果已完成测评且不是retry模式，返回现有信息
@@ -69,13 +79,22 @@ export async function POST(req: NextRequest) {
     }
     const { min: minDifficulty, max: maxDifficulty } = getGradeDifficultyRange(userGrade);
 
-    // 获取参与测评的知识点
+    // 获取参与测评的知识点（限制在用户选择的教材范围内）
+    const knowledgePointWhere: any = {
+      inAssess: true,
+      status: 'active',
+      deletedAt: null,
+    };
+
+    // 如果用户已选择教材，只获取该教材的知识点
+    if (user.selectedTextbookId) {
+      knowledgePointWhere.chapter = {
+        textbookId: user.selectedTextbookId,
+      };
+    }
+
     const knowledgePoints = await prisma.knowledgePoint.findMany({
-      where: {
-        inAssess: true,
-        status: 'active',
-        deletedAt: null,
-      },
+      where: knowledgePointWhere,
       select: {
         id: true,
         name: true,
