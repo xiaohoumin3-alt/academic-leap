@@ -1,8 +1,10 @@
-# Question Graph 架构设计文档 v2.0
+# Question Graph 架构设计文档 v2.1
 
 **日期**: 2026-04-26
-**状态**: 架构评审后修订
+**状态**: 第二轮架构评审后修订
 **作者**: AI + 用户头脑风暴 + 架构评审
+
+**关联文档**: `2026-04-26-cognitive-node-registry.md`（认知节点注册表）
 
 ---
 
@@ -11,6 +13,11 @@
 > **诊断能力来自覆盖认知节点，而不是步骤数。**
 
 所有设计决策必须服从这一原则。
+
+**关键推论**：
+- 认知节点必须标准化、可复用、可比较
+- 子问题必须绑定到具体的认知节点
+- 诊断结果是节点级别的，不是题目级别的
 
 ---
 
@@ -24,12 +31,13 @@
 | 公平性问题 | 学生A用10步，学生B用2步，答案都对，系统能给B扣分吗？ |
 | 诊断矛盾 | 选择题只有1步，如何诊断学生卡在哪里？ |
 | 步骤划分争议 | 什么该拆，什么不该拆，没有清晰标准 |
+| **节点未标准化** | 同一知识点，不同人拆出不同的"节点"，诊断不可比 |
 
-**核心矛盾**：系统试图用"线性结构"去约束"非线性思维"。
+**核心矛盾**：系统试图用"线性结构"去约束"非线性思维"，且缺少统一的认知节点体系。
 
 ---
 
-## 二、新范式：Question Graph
+## 二、新范式：Question Graph + Cognitive Node Registry
 
 ### 2.1 范式升级
 
@@ -37,31 +45,39 @@
 旧范式（Step-based）:
 一个题 → 多个步骤 → 强制顺序
 
-新范式（Question Graph）:
-一个知识点 → 多个子问题 → 弱依赖关系（DAG）→ 调度引擎
+新范式:
+一个知识点 → 认知节点注册表 → 子问题绑定节点 → 诊断引擎
 ```
 
-### 2.2 子问题定义 + 强约束
+### 2.2 核心概念关系
+
+```
+Cognitive Node（认知节点）
+    ↓
+SubQuestion（子问题，绑定到节点）
+    ↓
+QuestionGroup（问题组）
+    ↓
+Diagnosis（节点级诊断）
+```
+
+### 2.3 子问题定义 + 强约束
 
 **子问题（SubQuestion）**：一个"最小可判定的认知单元"
 
 必须满足三个条件：
 1. 学生必须输出（不是看/想）
 2. 系统可以判对错
-3. 对应一个独立认知动作
+3. **绑定到标准化的认知节点**（新增）
 
-| 示例 | 是否子问题 | 原因 |
-|------|-----------|------|
-| "理解题意" | ❌ | 不可判定 |
-| "判断是否直角三角形" | ✅ | yes/no 输出 |
-| "计算 c²" | ✅ | 数值输出 |
-| "计算 c" | ✅ | 数值输出 |
+| 示例 | 是否子问题 | 绑定节点 |
+|------|-----------|---------|
+| "理解题意" | ❌ | 无（不可判定） |
+| "判断是否直角三角形" | ✅ | pythagoras_recognition_001 |
+| "计算 c²" | ✅ | pythagoras_computation_001 |
+| "计算 c" | ✅ | pythagoras_computation_002 |
 
----
-
-### 2.3 子问题数量强约束（新增）
-
-**为防止模板质量失控，强制限制**：
+### 2.4 子问题数量强约束
 
 ```typescript
 const SUB_QUESTION_LIMITS = {
@@ -70,17 +86,6 @@ const SUB_QUESTION_LIMITS = {
   DAG_MAX_DEPTH: 2,      // DAG最大深度
 } as const;
 ```
-
-**按题型分类**：
-
-| 题型 | 子问题数 | 理由 |
-|------|---------|------|
-| 选择/填空 | 1 | 本身就是单步输入 |
-| 基础计算 | 2-3 | 按运算层级拆分 |
-| 应用题 | 3-5 | 按建模路径拆分 |
-| 证明题 | 4-6 | 未来扩展 |
-
-**超出限制的模板必须人工审查**。
 
 ---
 
@@ -93,111 +98,156 @@ const SUB_QUESTION_LIMITS = {
 │                     Question Graph System                    │
 ├─────────────────────────────────────────────────────────────┤
 │                                                               │
-│  ┌─────────────────┐    ┌─────────────────┐                  │
-│  │ Question Graph  │───→│ Student State   │                  │
-│  │   (结构层)       │    │   (状态层)       │                  │
-│  └─────────────────┘    └─────────────────┘                  │
-│                                ↓                              │
-│                       ┌─────────────────┐                     │
-│                       │ Diagnosis Engine│ ← 核心缺失模块      │
-│                       │   (决策层)       │   (新增)            │
-│                       └─────────────────┘                     │
-│                                ↓                              │
-│                       ┌─────────────────┐                     │
-│                       │       UI        │                     │
-│                       │   (展示层)       │                     │
-│                       └─────────────────┘                     │
+│  ┌──────────────────┐    ┌──────────────────┐                │
+│  │ Cognitive Node   │───→│  Question Graph  │                  │
+│  │   Registry       │    │    (结构层)       │                  │
+│  │  (节点定义层)     │    │                  │                  │
+│  └──────────────────┘    └──────────────────┘                  │
+│                                   ↓                            │
+│                          ┌──────────────────┐                  │
+│                          │  Student State   │                  │
+│                          │   (状态层)        │                  │
+│                          │  - 节点掌握度     │                  │
+│                          │  - 时间衰减       │                  │
+│                          └──────────────────┘                  │
+│                                   ↓                            │
+│                          ┌──────────────────┐                  │
+│                          │ Diagnosis Engine │                  │
+│                          │   (决策层)        │                  │
+│                          │  - 启发式增益     │                  │
+│                          │  - 依赖惩罚       │                  │
+│                          └──────────────────┘                  │
+│                                   ↓                            │
+│                          ┌──────────────────┐                  │
+│                          │       UI        │                   │
+│                          │   (展示层)        │                  │
+│                          └──────────────────┘                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 3.2 数据结构（更新版）
+### 3.2 数据结构（v2.1 修订版）
 
 ```typescript
-// 知识点
+// ============ 认知节点（详见 Cognitive Node Registry 文档）============
+interface CognitiveNode {
+  id: string;                    // 唯一标识
+  knowledgeUnit: string;         // 归属知识点
+  type: 'recognition' | 'concept' | 'computation' | 'application' | 'reasoning';
+  description: string;
+  difficulty: number;            // 0-1，节点基础难度
+  importance: number;            // 0-1，在知识点中的重要性
+  prerequisites: string[];       // 前置节点ID
+  dependentNodes: string[];      // 后续节点ID
+}
+
+// ============ 知识点 ============
 interface KnowledgeUnit {
   id: string;
   name: string;
   chapter: string;
 }
 
-// 问题组（一个练习）
+// ============ 问题组 ============
 interface QuestionGroup {
   groupId: string;
   knowledge: KnowledgeUnit;
-  difficulty: number;  // 0-5，控制出题
+  difficulty: number;            // 0-5，控制出题
   questions: SubQuestion[];
 
-  // 新增：强约束
-  validate(): boolean {
-    return this.questions.length <= SUB_QUESTION_LIMITS.MAX_PER_GROUP;
-  }
+  validate(): boolean;           // 校验数量限制
 }
 
-// 子问题
+// ============ 子问题（v2.1 重大修订）============
 interface SubQuestion {
   questionId: string;
   type: AnswerMode;
   description: string;
   hint?: string;
   expectedAnswer: ExpectedAnswer;
-  dependsOn?: string[];  // 依赖的其他问题ID
+  dependsOn?: string[];          // 依赖的其他问题ID
 
-  // 新增：三个维度的统一
-  difficultyWeight: number;    // 评分权重（0-1）
-  coverageFactor: number;      // 覆盖因子（表示覆盖的认知节点数）
-  cognitiveLevel: number;      // 认知层级（1-4，按布鲁姆分类法）
+  // ✅ 新增：绑定到认知节点
+  nodeId: string;                // 绑定的认知节点ID（必需）
+  nodeWeight: number;            // 该问题在节点中的权重（默认1.0）
+
+  // 题目展示难度
+  difficulty: number;            // 0-5，控制出题
+
+  // ❌ v2.0 已删除
+  // - difficultyWeight（由 nodeWeight 代替）
+  // - coverageFactor（由 nodeId + importance 代替）
+  // - cognitiveLevel（装饰字段，已删除）
 }
 
-// 答题记录
+// ============ 节点掌握状态 ============
+interface NodeMastery {
+  nodeId: string;
+
+  // 掌握程度（0-1）
+  level: number;
+
+  // 置信度（0-1，基于尝试次数）
+  confidence: number;
+
+  // 时间衰减后的掌握度
+  decayedLevel: number;
+
+  // 最近表现
+  recentAttempts: Attempt[];
+
+  // 最后尝试时间
+  lastAttempt: number;
+}
+
+// ============ 学生状态 ============
+interface StudentState {
+  // 节点级掌握度
+  nodeMasteries: Map<string, NodeMastery>;
+
+  // 题目级结果（用于统计）
+  questionResults: Map<string, QuestionResult>;
+
+  // 推荐路径（动态生成）
+  recommendedPath: string[];
+}
+
+// ============ 答题记录 ============
 interface QuestionResult {
   questionId: string;
+  nodeId: string;                // 绑定的节点ID
   isCorrect: boolean;
   duration: number;
   skipped: boolean;
   timestamp: number;
 }
-
-// 学生状态（新增）
-interface StudentState {
-  // 当前题目的答题状态
-  results: Map<string, QuestionResult>;
-
-  // 每个认知节点的不确定性（0-1）
-  uncertainty: Map<string, number>;
-
-  // 推荐路径
-  recommendedPath: string[];
-}
 ```
 
-### 3.3 依赖关系图（DAG）+ 推荐路径
+### 3.3 依赖关系图（DAG）+ 节点依赖
 
 ```
 示例：勾股定理应用题
 
-Q1: 判断是否直角三角形 (boolean)
+问题级 DAG:
+Q1: 判断是否直角三角形 → 绑定节点: pythagoras_recognition_001
         ↓
-Q2: 计算 c² (number)
+Q2: 计算 c² → 绑定节点: pythagoras_computation_001
         ↓
-Q3: 计算 c (number)
+Q3: 计算 c → 绑定节点: pythagoras_computation_002
         ↓
-Q4: 应用到实际问题 (number)
+Q4: 应用到实际问题 → 绑定节点: pythagoras_application_001
 
-推荐路径: Q1 → Q2 → Q3 → Q4
-允许跳转: 学生可直接做 Q3，但系统会标记 Q1, Q2 未验证
+节点级依赖（来自 Cognitive Node Registry）:
+recognition_001 → concept_001 → computation_001 → computation_002 → application_001
 ```
 
 ---
 
-## 四、核心模块：诊断决策引擎（新增）
+## 四、核心模块：诊断决策引擎（v2.1 修订）
 
 ### 4.1 Question Scheduler（问题调度器）
 
-**这是系统最核心的缺失模块，负责决策"下一个问题是什么"**。
-
 ```typescript
 interface QuestionScheduler {
-  // 根据当前学生状态，选择下一个问题
   pickNext(state: StudentState): NextQuestionDecision;
 }
 
@@ -208,40 +258,32 @@ interface NextQuestionDecision {
 }
 ```
 
-#### 三种调度策略
-
-| 策略 | 触发条件 | 行为 |
-|------|---------|------|
-| **推进策略** | 当前问题完成，依赖已满足 | 进入推荐路径的下一题 |
-| **验证策略** | 跳过了高影响的基础问题 | 回头补问未验证的基础 |
-| **补洞策略** | 某节点不确定性过高 | 主动补问验证 |
-
-#### 示例决策逻辑
+#### 调度策略（基于节点诊断）
 
 ```typescript
 function pickNext(state: StudentState): NextQuestionDecision {
-  // 策略1：检查是否有未验证的高影响节点
-  const unvalidatedHighImpact = findUnvalidatedHighImpact(state);
-  if (unvalidatedHighImpact) {
-    return {
-      action: 'validate',
-      questionId: unvalidatedHighImpact,
-      reason: '验证基础是否掌握'
-    };
-  }
-
-  // 策略2：检查是否有高不确定性的节点
-  const highUncertainty = findHighUncertainty(state, threshold = 0.6);
-  if (highUncertainty) {
+  // 策略1：检查未掌握的高重要性节点
+  const unmasteredHighImportance = findUnmasteredHighImportance(state);
+  if (unmasteredHighImportance) {
     return {
       action: 'gap_fill',
-      questionId: highUncertainty,
-      reason: '补问以降低不确定性'
+      questionId: selectQuestionForNode(unmasteredHighImportance),
+      reason: `补问重要节点: ${unmasteredHighImportance}`
     };
   }
 
-  // 策略3：正常推进
-  const nextInPath = getNextInRecommendedPath(state);
+  // 策略2：检查未验证的前置节点
+  const unvalidatedPrereq = findUnvalidatedPrerequisite(state);
+  if (unvalidatedPrereq) {
+    return {
+      action: 'validate',
+      questionId: selectQuestionForNode(unvalidatedPrereq),
+      reason: `验证前置节点: ${unvalidatedPrereq}`
+    };
+  }
+
+  // 策略3：正常推进（动态推荐路径）
+  const nextInPath = generateDynamicRecommendedPath(state)[0];
   if (nextInPath) {
     return {
       action: 'progress',
@@ -250,230 +292,262 @@ function pickNext(state: StudentState): NextQuestionDecision {
     };
   }
 
-  return { action: 'complete', reason: '所有问题完成' };
+  return { action: 'complete', reason: '所有节点已验证' };
 }
 ```
 
-### 4.2 动态补问机制（重构版）
+### 4.2 启发式信息增益（v2.1 降级版）
 
-**从"规则驱动"升级为"信息增益驱动"**。
+**重要变更**：从"伪贝叶斯"降级为"启发式"
 
-#### 旧版本（❌ 规则驱动）
 ```typescript
-// ❌ 不好：硬编码次数
-if (directAnswerCount >= 2) {
-  triggerFollowUp();
+// ❌ v2.0 伪实现（避免）
+// informationGain = uncertainty - expectedPosteriorUncertainty
+
+// ✅ v2.1 启发式实现
+function heuristicGain(
+  state: StudentState,
+  nodeId: string,
+  nodeRegistry: CognitiveNodeRegistry
+): number {
+  const node = nodeRegistry.get(nodeId)!;
+  const mastery = state.nodeMasteries.get(nodeId);
+
+  // 如果已掌握（level > 0.8），增益低
+  if (mastery && mastery.decayedLevel > 0.8) {
+    return 0.1;
+  }
+
+  // 如果未掌握且重要，增益高
+  const importance = node.importance;
+  const uncertainty = mastery ? (1 - mastery.confidence) : 1.0;
+
+  // 启发式公式（不是AI，是规则）
+  return uncertainty * importance;
 }
-```
 
-#### 新版本（✅ 信息增益驱动）
-```typescript
-// ✅ 好：基于不确定性
 function shouldTriggerFollowUp(
   state: StudentState,
-  questionId: string
+  nodeId: string,
+  threshold: number = 0.5
 ): boolean {
-  const uncertainty = state.uncertainty.get(questionId) ?? 1.0;
-
-  // 信息增益 = 当前不确定性 - 预期事后不确定性
-  const informationGain = uncertainty - expectedPosteriorUncertainty;
-
-  // 只有当信息增益足够大时才补问
-  return informationGain > GAIN_THRESHOLD;
+  return heuristicGain(state, nodeId) > threshold;
 }
 ```
 
-**触发条件**：
-1. 某节点未验证（uncertainty = 1.0）
-2. 该节点影响后续问题（高coverageFactor）
-3. 补问能显著降低不确定性（informationGain > threshold）
+### 4.3 依赖惩罚机制（v2.1 新增）
 
-### 4.3 掌握度计算（统一公式）
-
-**三个维度的统一**：
+**问题**：如果前置节点未掌握，后续节点的正确性不可信
 
 ```typescript
-function calculateMastery(
-  results: QuestionResult[],
-  questions: SubQuestion[]
-): MasteryProfile {
-  // 统一公式
-  const mastery = questions.reduce((sum, q) => {
-    const result = results.find(r => r.questionId === q.questionId);
-    if (!result || result.skipped) return sum;
+function calculateNodeMasteryWithPenalty(
+  nodeId: string,
+  allMasteries: Map<string, NodeMastery>,
+  nodeRegistry: CognitiveNodeRegistry
+): NodeMastery {
+  const baseMastery = allMasteries.get(nodeId)!;
+  const node = nodeRegistry.get(nodeId)!;
 
-    const score = result.isCorrect ? 1 : 0;
-    const contribution = score * q.difficultyWeight * q.coverageFactor;
-
-    return sum + contribution;
-  }, 0) / normalizeFactor;
+  // 检查前置节点
+  let penalty = 1.0;
+  for (const prereqId of node.prerequisites) {
+    const prereqMastery = allMasteries.get(prereqId);
+    if (!prereqMastery || prereqMastery.decayedLevel < 0.7) {
+      // 前置节点未掌握，降低置信度
+      penalty *= 0.7;
+    }
+  }
 
   return {
-    overall: mastery,
-    nodes: calculateNodeMastery(results, questions),
-    recommended: generateRecommendations(mastery, uncertainty)
+    ...baseMastery,
+    level: baseMastery.level * penalty,      // 应用惩罚
+    confidence: baseMastery.confidence * penalty,
   };
 }
 ```
 
-**三个概念的明确分工**：
+### 4.4 掌握度计算（v2.1 修订版）
 
-| 概念 | 作用 | 使用场景 |
-|------|------|---------|
-| difficulty | 控制出题 | 决定给学生的题目难度 |
-| weight | 控制评分 | 计算最终得分 |
-| coverageFactor | 控制诊断 | 影响掌握度和补问决策 |
+```typescript
+function calculateKnowledgeMastery(
+  knowledgeUnit: string,
+  nodeMasteries: Map<string, NodeMastery>,
+  nodeRegistry: CognitiveNodeRegistry
+): KnowledgeMastery {
+  const nodes = nodeRegistry.getByKnowledgeUnit(knowledgeUnit);
+
+  // 加权平均（按重要性，考虑依赖惩罚）
+  let totalWeight = 0;
+  let weightedSum = 0;
+
+  for (const node of nodes) {
+    const mastery = calculateNodeMasteryWithPenalty(
+      node.id,
+      nodeMasteries,
+      nodeRegistry
+    );
+
+    if (mastery.confidence > 0.5) {  // 只计算有足够置信度的
+      weightedSum += mastery.decayedLevel * node.importance;
+      totalWeight += node.importance;
+    }
+  }
+
+  const overall = totalWeight > 0 ? weightedSum / totalWeight : 0;
+
+  return {
+    knowledgeUnit,
+    overall,
+    nodes: nodeMasteries,
+    diagnosis: diagnoseKnowledgeState(overall, nodeMasteries, nodes),
+    recommended: generateRecommendations(nodeMasteries, nodes),
+  };
+}
+```
+
+### 4.5 时间衰减（v2.1 新增）
+
+```typescript
+function applyTimeDecay(mastery: NodeMastery, now: number): NodeMastery {
+  const daysSinceLastAttempt = (now - mastery.lastAttempt) / (1000 * 60 * 60 * 24);
+
+  // 指数衰减，半衰期10天
+  const decayFactor = Math.exp(-0.069 * daysSinceLastAttempt);  // ln(0.5)/10 ≈ -0.069
+
+  return {
+    ...mastery,
+    decayedLevel: mastery.level * decayFactor,
+  };
+}
+```
 
 ---
 
-## 五、UI/UX 设计（更新版）
+## 五、动态推荐路径（v2.1 修订）
 
-### 5.1 问题卡片展示 + 推荐路径
+### 5.1 推荐路径生成（动态，非固定）
+
+```typescript
+function generateDynamicRecommendedPath(
+  state: StudentState,
+  nodeRegistry: CognitiveNodeRegistry
+): string[] {
+  const path: string[] = [];
+
+  // 获取当前知识点的所有节点
+  const nodes = nodeRegistry.getByKnowledgeUnit(state.currentKnowledge);
+  
+  // 按依赖排序
+  const sortedNodes = topologicalSort(nodes);
+
+  // 动态生成：跳过已掌握的节点
+  for (const node of sortedNodes) {
+    const mastery = state.nodeMasteries.get(node.id);
+    
+    if (!mastery || mastery.decayedLevel < 0.8) {
+      // 未掌握，找对应的问题加入路径
+      const questionId = selectQuestionForNode(node.id);
+      if (questionId) {
+        path.push(questionId);
+      }
+    }
+  }
+
+  return path;
+}
+```
+
+**关键变化**：
+- ✅ 路径是动态生成的，基于当前学生状态
+- ✅ 已掌握节点被跳过
+- ❌ 不再是固定的 Q1→Q2→Q3
+
+---
+
+## 六、UI/UX 设计
+
+### 6.1 问题卡片 + 节点信息
 
 ```
 ┌─────────────────────────────────────────────┐
 │  勾股定理 - 问题 2 / 4                       │
+│  节点: 计算平方和 (pythagoras_computation_001)│
 ├─────────────────────────────────────────────┤
 │                                             │
-│  在直角三角形中，a=3, b=4，求 c²           │
+│  在直角三角形中，a=3, b=4，求 a² + b²      │
 │                                             │
 │  [ 输入框 ]                                 │
 │                                             │
-│  [ 提交 ]  [ 跳过 ]  [ 查看推荐路径 → ]     │
+│  [ 提交 ]  [ 跳过 ]  [ 查看诊断 → ]         │
 └─────────────────────────────────────────────┘
 ```
 
-**关键变化**：
-- ✅ 显示"推荐路径"按钮（不是强制，但默认引导）
-- ✅ 跳题时给出警告："跳过此题可能影响诊断精度"
-
-### 5.2 进度展示 + DAG可视化
+### 6.2 节点级进度展示
 
 ```
-总进度: 2/4 问题完成
+知识点: 勾股定理
+掌握度: 75% (置信度: 高)
 
-推荐路径: Q1 → Q2 → Q3 → Q4
+认知节点进度:
+┌─────────────────────────────────────────┐
+│ ✓ 识别直角三角形     [掌握]  ████████░░ │
+│ ✓ 理解勾股定理       [掌握]  ████████░░ │
+│ ○ 计算平方和         [未验证] ░░░░░░░░░░ │
+│ ○ 计算平方根         [未验证] ░░░░░░░░░░ │
+│ ○ 实际应用           [未验证] ░░░░░░░░░░ │
+└─────────────────────────────────────────┘
 
-● ● ○ ○
-Q1 Q2 Q3 Q4
-✓  ✓  ?  ?
-
-未完成:
-○ Q3 (推荐下一题)
-○ Q4 (依赖: Q3)
-
-已跳过:
-⊘ Q1 (基础未验证，建议补问)
+推荐下一步: 计算平方和
 ```
 
 ---
 
-## 六、评估模型（更新版）
+## 七、实现路线图（v2.1 修订）
 
-### 6.1 诊断规则表（保留作为参考，但不是核心）
+### Step 1: 认知节点定义（1周）- 最核心
 
-| 场景 | 判断 | 不确定性 |
-|------|------|---------|
-| Q1正确, Q2正确, Q3正确 | 完全掌握 | 低 |
-| Q1跳过, Q2正确, Q3正确 | 可能掌握 | 中（Q1未验证） |
-| Q1错误, Q2跳过, Q3正确 | 部分掌握 | 高（基础不牢） |
-| Q1跳过, Q2跳过, Q3正确 | 直接答题者 | 极高（需补问） |
+- [ ] 定义前5个知识点的节点（勾股定理、梯形、四边形等）
+- [ ] 实现 CognitiveNodeRegistry
+- [ ] 实现节点依赖验证
+- [ ] 输出: `cognitive-nodes.json`
 
-### 6.2 诊断一致性指标（新增）
+### Step 2: 子问题绑定（1周）
 
-**系统护城河指标**：
+- [ ] 更新 SubQuestion 接口（添加 nodeId）
+- [ ] 删除旧字段（difficultyWeight, coverageFactor, cognitiveLevel）
+- [ ] 迁移现有模板到新结构
+- [ ] 实现模板校验工具
 
-| 指标 | 定义 | 目标 |
-|------|------|------|
-| **诊断一致性** | 同一学生多次测试结果的相关系数 | >0.8 |
-| **预测能力** | 用前N题预测第N+1题的准确率 | >0.75 |
-| **信息增益** | 平均每题降低的不确定性 | >0.3 |
+### Step 3: 诊断模型（1周）
 
----
+- [ ] 实现节点掌握度计算（含时间衰减）
+- [ ] 实现依赖惩罚机制
+- [ ] 实现启发式信息增益
+- [ ] 实现动态推荐路径
 
-## 七、实现路线图（重构版 - 分4步收敛）
+### Step 4: UI与集成（1周）
 
-### Step 1: 固定结构（1周）- 先做能上线的
-
-**目标**：快速验证核心假设，不追求完整功能
-
-```typescript
-// 强约束
-const STEP_1_LIMITS = {
-  MAX_QUESTIONS: 3,      // 每组最多3个问题
-  DAG_DEPTH: 1,          // DAG最大深度1（只有顺序依赖）
-  SKIP_ENABLED: false,   // 暂时禁用跳题
-} as const;
-```
-
-- [ ] 定义 `QuestionGroup`, `SubQuestion` 接口
-- [ ] 实现简单的顺序依赖（Q1→Q2→Q3）
-- [ ] 迁移5个核心模板到新结构
-- [ ] 不允许跳题，只有"下一题"
-
-### Step 2: 简单调度器（1周）
-
-**目标**：加入基础决策能力
-
-```typescript
-// 规则版调度器
-function simpleScheduler(state: StudentState): NextQuestionDecision {
-  // 规则1：有未完成的依赖 → 补基础
-  if (hasUnmetDependency(state)) {
-    return { action: 'validate', questionId: findDependency(state) };
-  }
-
-  // 规则2：推进新问题
-  return { action: 'progress', questionId: getNextQuestion(state) };
-}
-```
-
-- [ ] 实现 StudentState
-- [ ] 实现简单调度器（2条规则）
-- [ ] 加入"跳过"功能（但给出警告）
-
-### Step 3: 智能补问（1周）
-
-**目标**：从规则驱动升级到信息增益驱动
-
-```typescript
-function shouldFollowUp(state: StudentState, questionId: string): boolean {
-  const unvalidated = state.uncertainty.get(questionId) ?? 1.0;
-  const impact = questions.find(q => q.id === questionId)!.coverageFactor;
-
-  // 规则：未验证 + 高影响 → 补问
-  return unvalidated > 0.8 && impact > 0.7;
-}
-```
-
-- [ ] 实现不确定性计算
-- [ ] 实现基于影响力的补问决策
-- [ ] UI显示补问提示
-
-### Step 4: 完整系统（2周）- 最后才做
-
-**目标**：完全非线性 + 自适应
-
-- [ ] 完全自由跳题
-- [ ] 信息增益优化
-- [ ] 自适应推荐路径
-- [ ] DAG可视化
+- [ ] 节点诊断结果展示
+- [ ] 节点级进度可视化
+- [ ] 补问推荐UI
+- [ ] A/B测试准备
 
 ---
 
-## 八、风险与缓解（更新版）
+## 八、风险与缓解（v2.1 修订）
 
 | 风险 | 缓解措施 | 对应Step |
 |------|---------|----------|
-| 模板质量失控 | 强约束（MAX=5）+ 人工审查 | Step 1 |
-| 学生乱跳题 | 推荐路径 + 跳题警告 | Step 2 |
-| 调度器过于复杂 | 从规则版开始，逐步升级 | Step 2-4 |
-| 诊断失真 | 加入一致性指标监控 | Step 3 |
-| 数据迁移困难 | 保留旧API，双轨运行 | 全程 |
+| 节点定义不统一 | Cognitive Node Registry + 标准化流程 | Step 1 |
+| 节点数量失控 | 每知识点5-10个节点，人工审查 | Step 1 |
+| 模板绑定错误 | 模板校验工具 | Step 2 |
+| 依赖惩罚过重 | 调整惩罚系数（0.7可调） | Step 3 |
+| 时间衰减过快 | 调整半衰期（10天可调） | Step 3 |
+| 诊断失真 | 加入一致性指标监控 | Step 4 |
 
 ---
 
-## 九、成功指标（更新版）
+## 九、成功指标（v2.1 修订）
 
 ### 产品指标
 
@@ -487,48 +561,52 @@ function shouldFollowUp(state: StudentState, questionId: string): boolean {
 
 | 指标 | 定义 | 目标 |
 |------|------|------|
-| **诊断一致性** | 同一学生多次测试结果相关系数 | >0.8 |
-| **预测能力** | 用前N题预测第N+1题准确率 | >0.75 |
-| **信息增益** | 平均每题降低的不确定性 | >0.3 |
+| **诊断一致性** | 同一学生多次测试节点掌握度的相关系数 | >0.8 |
+| **预测能力** | 用节点掌握度预测新题准确率 | >0.75 |
+| **节点覆盖率** | 知识点节点被测试的比例 | >90% |
 
 ---
 
-## 十、待确认问题（更新版）
+## 十、待确认问题（v2.1 修订）
 
-### 架构级决策
+### 节点设计
 
-1. **Step 1 上线时间**：是否接受2周内上线简化版？（推荐：是）
+1. **节点粒度**：每个知识点拆5-10个节点是否合适？
+2. **节点标准化**：是否需要建立"节点标准库"供所有模板使用？
+3. **节点类型**：5种类型（recognition, concept, computation, application, reasoning）是否足够？
 
-2. **子问题数量上限**：确认 MAX=5？（推荐：是）
+### 参数调优
 
-3. **跳题策略**：
-   - A) 完全自由跳
-   - B) 跳题需确认
-   - C) 只能跳过，不能跳回
-
-4. **补问触发阈值**：informationGain > 0.5？（推荐：0.5）
+4. **依赖惩罚系数**：0.7是否合适？（可调参数）
+5. **时间衰减半衰期**：10天是否合适？（可调参数）
+6. **补问增益阈值**：0.5是否合适？（可调参数）
 
 ### 向后兼容
 
-5. **旧模板迁移**：
-   - A) 自动1:1映射（快速但有风险）
+7. **旧模板迁移**：
+   - A) 自动1:1映射到默认节点
    - B) 人工审查5个核心模板后批量迁移
    - C) 双轨运行，逐步迁移
 
 ---
 
-## 附录：关键决策记录
+## 附录：v2.1 主要变更
 
-| 决策 | 理由 | 日期 |
+| 变更 | 说明 | 理由 |
 |------|------|------|
-| 废除步骤概念，改用Question Graph | 步骤是伪问题，诊断靠覆盖节点 | 2026-04-26 |
-| 允许非线性答题 | 公平性 + 现实性 | 2026-04-26 |
-| 补问从规则驱动改为信息增益驱动 | 诊断系统需要智能决策 | 2026-04-26 |
-| 分4步收敛，先做简化版 | 避免理论完美、工程失败 | 2026-04-26 |
-| 强约束子问题数量（MAX=5） | 防止模板质量失控 | 2026-04-26 |
+| 引入 Cognitive Node Registry | 统一认知节点定义 | 解决诊断不可比问题 |
+| 删除 cognitiveLevel | 装饰字段，无实际用途 | 避免数据污染 |
+| 删除 coverageFactor | 改用 nodeId + importance | 避免主观评分 |
+| 新增 nodeId | 子问题绑定到节点 | 实现节点级诊断 |
+| 新增 nodeWeight | 问题在节点中的权重 | 替代 difficultyWeight |
+| 降级为启发式增益 | 不用伪贝叶斯 | 避免伪AI |
+| 新增依赖惩罚 | 前置未掌握，后续打折 | 避免高估 |
+| 新增时间衰减 | 考虑遗忘因素 | 提高诊断准确性 |
+| 推荐路径改为动态 | 基于学生状态生成 | 避免伪装的步骤 |
 
 ---
 
-**文档版本**: v2.0 (架构评审后修订)
+**文档版本**: v2.1
 **最后更新**: 2026-04-26
 **审查状态**: 待最终确认
+**关联文档**: `2026-04-26-cognitive-node-registry.md`
