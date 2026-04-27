@@ -85,6 +85,33 @@ function generateAttempts(baseRate: number, count: number): boolean[] {
   return attempts;
 }
 
+/**
+ * Train UOK on simple questions only
+ */
+function trainUOK(allQuestions: TestQuestion[]): UOK {
+  const uok = new UOK();
+
+  // Encode all questions first
+  for (const q of allQuestions) {
+    uok.encodeQuestion({
+      id: q.id,
+      content: q.content,
+      topics: q.topics,
+    });
+  }
+
+  // Train on simple questions only (complexity < 0.3)
+  for (const q of allQuestions) {
+    if (q.complexity < 0.3) {
+      for (const correct of q.attempts) {
+        uok.encodeAnswer('student1', q.id, correct);
+      }
+    }
+  }
+
+  return uok;
+}
+
 async function main() {
   console.log('=== CTG Verification ===\n');
   console.log('TODO: Implement verification');
