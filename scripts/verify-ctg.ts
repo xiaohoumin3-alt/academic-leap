@@ -173,32 +173,42 @@ function calculateTransferAccuracy(
   return { correct, total };
 }
 
+/**
+ * Run multiple trials for statistical significance
+ */
+async function runMultipleTrials(numTrials: number = 10): Promise<void> {
+  const results: number[] = [];
+
+  for (let i = 0; i < numTrials; i++) {
+    const allQuestions = generateSyntheticData();
+    const trainQuestions = allQuestions.filter(q => q.complexity < 0.3);
+    const testQuestions = allQuestions.filter(q => q.complexity >= 0.3);
+
+    const uok = trainUOK(allQuestions);
+
+    const baseline = calculateBaselineAccuracy(uok, testQuestions);
+    const transfer = calculateTransferAccuracy(uok, testQuestions, trainQuestions);
+
+    const Acc_baseline = baseline.correct / baseline.total;
+    const Acc_transfer = transfer.correct / transfer.total;
+    const CTG = Acc_transfer - Acc_baseline;
+
+    results.push(CTG);
+    console.log(`Trial ${i + 1}: CTG = ${CTG.toFixed(4)}`);
+  }
+
+  const avgCTG = results.reduce((a, b) => a + b, 0) / numTrials;
+  const winRate = results.filter(r => r > 0).length / numTrials;
+
+  console.log(`\n=== Aggregated Results ===`);
+  console.log(`Average CTG: ${avgCTG.toFixed(4)}`);
+  console.log(`Win Rate: ${(winRate * 100).toFixed(1)}%`);
+  console.log(`Verdict: ${avgCTG > 0 ? 'SUCCESS' : 'FAILURE'}`);
+}
+
 async function main() {
   console.log('=== CTG Verification ===\n');
-
-  // Generate synthetic data
-  const allQuestions = generateSyntheticData();
-  const trainQuestions = allQuestions.filter(q => q.complexity < 0.3);
-  const testQuestions = allQuestions.filter(q => q.complexity >= 0.3);
-
-  console.log(`Train questions: ${trainQuestions.length}`);
-  console.log(`Test questions: ${testQuestions.length}`);
-
-  // Train UOK
-  const uok = trainUOK(allQuestions);
-
-  // Calculate accuracies
-  const baseline = calculateBaselineAccuracy(uok, testQuestions);
-  const transfer = calculateTransferAccuracy(uok, testQuestions, trainQuestions);
-
-  const Acc_baseline = baseline.correct / baseline.total;
-  const Acc_transfer = transfer.correct / transfer.total;
-  const CTG = Acc_transfer - Acc_baseline;
-
-  console.log(`\nBaseline accuracy: ${Acc_baseline.toFixed(4)} (${baseline.correct}/${baseline.total})`);
-  console.log(`Transfer accuracy: ${Acc_transfer.toFixed(4)} (${transfer.correct}/${transfer.total})`);
-  console.log(`CTG: ${CTG.toFixed(4)}`);
-  console.log(`\nVerdict: ${CTG > 0 ? 'SUCCESS' : 'FAILURE'}`);
+  await runMultipleTrials(10);
 }
 
 main().catch(console.error);
