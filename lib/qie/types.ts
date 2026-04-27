@@ -37,6 +37,23 @@ export interface ModelExport {
 }
 
 /**
+ * ML 内部状态（计算域）
+ */
+export interface MLState {
+  embeddings: {
+    students: Map<string, Float32Array>;
+    questions: Map<string, Float32Array>;
+  };
+  weights: {
+    w1: Float32Array;
+    b1: Float32Array;
+    w2: Float32Array;
+    b2: number;
+  };
+  updateCounter: number;
+}
+
+/**
  * UOK State types
  */
 export interface QuestionState {
@@ -60,6 +77,7 @@ export interface UOKState {
   students: Map<string, StudentState>;
   space: SpaceState;
   trace: TraceEntry[];
+  _ml: MLState;  // NEW: ML internal computation domain
 }
 
 export class SpaceState {

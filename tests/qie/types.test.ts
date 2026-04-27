@@ -7,6 +7,7 @@ import {
   StudentState,
   UOKState,
   SpaceState,
+  MLState,
   Explanation,
   Action,
   Gap
@@ -94,12 +95,58 @@ describe('QIE Types', () => {
         questions: new Map([['q1', questionState]]),
         students: new Map([['s1', studentState]]),
         space: new SpaceState(),
-        trace: []
+        trace: [],
+        _ml: {
+          embeddings: { students: new Map(), questions: new Map() },
+          weights: { w1: new Float32Array(0), b1: new Float32Array(0), w2: new Float32Array(0), b2: 0 },
+          updateCounter: 0,
+        },
       };
 
       expect(uokState.questions.get('q1')?.id).toBe('q1');
       expect(uokState.students.get('s1')?.id).toBe('s1');
       expect(uokState.trace.length).toBe(0);
+    });
+  });
+
+  describe('MLState', () => {
+    it('should create valid ML state structure', () => {
+      const mlState: MLState = {
+        embeddings: {
+          students: new Map(),
+          questions: new Map(),
+        },
+        weights: {
+          w1: new Float32Array(67 * 32),
+          b1: new Float32Array(32),
+          w2: new Float32Array(32),
+          b2: 0,
+        },
+        updateCounter: 0,
+      };
+      expect(mlState.embeddings.students).toBeInstanceOf(Map);
+      expect(mlState.embeddings.questions).toBeInstanceOf(Map);
+      expect(mlState.weights.w1).toHaveLength(67 * 32);
+    });
+  });
+
+  describe('UOKState v2.0', () => {
+    it('should include _ml subdomain', () => {
+      const mlState: MLState = {
+        embeddings: { students: new Map(), questions: new Map() },
+        weights: { w1: new Float32Array(0), b1: new Float32Array(0), w2: new Float32Array(0), b2: 0 },
+        updateCounter: 0,
+      };
+
+      const state: UOKState = {
+        questions: new Map(),
+        students: new Map(),
+        space: new SpaceState(),
+        trace: [],
+        _ml: mlState,
+      };
+      expect(state._ml).toBeDefined();
+      expect(state._ml.embeddings).toBeDefined();
     });
   });
 
