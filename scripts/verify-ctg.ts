@@ -112,6 +112,67 @@ function trainUOK(allQuestions: TestQuestion[]): UOK {
   return uok;
 }
 
+/**
+ * Calculate baseline accuracy (pure MLP prediction)
+ */
+function calculateBaselineAccuracy(
+  uok: UOK,
+  testQuestions: TestQuestion[]
+): { correct: number; total: number } {
+  let correct = 0;
+  let total = 0;
+
+  for (const q of testQuestions) {
+    if (q.attempts.length === 0) continue;
+
+    const actual = q.attempts[q.attempts.length - 1] ? 1 : 0;
+    const ctx = { difficulty: 0.5, complexity: q.complexity };
+    const prediction = uok.predict('student1', q.id, ctx);
+
+    if (Math.round(prediction) === actual) {
+      correct++;
+    }
+    total++;
+  }
+
+  return { correct, total };
+}
+
+/**
+ * Calculate transfer accuracy (with complexity transfer)
+ */
+function calculateTransferAccuracy(
+  uok: UOK,
+  testQuestions: TestQuestion[],
+  trainQuestions: TestQuestion[]
+): { correct: number; total: number } {
+  let correct = 0;
+  let total = 0;
+
+  // Find the simplest question from training set as reference
+  const refQuestion = trainQuestions.reduce((best, q) =>
+    q.complexity < best.complexity ? q : best
+  );
+
+  for (const q of testQuestions) {
+    if (q.attempts.length === 0) continue;
+
+    const actual = q.attempts[q.attempts.length - 1] ? 1 : 0;
+    const prediction = uok.predictWithComplexityTransfer(
+      'student1',
+      refQuestion.id,
+      q.id
+    );
+
+    if (Math.round(prediction) === actual) {
+      correct++;
+    }
+    total++;
+  }
+
+  return { correct, total };
+}
+
 async function main() {
   console.log('=== CTG Verification ===\n');
   console.log('TODO: Implement verification');
