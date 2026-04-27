@@ -97,4 +97,77 @@ describe('UOK', () => {
       expect(state._ml.embeddings.questions.size).toBe(1);
     });
   });
+
+  describe('learnML (via encodeAnswer)', () => {
+    it('should update weights after feedback', () => {
+      const uok = new UOK();
+      uok.encodeQuestion({
+        id: 'q1',
+        content: 'Test',
+        topics: ['test']
+      });
+
+      const stateBefore = (uok as any).state;
+      const w1Before = Array.from(stateBefore._ml.weights.w1);
+
+      uok.encodeAnswer('s1', 'q1', true);
+
+      const stateAfter = (uok as any).state;
+      const w1After = Array.from(stateAfter._ml.weights.w1);
+
+      expect(w1Before).not.toEqual(w1After);
+    });
+
+    it('should increase prediction for correct answers', () => {
+      const uok = new UOK();
+      uok.encodeQuestion({
+        id: 'q1',
+        content: 'Test',
+        topics: ['test']
+      });
+
+      const ctx = { difficulty: 0.5, complexity: 0.5 };
+      const pBefore = uok.predict('s1', 'q1', ctx);
+
+      for (let i = 0; i < 10; i++) {
+        uok.encodeAnswer('s1', 'q1', true);
+      }
+
+      const pAfter = uok.predict('s1', 'q1', ctx);
+      expect(pAfter).toBeGreaterThan(pBefore);
+    });
+
+    it('should decrease prediction for incorrect answers', () => {
+      const uok = new UOK();
+      uok.encodeQuestion({
+        id: 'q1',
+        content: 'Test',
+        topics: ['test']
+      });
+
+      const ctx = { difficulty: 0.5, complexity: 0.5 };
+      const pBefore = uok.predict('s2', 'q1', ctx);
+
+      for (let i = 0; i < 10; i++) {
+        uok.encodeAnswer('s2', 'q1', false);
+      }
+
+      const pAfter = uok.predict('s2', 'q1', ctx);
+      expect(pAfter).toBeLessThan(pBefore);
+    });
+
+    it('should return pre-learning probability', () => {
+      const uok = new UOK();
+      uok.encodeQuestion({
+        id: 'q1',
+        content: 'Test',
+        topics: ['test']
+      });
+
+      const probability = uok.encodeAnswer('s1', 'q1', true);
+      expect(typeof probability).toBe('number');
+      expect(probability).toBeGreaterThanOrEqual(0);
+      expect(probability).toBeLessThanOrEqual(1);
+    });
+  });
 });

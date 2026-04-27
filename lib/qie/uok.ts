@@ -106,6 +106,55 @@ export class UOK {
     return this.sigmoid(z);
   }
 
+  /**
+   * 编码答案到状态（触发 ML 学习）
+   *
+   * @returns 学习前的预测概率
+   */
+  encodeAnswer(
+    studentId: string,
+    questionId: string,
+    correct: boolean
+  ): number {
+    const q = this.state.questions.get(questionId);
+    if (!q) return 0.5;
+
+    // 0. 先预测（记录学习前的状态）
+    const ctx: Context = {
+      difficulty: q.features.difficulty,
+      complexity: q.features.complexity,
+    };
+    const probability = this.predict(studentId, questionId, ctx);
+
+    // 1. 更新公共状态
+    q.attemptCount++;
+    if (correct) q.correctCount++;
+    q.quality = q.correctCount / q.attemptCount;
+
+    const s = this.getOrCreateStudent(studentId);
+    for (const topic of q.topics) {
+      const current = s.knowledge.get(topic) ?? 0.5;
+      const updated = 0.95 * current + 0.05 * (correct ? 1 : 0);
+      s.knowledge.set(topic, updated);
+    }
+    s.attemptCount++;
+    s.correctCount += correct ? 1 : 0;
+
+    // 2. 触发 ML 学习（单写入口）
+    this.learnML(studentId, questionId, ctx, correct);
+
+    // 3. 记录轨迹
+    this.state.trace.push({
+      type: 'answer',
+      studentId,
+      questionId,
+      correct,
+      time: Date.now(),
+    });
+
+    return probability;
+  }
+
   explain(target?: { studentId?: string; questionId?: string }): Explanation {
     if (target?.studentId) {
       return this.explainStudent(target.studentId);
@@ -114,6 +163,65 @@ export class UOK {
       return this.explainQuestion(target.questionId);
     }
     return this.explainSystem();
+  }
+
+  /**
+   * 🔒 单写入口：ML 状态的唯一修改点
+   */
+  private learnML(
+    studentId: string,
+    questionId: string,
+    ctx: Context,
+    correct: boolean
+  ): void {
+    const { _ml } = this.state;
+
+    // Forward pass
+    const s = this.getEmbedding(_ml.embeddings.students, studentId);
+    const q = this.getEmbedding(_ml.embeddings.questions, questionId);
+    const x = this.embedInput(s, q, ctx);
+
+    const h1 = this.matmul(x, _ml.weights.w1, _ml.weights.b1);
+    const h = this.relu(h1);
+    const z = this.dot(h, _ml.weights.w2) + _ml.weights.b2;
+    const p = this.sigmoid(z);
+
+    // Backward pass
+    const y = correct ? 1 : 0;
+    const dz = p - y;
+    const dh = this.reluGrad(h1, this.mul(_ml.weights.w2, dz));
+
+    // Compute embedding gradients
+    // ds[j] = sum_i (w1[j * hidden + i] * dh[i])
+    const ds = new Float32Array(this.dim);
+    const dq = new Float32Array(this.dim);
+    for (let j = 0; j < this.dim; j++) {
+      for (let i = 0; i < this.hidden; i++) {
+        ds[j] += _ml.weights.w1[j * this.hidden + i] * dh[i];
+        dq[j] += _ml.weights.w1[(this.dim + j) * this.hidden + i] * dh[i];
+      }
+    }
+
+    // Update weights
+    for (let i = 0; i < _ml.weights.w2.length; i++) {
+      _ml.weights.w2[i] -= this.lr * dz * h[i];
+    }
+    _ml.weights.b2 -= this.lr * dz;
+
+    for (let i = 0; i < _ml.weights.w1.length; i++) {
+      const inputIdx = Math.floor(i / this.hidden);
+      const hiddenIdx = i % this.hidden;
+      _ml.weights.w1[i] -= this.lr * x[inputIdx] * dh[hiddenIdx];
+    }
+
+    // Update embeddings
+    this.updateEmbedding(_ml.embeddings.students, studentId, ds);
+    this.updateEmbedding(_ml.embeddings.questions, questionId, dq);
+
+    // Periodic normalization
+    if (++_ml.updateCounter % 1000 === 0) {
+      this._normalizeML();
+    }
   }
 
   private explainSystem(): Explanation {
@@ -159,6 +267,56 @@ export class UOK {
       weakTopics,
       totalAttempts: s.attemptCount,
     };
+  }
+
+  // ========== Additional ML Helpers ==========
+
+  private mul(w: Float32Array, s: number): Float32Array {
+    const out = new Float32Array(w.length);
+    for (let i = 0; i < w.length; i++) out[i] = w[i] * s;
+    return out;
+  }
+
+  private reluGrad(x: Float32Array, dy: Float32Array): Float32Array {
+    const out = new Float32Array(x.length);
+    for (let i = 0; i < x.length; i++) out[i] = x[i] > 0 ? dy[i] : 0;
+    return out;
+  }
+
+  private updateEmbedding(
+    map: Map<string, Float32Array>,
+    id: string,
+    grad: Float32Array
+  ): void {
+    const emb = map.get(id);
+    if (emb) {
+      for (let i = 0; i < emb.length; i++) {
+        emb[i] -= this.lr * grad[i];
+      }
+    }
+  }
+
+  private _normalizeML(): void {
+    const all = Array.from(this.state._ml.embeddings.students.values());
+    if (all.length <= 10) return;
+
+    let sum = 0, count = 0;
+    for (const emb of all) {
+      for (const v of emb) { sum += v; count++; }
+    }
+    const mu = sum / count;
+
+    let varSum = 0;
+    for (const emb of all) {
+      for (const v of emb) { varSum += (v - mu) ** 2; }
+    }
+    const sigma = Math.sqrt(varSum / count);
+
+    for (const emb of all) {
+      for (let i = 0; i < emb.length; i++) {
+        emb[i] = (emb[i] - mu) / sigma;
+      }
+    }
   }
 
   /**
@@ -223,9 +381,9 @@ export class UOK {
     const x = new Float32Array(this.dim * 2 + 3);
     x.set(s, 0);
     x.set(q, this.dim);
-    x[0] = ctx.difficulty;
-    x[1] = ctx.complexity;
-    x[2] = ctx.difficulty * ctx.complexity;
+    x[this.dim * 2] = ctx.difficulty;
+    x[this.dim * 2 + 1] = ctx.complexity;
+    x[this.dim * 2 + 2] = ctx.difficulty * ctx.complexity;
     return x;
   }
 
