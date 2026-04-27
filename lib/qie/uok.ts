@@ -13,6 +13,7 @@ import {
   UOKState,
   MLState,
   ComplexityTransferWeights,
+  ComplexityDelta,
 } from './types';
 
 /**
@@ -121,6 +122,52 @@ export class UOK {
     const h = this.relu(this.matmul(x, this.state._ml.weights.w1, this.state._ml.weights.b1));
     const z = this.dot(h, this.state._ml.weights.w2) + this.state._ml.weights.b2;
     return this.sigmoid(z);
+  }
+
+  /**
+   * Predict probability for complex question based on simple question performance
+   * using complexity transfer mapping function:
+   * P_complex = P_simple · exp(- w · ΔC)
+   *
+   * @param studentId - Student identifier
+   * @param simpleQuestionId - ID of the simpler question (baseline)
+   * @param complexQuestionId - ID of the more complex question (target)
+   * @returns Adjusted probability for the complex question
+   */
+  predictWithComplexityTransfer(
+    studentId: string,
+    simpleQuestionId: string,
+    complexQuestionId: string
+  ): number {
+    const simpleQ = this.state.questions.get(simpleQuestionId);
+    const complexQ = this.state.questions.get(complexQuestionId);
+
+    // Handle null/undefined question cases
+    if (!simpleQ || !complexQ) {
+      return 0.5;
+    }
+
+    // Get base probability from simple question
+    const simpleCtx: Context = {
+      difficulty: simpleQ.features.difficulty,
+      complexity: simpleQ.features.complexity,
+    };
+    const pSimple = this.predict(studentId, simpleQuestionId, simpleCtx);
+
+    // Calculate complexity delta (only penalize increased complexity)
+    const deltaCognitive = Math.max(0, complexQ.features.cognitiveLoad - simpleQ.features.cognitiveLoad);
+    const deltaReasoning = Math.max(0, complexQ.features.reasoningDepth - simpleQ.features.reasoningDepth);
+    const deltaComplexity = Math.max(0, complexQ.features.complexity - simpleQ.features.complexity);
+
+    // Calculate weighted projection: w · ΔC
+    const weights = this.state._ml.transfer.weights;
+    const weightedDelta =
+      weights.cognitiveLoad * deltaCognitive +
+      weights.reasoningDepth * deltaReasoning +
+      weights.complexity * deltaComplexity;
+
+    // Apply mapping function: P_complex = P_simple · exp(- w · ΔC)
+    return pSimple * Math.exp(-weightedDelta);
   }
 
   /**

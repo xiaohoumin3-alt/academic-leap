@@ -149,5 +149,98 @@ describe('QIE Integration', () => {
       const sum = weights.cognitiveLoad + weights.reasoningDepth + weights.complexity;
       expect(sum).toBeCloseTo(1, 5);
     });
+
+    describe('predictWithComplexityTransfer', () => {
+      it('should return lower probability for more complex questions', () => {
+        const uok = new UOK();
+
+        // Encode a simple question
+        uok.encodeQuestion({
+          id: 'simple',
+          content: 'Basic calculation',
+          topics: ['math']
+        });
+
+        // Encode a complex question with higher cognitive load
+        uok.encodeQuestion({
+          id: 'complex',
+          content: '同时证明两个定理并进行分析', // "Prove two theorems simultaneously and analyze"
+          topics: ['math']
+        });
+
+        // Train student on simple question
+        for (let i = 0; i < 5; i++) {
+          uok.encodeAnswer('student1', 'simple', true);
+        }
+
+        // Get predictions
+        const pSimple = uok.predict('student1', 'simple', { difficulty: 0.5, complexity: 0.5 });
+        const pComplex = uok.predictWithComplexityTransfer('student1', 'simple', 'complex');
+
+        // Complex question should have lower probability
+        expect(pComplex).toBeLessThan(pSimple);
+      });
+
+      it('should return same probability when questions have equal complexity', () => {
+        const uok = new UOK();
+
+        // Encode two identical questions (same content = same features)
+        uok.encodeQuestion({
+          id: 'q1',
+          content: 'Basic calculation',
+          topics: ['math']
+        });
+
+        uok.encodeQuestion({
+          id: 'q2',
+          content: 'Basic calculation',
+          topics: ['math']
+        });
+
+        // Get transfer prediction - with identical features, delta = 0, so exp(0) = 1
+        const pTransfer = uok.predictWithComplexityTransfer('student1', 'q1', 'q2');
+
+        // Get the question state to verify features are identical
+        const state = (uok as any).state;
+        const q1Features = state.questions.get('q1').features;
+        const q2Features = state.questions.get('q2').features;
+
+        // Verify features are identical
+        expect(q1Features.cognitiveLoad).toBe(q2Features.cognitiveLoad);
+        expect(q1Features.reasoningDepth).toBe(q2Features.reasoningDepth);
+        expect(q1Features.complexity).toBe(q2Features.complexity);
+
+        // When complexity delta is 0, the weighted delta is 0, so exp(0) = 1
+        // Therefore pTransfer should equal predict(simpleQuestion)
+        const pSimple = uok.predict('student1', 'q1', {
+          difficulty: q1Features.difficulty,
+          complexity: q1Features.complexity
+        });
+
+        expect(pTransfer).toBe(pSimple);
+      });
+
+      it('should return 0.5 for null/undefined questions', () => {
+        const uok = new UOK();
+
+        uok.encodeQuestion({
+          id: 'existing',
+          content: 'Test question',
+          topics: ['test']
+        });
+
+        // Non-existent simple question
+        const p1 = uok.predictWithComplexityTransfer('student1', 'nonexistent', 'existing');
+        expect(p1).toBe(0.5);
+
+        // Non-existent complex question
+        const p2 = uok.predictWithComplexityTransfer('student1', 'existing', 'nonexistent');
+        expect(p2).toBe(0.5);
+
+        // Both non-existent
+        const p3 = uok.predictWithComplexityTransfer('student1', 'ghost1', 'ghost2');
+        expect(p3).toBe(0.5);
+      });
+    });
   });
 });
