@@ -207,7 +207,10 @@ export class UOK {
     // 2. 触发 ML 学习（单写入口）
     this.learnML(studentId, questionId, ctx, correct);
 
-    // 3. 记录轨迹
+    // 3. 触发 gated online calibration for transfer weights
+    this.updateTransferWeights(studentId, questionId, correct);
+
+    // 4. 记录轨迹
     this.state.trace.push({
       type: 'answer',
       studentId,
@@ -314,6 +317,141 @@ export class UOK {
     if (++_ml.updateCounter % 1000 === 0) {
       this._normalizeML();
     }
+  }
+
+  /**
+   * 🔒 Gated Online Calibration for Complexity Transfer Weights
+   *
+   * Only updates transfer weights when:
+   * 1. Student has demonstrated competence on simpler questions (P_simple >= τ)
+   * 2. There's a complexity delta between current and reference question
+   *
+   * Algorithm:
+   * - Find simpler reference question from same topic
+   * - Check if P_simple >= gateThreshold (τ = 0.7)
+   * - If gated: update weights using gradient descent on transfer error
+   *
+   * @param studentId - Student identifier
+   * @param complexQuestionId - Current (more complex) question
+   * @param correct - Whether student answered correctly (y = 1 if correct else 0)
+   */
+  private updateTransferWeights(
+    studentId: string,
+    complexQuestionId: string,
+    correct: boolean
+  ): void {
+    const { _ml } = this.state;
+    const config = _ml.transfer;
+    const tau = config.gateThreshold; // τ = 0.7
+    const lr = config.learningRate;   // η = 0.01
+
+    // Find the current question
+    const complexQ = this.state.questions.get(complexQuestionId);
+    if (!complexQ || complexQ.topics.length === 0) return;
+
+    // Find a simpler reference question from the same topic
+    const simpleQuestionId = this.findSimplerReferenceQuestion(
+      complexQuestionId,
+      complexQ.topics[0]
+    );
+    if (!simpleQuestionId) return;
+
+    // Check gate: is P_simple >= τ?
+    const simpleQ = this.state.questions.get(simpleQuestionId);
+    if (!simpleQ) return;
+
+    const simpleCtx: Context = {
+      difficulty: simpleQ.features.difficulty,
+      complexity: simpleQ.features.complexity,
+    };
+    const pSimple = this.predict(studentId, simpleQuestionId, simpleCtx);
+
+    // GATE: Only update if student shows competence on simple question
+    if (pSimple < tau) return;
+
+    // Calculate complexity delta (only positive deltas contribute)
+    const deltaC: ComplexityDelta = {
+      cognitiveLoad: Math.max(0, complexQ.features.cognitiveLoad - simpleQ.features.cognitiveLoad),
+      reasoningDepth: Math.max(0, complexQ.features.reasoningDepth - simpleQ.features.reasoningDepth),
+      complexity: Math.max(0, complexQ.features.complexity - simpleQ.features.complexity),
+    };
+
+    // Skip if no complexity delta (nothing to learn from)
+    if (deltaC.cognitiveLoad === 0 && deltaC.reasoningDepth === 0 && deltaC.complexity === 0) {
+      return;
+    }
+
+    // Get prediction for complex question using transfer model
+    const pComplexPredicted = this.predictWithComplexityTransfer(
+      studentId,
+      simpleQuestionId,
+      complexQuestionId
+    );
+
+    // Calculate prediction error
+    const y = correct ? 1 : 0;
+    const error = y - pComplexPredicted;
+
+    // Update weights: w_i = w_i + lr * error * deltaC_i
+    // Only update dimensions where deltaC > 0
+    const weights = config.weights;
+
+    if (deltaC.cognitiveLoad > 0) {
+      weights.cognitiveLoad = Math.max(0, weights.cognitiveLoad + lr * error * deltaC.cognitiveLoad);
+    }
+    if (deltaC.reasoningDepth > 0) {
+      weights.reasoningDepth = Math.max(0, weights.reasoningDepth + lr * error * deltaC.reasoningDepth);
+    }
+    if (deltaC.complexity > 0) {
+      weights.complexity = Math.max(0, weights.complexity + lr * error * deltaC.complexity);
+    }
+
+    // Normalize weights to sum to 1
+    const sum = weights.cognitiveLoad + weights.reasoningDepth + weights.complexity;
+    if (sum > 0) {
+      weights.cognitiveLoad /= sum;
+      weights.reasoningDepth /= sum;
+      weights.complexity /= sum;
+    }
+  }
+
+  /**
+   * Find a simpler reference question from the same topic
+   * Returns the question with lowest total complexity score
+   */
+  private findSimplerReferenceQuestion(
+    currentQuestionId: string,
+    topic: string
+  ): string | null {
+    const currentQ = this.state.questions.get(currentQuestionId);
+    if (!currentQ) return null;
+
+    let simplerId: string | null = null;
+    let minComplexity = Infinity;
+
+    for (const [id, q] of this.state.questions) {
+      if (id === currentQuestionId) continue;
+      if (!q.topics.includes(topic)) continue;
+
+      // Calculate total complexity
+      const totalComplexity =
+        q.features.cognitiveLoad +
+        q.features.reasoningDepth +
+        q.features.complexity;
+
+      // Check if this question is simpler than current
+      const currentTotal =
+        currentQ.features.cognitiveLoad +
+        currentQ.features.reasoningDepth +
+        currentQ.features.complexity;
+
+      if (totalComplexity < currentTotal && totalComplexity < minComplexity) {
+        minComplexity = totalComplexity;
+        simplerId = id;
+      }
+    }
+
+    return simplerId;
   }
 
   private explainSystem(): Explanation {
