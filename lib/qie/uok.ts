@@ -155,6 +155,34 @@ export class UOK {
     return probability;
   }
 
+  /**
+   * 决策
+   */
+  act(intent: 'next_question' | 'gap_analysis', studentId: string): Action {
+    const student = this.state.students.get(studentId);
+    if (!student) {
+      return { type: 'error', reason: 'Student not found' };
+    }
+
+    if (intent === 'next_question') {
+      const weakTopic = this.findWeakestTopic(student);
+      if (!weakTopic) {
+        return { type: 'done', reason: 'All topics mastered' };
+      }
+      return {
+        type: 'recommend',
+        topic: weakTopic,
+        reason: `Weakest topic (mastery: ${student.knowledge.get(weakTopic)?.toFixed(2)})`,
+      };
+    }
+
+    if (intent === 'gap_analysis') {
+      return { type: 'gap_report', gaps: this.findGaps(student) };
+    }
+
+    return { type: 'error', reason: 'Unknown intent' };
+  }
+
   explain(target?: { studentId?: string; questionId?: string }): Explanation {
     if (target?.studentId) {
       return this.explainStudent(target.studentId);
@@ -267,6 +295,34 @@ export class UOK {
       weakTopics,
       totalAttempts: s.attemptCount,
     };
+  }
+
+  private findWeakestTopic(student: StudentState): string | null {
+    let weakest: string | null = null;
+    let minMastery = 1;
+    for (const [topic, mastery] of student.knowledge) {
+      if (mastery < minMastery) {
+        minMastery = mastery;
+        weakest = topic;
+      }
+    }
+    return weakest;
+  }
+
+  private findGaps(student: StudentState): Gap[] {
+    const gaps: Gap[] = [];
+    for (const [topic, mastery] of student.knowledge) {
+      if (mastery < 0.6) {
+        gaps.push({ topic, mastery, type: 'weak_knowledge' });
+      }
+    }
+    for (const topic of this.state.space.topics) {
+      const count = this.state.space.getCount(topic);
+      if (count < 5) {
+        gaps.push({ topic, mastery: 0, type: 'missing_questions', count });
+      }
+    }
+    return gaps;
   }
 
   // ========== Additional ML Helpers ==========

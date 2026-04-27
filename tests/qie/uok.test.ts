@@ -170,4 +170,56 @@ describe('UOK', () => {
       expect(probability).toBeLessThanOrEqual(1);
     });
   });
+
+  describe('act', () => {
+    beforeEach(() => {
+      // Setup test questions
+    });
+
+    it('should recommend weakest topic', () => {
+      const uok = new UOK();
+      uok.encodeQuestion({ id: 'q1', content: '代数题', topics: ['代数'] });
+      uok.encodeQuestion({ id: 'q2', content: '几何题', topics: ['几何'] });
+
+      uok.encodeAnswer('s1', 'q1', false);
+      uok.encodeAnswer('s1', 'q2', true);
+
+      const action = uok.act('next_question', 's1');
+      expect(action.type).toBe('recommend');
+      if (action.type === 'recommend') {
+        expect(action.topic).toBe('代数');
+      }
+    });
+
+    it('should return done when no topics exist', () => {
+      const uok = new UOK();
+      // Create a student but with no topics (edge case: questions without topics)
+      uok.encodeQuestion({ id: 'q1', content: '题', topics: [] });
+
+      uok.encodeAnswer('s1', 'q1', true);
+
+      const action = uok.act('next_question', 's1');
+      // Student exists but has no topics in knowledge map
+      expect(action.type).toBe('done');
+    });
+
+    it('should return error for unknown student', () => {
+      const uok = new UOK();
+      const action = uok.act('next_question', 'unknown');
+      expect(action.type).toBe('error');
+    });
+
+    it('should analyze gaps', () => {
+      const uok = new UOK();
+      uok.encodeQuestion({ id: 'q1', content: '代数题', topics: ['代数'] });
+
+      uok.encodeAnswer('s1', 'q1', false);
+
+      const action = uok.act('gap_analysis', 's1');
+      expect(action.type).toBe('gap_report');
+      if (action.type === 'gap_report') {
+        expect(action.gaps.length).toBeGreaterThan(0);
+      }
+    });
+  });
 });
