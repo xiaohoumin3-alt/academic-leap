@@ -131,4 +131,23 @@ describe('QIE Integration', () => {
       expect(w1Before).not.toEqual(w1After);
     });
   });
+
+  describe('Complexity Transfer', () => {
+    it('should initialize transfer weights to uniform (1/3 each)', () => {
+      const uok = new UOK();
+      const weights = uok.getComplexityTransferWeights();
+
+      expect(weights.cognitiveLoad).toBeCloseTo(1/3, 5);
+      expect(weights.reasoningDepth).toBeCloseTo(1/3, 5);
+      expect(weights.complexity).toBeCloseTo(1/3, 5);
+    });
+
+    it('should have weights that sum to 1', () => {
+      const uok = new UOK();
+      const weights = uok.getComplexityTransferWeights();
+
+      const sum = weights.cognitiveLoad + weights.reasoningDepth + weights.complexity;
+      expect(sum).toBeCloseTo(1, 5);
+    });
+  });
 });

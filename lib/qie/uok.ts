@@ -12,7 +12,7 @@ import {
   Gap,
   UOKState,
   MLState,
-  DEFAULT_TRANSFER_CONFIG,
+  ComplexityTransferWeights,
 } from './types';
 
 /**
@@ -38,7 +38,15 @@ export class UOK {
         b2: 0,
       },
       updateCounter: 0,
-      transfer: DEFAULT_TRANSFER_CONFIG,
+      transfer: {
+        weights: {
+          cognitiveLoad: 1/3,
+          reasoningDepth: 1/3,
+          complexity: 1/3,
+        },
+        gateThreshold: 0.7,
+        learningRate: 0.01,
+      },
     },
   };
 
@@ -48,6 +56,13 @@ export class UOK {
 
   constructor() {
     this.initializeML();
+  }
+
+  /**
+   * Get a copy of the current complexity transfer weights
+   */
+  getComplexityTransferWeights(): ComplexityTransferWeights {
+    return { ...this.state._ml.transfer.weights };
   }
 
   private initializeML(): void {
