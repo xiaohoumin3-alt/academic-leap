@@ -93,6 +93,19 @@ export class UOK {
     });
   }
 
+  /**
+   * 预测（只读 ML 状态）
+   */
+  predict(studentId: string, questionId: string, ctx: Context): number {
+    const s = this.getEmbedding(this.state._ml.embeddings.students, studentId);
+    const q = this.getEmbedding(this.state._ml.embeddings.questions, questionId);
+
+    const x = this.embedInput(s, q, ctx);
+    const h = this.relu(this.matmul(x, this.state._ml.weights.w1, this.state._ml.weights.b1));
+    const z = this.dot(h, this.state._ml.weights.w2) + this.state._ml.weights.b2;
+    return this.sigmoid(z);
+  }
+
   explain(target?: { studentId?: string; questionId?: string }): Explanation {
     if (target?.studentId) {
       return this.explainStudent(target.studentId);
@@ -183,6 +196,64 @@ export class UOK {
       this.state.students.set(id, s);
     }
     return s;
+  }
+
+  // ========== ML Helpers ==========
+
+  private getEmbedding(
+    map: Map<string, Float32Array>,
+    id: string
+  ): Float32Array {
+    let emb = map.get(id);
+    if (!emb) {
+      emb = new Float32Array(this.dim);
+      for (let i = 0; i < this.dim; i++) {
+        emb[i] = gaussian() * 0.01;
+      }
+      map.set(id, emb);
+    }
+    return emb;
+  }
+
+  private embedInput(
+    s: Float32Array,
+    q: Float32Array,
+    ctx: Context
+  ): Float32Array {
+    const x = new Float32Array(this.dim * 2 + 3);
+    x.set(s, 0);
+    x.set(q, this.dim);
+    x[0] = ctx.difficulty;
+    x[1] = ctx.complexity;
+    x[2] = ctx.difficulty * ctx.complexity;
+    return x;
+  }
+
+  private matmul(x: Float32Array, w: Float32Array, b: Float32Array): Float32Array {
+    const out = new Float32Array(this.hidden);
+    for (let j = 0; j < this.hidden; j++) {
+      for (let i = 0; i < x.length; i++) {
+        out[j] += x[i] * w[i * this.hidden + j];
+      }
+      out[j] += b[j];
+    }
+    return out;
+  }
+
+  private dot(x: Float32Array, y: Float32Array): number {
+    let s = 0;
+    for (let i = 0; i < x.length; i++) s += x[i] * y[i];
+    return s;
+  }
+
+  private relu(x: Float32Array): Float32Array {
+    const out = new Float32Array(x.length);
+    for (let i = 0; i < x.length; i++) out[i] = Math.max(0, x[i]);
+    return out;
+  }
+
+  private sigmoid(z: number): number {
+    return 1 / (1 + Math.exp(-z));
   }
 }
 
