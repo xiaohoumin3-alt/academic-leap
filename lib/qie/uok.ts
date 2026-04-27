@@ -65,7 +65,45 @@ export class UOK {
     }
   }
 
-  explain(): Explanation {
+  /**
+   * 编码题目到状态
+   */
+  encodeQuestion(question: {
+    id: string;
+    content: string;
+    topics: string[];
+  }): void {
+    const features = this.extractFeatures(question.content);
+
+    const qState: QuestionState = {
+      id: question.id,
+      topics: question.topics,
+      features,
+      quality: 0.5,
+      attemptCount: 0,
+      correctCount: 0,
+    };
+
+    this.state.questions.set(question.id, qState);
+    this.state.space.update(question.topics, features);
+    this.state.trace.push({
+      type: 'encode',
+      questionId: question.id,
+      time: Date.now(),
+    });
+  }
+
+  explain(target?: { studentId?: string; questionId?: string }): Explanation {
+    if (target?.studentId) {
+      return this.explainStudent(target.studentId);
+    }
+    if (target?.questionId) {
+      return this.explainQuestion(target.questionId);
+    }
+    return this.explainSystem();
+  }
+
+  private explainSystem(): Explanation {
     return {
       type: 'system',
       totalQuestions: this.state.questions.size,
@@ -75,6 +113,76 @@ export class UOK {
       topics: Array.from(this.state.space.topics),
       traceLength: this.state.trace.length,
     };
+  }
+
+  private explainQuestion(questionId: string): Explanation {
+    const q = this.state.questions.get(questionId);
+    if (!q) return { type: 'error', message: 'Question not found' };
+
+    return {
+      type: 'question',
+      questionId,
+      topics: q.topics,
+      quality: q.quality,
+      attempts: q.attemptCount,
+      features: q.features,
+    };
+  }
+
+  private explainStudent(studentId: string): Explanation {
+    const s = this.state.students.get(studentId);
+    if (!s) return { type: 'error', message: 'Student not found' };
+
+    const weakTopics = Array.from(s.knowledge.entries())
+      .filter(([_, m]) => m < 0.6)
+      .sort((a, b) => a[1] - b[1])
+      .slice(0, 3)
+      .map(([t, m]) => ({ topic: t, mastery: m }));
+
+    return {
+      type: 'student',
+      studentId,
+      ability: s.attemptCount > 0 ? s.correctCount / s.attemptCount : 0.5,
+      weakTopics,
+      totalAttempts: s.attemptCount,
+    };
+  }
+
+  /**
+   * Extract features from question content
+   */
+  private extractFeatures(content: string): QuestionFeatures {
+    const cognitiveWords = ['同时', '分别', '至少', '所有'];
+    let cognitiveLoad = 0;
+    for (const w of cognitiveWords) {
+      cognitiveLoad += (content.match(new RegExp(w, 'g')) || []).length * 0.2;
+    }
+
+    const reasoningWords: [string, number][] = [
+      ['证明', 2], ['推导', 1.5], ['分析', 1], ['计算', 0.5],
+    ];
+    let reasoningDepth = 0;
+    for (const [w, weight] of reasoningWords) {
+      if (content.includes(w)) reasoningDepth += weight;
+    }
+
+    const nests = (content.match(/[()（）]/g) || []).length / 2;
+
+    return {
+      cognitiveLoad: Math.min(1, cognitiveLoad),
+      reasoningDepth: Math.min(5, reasoningDepth),
+      complexity: Math.min(1, nests / 5),
+      difficulty: 0.5,
+    };
+  }
+
+  private getOrCreateStudent(id: string): StudentState {
+    let s = this.state.students.get(id);
+    if (!s) {
+      s = { id, knowledge: new Map(), attemptCount: 0, correctCount: 0 };
+      this.state.students.set(id, s);
+    }
+    return s;
   }
 }
 
