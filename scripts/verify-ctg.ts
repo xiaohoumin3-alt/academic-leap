@@ -1,5 +1,5 @@
 // scripts/verify-ctg.ts
-import { UOK } from '../lib/qie';
+import { UOK } from '../lib/qie/index.js';
 
 interface TestQuestion {
   id: string;
@@ -175,7 +175,30 @@ function calculateTransferAccuracy(
 
 async function main() {
   console.log('=== CTG Verification ===\n');
-  console.log('TODO: Implement verification');
+
+  // Generate synthetic data
+  const allQuestions = generateSyntheticData();
+  const trainQuestions = allQuestions.filter(q => q.complexity < 0.3);
+  const testQuestions = allQuestions.filter(q => q.complexity >= 0.3);
+
+  console.log(`Train questions: ${trainQuestions.length}`);
+  console.log(`Test questions: ${testQuestions.length}`);
+
+  // Train UOK
+  const uok = trainUOK(allQuestions);
+
+  // Calculate accuracies
+  const baseline = calculateBaselineAccuracy(uok, testQuestions);
+  const transfer = calculateTransferAccuracy(uok, testQuestions, trainQuestions);
+
+  const Acc_baseline = baseline.correct / baseline.total;
+  const Acc_transfer = transfer.correct / transfer.total;
+  const CTG = Acc_transfer - Acc_baseline;
+
+  console.log(`\nBaseline accuracy: ${Acc_baseline.toFixed(4)} (${baseline.correct}/${baseline.total})`);
+  console.log(`Transfer accuracy: ${Acc_transfer.toFixed(4)} (${transfer.correct}/${transfer.total})`);
+  console.log(`CTG: ${CTG.toFixed(4)}`);
+  console.log(`\nVerdict: ${CTG > 0 ? 'SUCCESS' : 'FAILURE'}`);
 }
 
 main().catch(console.error);
