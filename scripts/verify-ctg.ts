@@ -178,6 +178,7 @@ function calculateTransferAccuracy(
  */
 async function runMultipleTrials(numTrials: number = 10): Promise<void> {
   const results: number[] = [];
+  let lastUok: UOK | null = null;
 
   for (let i = 0; i < numTrials; i++) {
     const allQuestions = generateSyntheticData();
@@ -185,6 +186,7 @@ async function runMultipleTrials(numTrials: number = 10): Promise<void> {
     const testQuestions = allQuestions.filter(q => q.complexity >= 0.3);
 
     const uok = trainUOK(allQuestions);
+    lastUok = uok;
 
     const baseline = calculateBaselineAccuracy(uok, testQuestions);
     const transfer = calculateTransferAccuracy(uok, testQuestions, trainQuestions);
@@ -204,6 +206,27 @@ async function runMultipleTrials(numTrials: number = 10): Promise<void> {
   console.log(`Average CTG: ${avgCTG.toFixed(4)}`);
   console.log(`Win Rate: ${(winRate * 100).toFixed(1)}%`);
   console.log(`Verdict: ${avgCTG > 0 ? 'SUCCESS' : 'FAILURE'}`);
+
+  // After printing results, add weight analysis
+  console.log('\n=== Weight Analysis ===');
+  if (lastUok) {
+    try {
+      const weights = lastUok.getComplexityTransferWeights();
+      console.log(`cognitiveLoad: ${weights.cognitiveLoad.toFixed(4)}`);
+      console.log(`reasoningDepth: ${weights.reasoningDepth.toFixed(4)}`);
+      console.log(`complexity: ${weights.complexity.toFixed(4)}`);
+    } catch (e) {
+      console.log('Weights not available');
+    }
+  }
+
+  // Add analysis of why transfer might be failing
+  console.log('\n=== Analysis ===');
+  console.log('The negative CTG suggests:');
+  console.log('1. Complexity transfer weights may not be learning correctly');
+  console.log('2. The mapping function P_complex = P_simple * exp(-w*ΔC) may need tuning');
+  console.log('3. The fusion function λ * P_mlp + (1-λ) * P_transfer may need adjustment');
+  console.log('4. More training data may be needed for weights to converge');
 }
 
 async function main() {
