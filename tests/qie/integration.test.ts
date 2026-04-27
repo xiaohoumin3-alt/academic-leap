@@ -361,6 +361,89 @@ describe('QIE Integration', () => {
       });
     });
 
+    describe('Configuration API', () => {
+      it('should get current complexity transfer config', () => {
+        const uok = new UOK();
+        const config = uok.getComplexityTransferConfig();
+
+        expect(config).toBeDefined();
+        expect(config.weights).toBeDefined();
+        expect(config.gateThreshold).toBe(0.7);
+        expect(config.learningRate).toBe(0.01);
+        expect(config.weights.cognitiveLoad).toBeCloseTo(1/3, 5);
+        expect(config.weights.reasoningDepth).toBeCloseTo(1/3, 5);
+        expect(config.weights.complexity).toBeCloseTo(1/3, 5);
+      });
+
+      it('should set gate threshold and learning rate', () => {
+        const uok = new UOK();
+
+        uok.setComplexityTransferConfig({
+          gateThreshold: 0.8,
+          learningRate: 0.02,
+        });
+
+        const config = uok.getComplexityTransferConfig();
+        expect(config.gateThreshold).toBe(0.8);
+        expect(config.learningRate).toBe(0.02);
+      });
+
+      it('should validate gate threshold is between 0 and 1', () => {
+        const uok = new UOK();
+
+        expect(() => {
+          uok.setComplexityTransferConfig({ gateThreshold: -0.1 });
+        }).toThrow('gateThreshold must be between 0 and 1');
+
+        expect(() => {
+          uok.setComplexityTransferConfig({ gateThreshold: 1.5 });
+        }).toThrow('gateThreshold must be between 0 and 1');
+      });
+
+      it('should validate learning rate is positive', () => {
+        const uok = new UOK();
+
+        expect(() => {
+          uok.setComplexityTransferConfig({ learningRate: 0 });
+        }).toThrow('learningRate must be positive');
+
+        expect(() => {
+          uok.setComplexityTransferConfig({ learningRate: -0.01 });
+        }).toThrow('learningRate must be positive');
+      });
+
+      it('should not allow setting weights directly', () => {
+        const uok = new UOK();
+        const originalWeights = uok.getComplexityTransferWeights();
+
+        // Attempting to set weights should be ignored
+        uok.setComplexityTransferConfig({
+          weights: { cognitiveLoad: 0.5, reasoningDepth: 0.3, complexity: 0.2 },
+        } as any);
+
+        const weightsAfter = uok.getComplexityTransferWeights();
+        expect(weightsAfter.cognitiveLoad).toBeCloseTo(originalWeights.cognitiveLoad, 5);
+      });
+
+      it('should return a copy of config from getComplexityTransferConfig', () => {
+        const uok = new UOK();
+        const config1 = uok.getComplexityTransferConfig();
+        const config2 = uok.getComplexityTransferConfig();
+
+        // Modify config1 should not affect config2 or internal state
+        config1.gateThreshold = 0.99;
+        config1.weights.cognitiveLoad = 0.99;
+
+        expect(config2.gateThreshold).toBe(0.7);
+        expect(config2.weights.cognitiveLoad).not.toBe(0.99);
+
+        // Internal state should be unchanged
+        const config3 = uok.getComplexityTransferConfig();
+        expect(config3.gateThreshold).toBe(0.7);
+        expect(config3.weights.cognitiveLoad).toBeCloseTo(1/3, 5);
+      });
+    });
+
     describe('predictWithComplexityTransfer', () => {
       it('should return lower probability for more complex questions', () => {
         const uok = new UOK();

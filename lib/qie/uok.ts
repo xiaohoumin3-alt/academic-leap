@@ -14,6 +14,7 @@ import {
   MLState,
   ComplexityTransferWeights,
   ComplexityDelta,
+  ComplexityTransferConfig,
 } from './types';
 
 /**
@@ -64,6 +65,39 @@ export class UOK {
    */
   getComplexityTransferWeights(): ComplexityTransferWeights {
     return { ...this.state._ml.transfer.weights };
+  }
+
+  /**
+   * Get a copy of the current complexity transfer configuration
+   * Returns a new object to prevent external mutation
+   */
+  getComplexityTransferConfig(): ComplexityTransferConfig {
+    return {
+      weights: { ...this.state._ml.transfer.weights },
+      gateThreshold: this.state._ml.transfer.gateThreshold,
+      learningRate: this.state._ml.transfer.learningRate,
+    };
+  }
+
+  /**
+   * Set complexity transfer configuration
+   * Only allows updating gateThreshold and learningRate
+   * Weights cannot be set directly (they are learned through gated calibration)
+   */
+  setComplexityTransferConfig(config: Partial<Pick<ComplexityTransferConfig, 'gateThreshold' | 'learningRate'>>): void {
+    if (config.gateThreshold !== undefined) {
+      if (config.gateThreshold < 0 || config.gateThreshold > 1) {
+        throw new Error('gateThreshold must be between 0 and 1');
+      }
+      this.state._ml.transfer.gateThreshold = config.gateThreshold;
+    }
+
+    if (config.learningRate !== undefined) {
+      if (config.learningRate <= 0) {
+        throw new Error('learningRate must be positive');
+      }
+      this.state._ml.transfer.learningRate = config.learningRate;
+    }
   }
 
   private initializeML(): void {
