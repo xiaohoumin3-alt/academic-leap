@@ -24,6 +24,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "$lib/*": [
+        "lib/*"
       ]
     },
     "isolatedModules": true
@@ -37,6 +40,7 @@
   ],
   "exclude": [
     "node_modules",
-    "e2e"
+    "e2e",
+    "validation"
   ]
 }

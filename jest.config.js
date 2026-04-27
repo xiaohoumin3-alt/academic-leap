@@ -12,5 +12,6 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/', '/.next/'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '^\\$lib/(.*)$': '<rootDir>/lib/$1',
   },
 };
