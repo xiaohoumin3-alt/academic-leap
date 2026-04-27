@@ -12,6 +12,7 @@ import {
   Gap,
   UOKState,
   MLState,
+  DEFAULT_TRANSFER_CONFIG,
 } from './types';
 
 /**
@@ -37,6 +38,7 @@ export class UOK {
         b2: 0,
       },
       updateCounter: 0,
+      transfer: DEFAULT_TRANSFER_CONFIG,
     },
   };
 

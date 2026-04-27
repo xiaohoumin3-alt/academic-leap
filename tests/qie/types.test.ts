@@ -10,7 +10,9 @@ import {
   MLState,
   Explanation,
   Action,
-  Gap
+  Gap,
+  ComplexityTransferConfig,
+  DEFAULT_TRANSFER_CONFIG,
 } from '$lib/qie/types';
 
 describe('QIE Types', () => {
@@ -100,6 +102,7 @@ describe('QIE Types', () => {
           embeddings: { students: new Map(), questions: new Map() },
           weights: { w1: new Float32Array(0), b1: new Float32Array(0), w2: new Float32Array(0), b2: 0 },
           updateCounter: 0,
+          transfer: DEFAULT_TRANSFER_CONFIG,
         },
       };
 
@@ -123,6 +126,7 @@ describe('QIE Types', () => {
           b2: 0,
         },
         updateCounter: 0,
+        transfer: DEFAULT_TRANSFER_CONFIG,
       };
       expect(mlState.embeddings.students).toBeInstanceOf(Map);
       expect(mlState.embeddings.questions).toBeInstanceOf(Map);
@@ -136,6 +140,7 @@ describe('QIE Types', () => {
         embeddings: { students: new Map(), questions: new Map() },
         weights: { w1: new Float32Array(0), b1: new Float32Array(0), w2: new Float32Array(0), b2: 0 },
         updateCounter: 0,
+        transfer: DEFAULT_TRANSFER_CONFIG,
       };
 
       const state: UOKState = {

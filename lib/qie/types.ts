@@ -51,7 +51,47 @@ export interface MLState {
     b2: number;
   };
   updateCounter: number;
+  transfer: ComplexityTransferConfig;     // NEW: complexity transfer state
 }
+
+/**
+ * Complexity transfer weights for feature space mapping
+ * w = (w_cognitive, w_reasoning, w_complexity)
+ */
+export interface ComplexityTransferWeights {
+  cognitiveLoad: number;    // w₁: cognitive load penalty weight
+  reasoningDepth: number;   // w₂: reasoning depth penalty weight
+  complexity: number;       // w₃: structural complexity penalty weight
+}
+
+/**
+ * Complexity difference vector between two questions
+ * ΔC = (ΔcognitiveLoad, ΔreasoningDepth, Δcomplexity)
+ */
+export interface ComplexityDelta {
+  cognitiveLoad: number;
+  reasoningDepth: number;
+  complexity: number;
+}
+
+/**
+ * Configuration for complexity transfer mechanism
+ */
+export interface ComplexityTransferConfig {
+  weights: ComplexityTransferWeights;     // Current weight vector
+  gateThreshold: number;                  // τ: minimum P_simple for calibration
+  learningRate: number;                   // η: weight update step size
+}
+
+export const DEFAULT_TRANSFER_CONFIG: ComplexityTransferConfig = {
+  weights: {
+    cognitiveLoad: 0.5,
+    reasoningDepth: 0.3,
+    complexity: 0.2,
+  },
+  gateThreshold: 0.7,
+  learningRate: 0.01,
+};
 
 /**
  * UOK State types
