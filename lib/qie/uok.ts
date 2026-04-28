@@ -123,6 +123,25 @@ export class UOK {
   }
 
   /**
+   * Get adaptive learning rate with decay
+   * Decays by 0.95 every 1000 updates
+   */
+  private getAdaptiveLR(): number {
+    const baseLR = 0.01;
+    const decay = 0.95;
+    const decaySteps = Math.floor(UOK.globalUpdateCounter / 1000);
+    return baseLR * Math.pow(decay, decaySteps);
+  }
+
+  /**
+   * Decay learning rate (called every 1000 updates)
+   */
+  private decayLearningRate(): void {
+    const decay = 0.95;
+    this.state._ml.transfer.learningRate *= decay;
+  }
+
+  /**
    * Get the global shared transfer weights (same across all UOK instances)
    */
   static getGlobalTransferWeights(): ComplexityTransferWeights {
