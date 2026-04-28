@@ -446,7 +446,6 @@ export class UOK {
     const { _ml } = this.state;
     const config = _ml.transfer;
     const tau = config.gateThreshold; // τ = 0.55
-    const lr = config.learningRate;   // η = 0.01
 
     // Find the current question
     const complexQ = this.state.questions.get(complexQuestionId);
@@ -470,36 +469,31 @@ export class UOK {
     const pSimple = this.predict(studentId, simpleQuestionId, simpleCtx);
 
     // GATE: Only update if student shows competence on simple question
-    // Lowered from 0.7 to 0.5 for cold-start testing
-    console.log(`[Calibration] pSimple=${pSimple.toFixed(3)}, threshold=0.5, willUpdate=${pSimple >= 0.5}`);
-    if (pSimple < 0.5) return;
+    if (pSimple < tau) return;
 
-    // Calculate complexity delta (only positive deltas contribute)
+    // Calculate complexity delta
     const deltaC: ComplexityDelta = {
       cognitiveLoad: Math.max(0, complexQ.features.cognitiveLoad - simpleQ.features.cognitiveLoad),
       reasoningDepth: Math.max(0, complexQ.features.reasoningDepth - simpleQ.features.reasoningDepth),
       complexity: Math.max(0, complexQ.features.complexity - simpleQ.features.complexity),
     };
 
-    // Skip if no complexity delta (nothing to learn from)
     if (deltaC.cognitiveLoad === 0 && deltaC.reasoningDepth === 0 && deltaC.complexity === 0) {
       return;
     }
 
-    // Get prediction for complex question using transfer model
-    const pComplexPredicted = this.predictWithComplexityTransfer(
-      studentId,
-      simpleQuestionId,
-      complexQuestionId
-    );
+    // Get prediction using transfer with clamp
+    const pComplexPredicted = this.applyTransfer(pSimple, deltaC);
 
     // Calculate prediction error
     const y = correct ? 1 : 0;
     const error = y - pComplexPredicted;
 
-    // Update weights: w_i = w_i + lr * error * deltaC_i
-    // Only update dimensions where deltaC > 0
-    const weights = config.weights;
+    // Get adaptive learning rate
+    const lr = this.getAdaptiveLR();
+
+    // Update GLOBAL shared weights
+    const weights = UOK.globalTransferWeights;
 
     if (deltaC.cognitiveLoad > 0) {
       weights.cognitiveLoad = Math.max(0, weights.cognitiveLoad + lr * error * deltaC.cognitiveLoad);
@@ -517,6 +511,11 @@ export class UOK {
       weights.cognitiveLoad /= sum;
       weights.reasoningDepth /= sum;
       weights.complexity /= sum;
+    }
+
+    // Increment global counter and decay LR every 1000 updates
+    if (++UOK.globalUpdateCounter % 1000 === 0) {
+      this.decayLearningRate();
     }
   }
 
