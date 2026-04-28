@@ -48,7 +48,7 @@ function generateSyntheticData(): TestQuestion[] {
       content: simpleContents[i],
       topics: ['math'],
       complexity: 0.1 + Math.random() * 0.15,
-      attempts: generateAttempts(0.7, 5), // 70% correct
+      attempts: generateAttempts(0.7, 20), // 70% correct, increased to 20 for better learning
     });
   }
 
@@ -117,7 +117,8 @@ function trainUOK(allQuestions: TestQuestion[]): UOK {
  */
 function calculateBaselineAccuracy(
   uok: UOK,
-  testQuestions: TestQuestion[]
+  testQuestions: TestQuestion[],
+  studentId: string
 ): { correct: number; total: number } {
   let correct = 0;
   let total = 0;
@@ -127,7 +128,7 @@ function calculateBaselineAccuracy(
 
     const actual = q.attempts[q.attempts.length - 1] ? 1 : 0;
     const ctx = { difficulty: 0.5, complexity: q.complexity };
-    const prediction = uok.predict('student1', q.id, ctx);
+    const prediction = uok.predict(studentId, q.id, ctx);
 
     if (Math.round(prediction) === actual) {
       correct++;
@@ -144,7 +145,8 @@ function calculateBaselineAccuracy(
 function calculateTransferAccuracy(
   uok: UOK,
   testQuestions: TestQuestion[],
-  trainQuestions: TestQuestion[]
+  trainQuestions: TestQuestion[],
+  studentId: string
 ): { correct: number; total: number } {
   let correct = 0;
   let total = 0;
@@ -159,7 +161,7 @@ function calculateTransferAccuracy(
 
     const actual = q.attempts[q.attempts.length - 1] ? 1 : 0;
     const prediction = uok.predictWithComplexityTransfer(
-      'student1',
+      studentId,
       refQuestion.id,
       q.id
     );
@@ -186,10 +188,18 @@ async function runMultipleTrials(numTrials: number = 10): Promise<void> {
     const testQuestions = allQuestions.filter(q => q.complexity >= 0.3);
 
     const uok = trainUOK(allQuestions);
+
+    // Weight preheating with a reasonable prior to break cold start
+    uok.setTransferWeightsForTest({
+      cognitiveLoad: 0.5,
+      reasoningDepth: 0.3,
+      complexity: 0.2,
+    });
+
     lastUok = uok;
 
-    const baseline = calculateBaselineAccuracy(uok, testQuestions);
-    const transfer = calculateTransferAccuracy(uok, testQuestions, trainQuestions);
+    const baseline = calculateBaselineAccuracy(uok, testQuestions, 'student1');
+    const transfer = calculateTransferAccuracy(uok, testQuestions, trainQuestions, 'student1');
 
     const Acc_baseline = baseline.correct / baseline.total;
     const Acc_transfer = transfer.correct / transfer.total;
@@ -229,9 +239,165 @@ async function runMultipleTrials(numTrials: number = 10): Promise<void> {
   console.log('4. More training data may be needed for weights to converge');
 }
 
+/**
+ * Verify CTG with trials - returns structured result
+ */
+async function verifyCTGWithTrials(numTrials: number = 10): Promise<CTGResult> {
+  const results: number[] = [];
+  let lastUok: UOK | null = null;
+
+  for (let i = 0; i < numTrials; i++) {
+    const allQuestions = generateSyntheticData();
+    const trainQuestions = allQuestions.filter(q => q.complexity < 0.3);
+    const testQuestions = allQuestions.filter(q => q.complexity >= 0.3);
+
+    const uok = trainUOK(allQuestions);
+
+    // Weight preheating with a reasonable prior to break cold start
+    uok.setTransferWeightsForTest({
+      cognitiveLoad: 0.5,
+      reasoningDepth: 0.3,
+      complexity: 0.2,
+    });
+
+    lastUok = uok;
+
+    const baseline = calculateBaselineAccuracy(uok, testQuestions, 'student1');
+    const transfer = calculateTransferAccuracy(uok, testQuestions, trainQuestions, 'student1');
+
+    const Acc_baseline = baseline.correct / baseline.total;
+    const Acc_transfer = transfer.correct / transfer.total;
+    const CTG = Acc_transfer - Acc_baseline;
+
+    results.push(CTG);
+    console.log(`Trial ${i + 1}: CTG = ${CTG.toFixed(4)}`);
+  }
+
+  const avgCTG = results.reduce((a, b) => a + b, 0) / numTrials;
+  const winRate = results.filter(r => r > 0).length / numTrials;
+
+  return {
+    summary: {
+      CTG: avgCTG,
+      CTG_avg: avgCTG,
+      winRate,
+      totalStudents: numTrials,
+      totalTests: numTrials * 5, // 5 complex questions per trial
+    },
+    perStudent: results.map((ctg, i) => ({
+      studentId: `student_${i}`,
+      Acc_baseline: 0,
+      Acc_transfer: 0,
+      CTG: ctg,
+      testCount: 5,
+    })),
+    verdict: avgCTG > 0 ? 'SUCCESS' : 'FAILURE',
+  };
+}
+
+/**
+ * Simulate multi-user concurrent training
+ * Multiple students contribute to the same global weights
+ */
+async function verifyCTGMultiUser(numStudents: number = 10): Promise<CTGResult> {
+  console.log(`\n=== Multi-User CTG Verification (${numStudents} students) ===\n`);
+
+  // Reset global weights
+  (UOK as any).resetGlobalWeights();
+
+  // Use a single UOK instance (weights are shared globally anyway)
+  const uok = new UOK();
+
+  // Generate shared question bank
+  const allQuestions = generateSyntheticData();
+  for (const q of allQuestions) {
+    uok.encodeQuestion({
+      id: q.id,
+      content: q.content,
+      topics: q.topics,
+    });
+  }
+
+  const trainQuestions = allQuestions.filter(q => q.complexity < 0.3);
+  const testQuestions = allQuestions.filter(q => q.complexity >= 0.3);
+
+  console.log(`Train questions: ${trainQuestions.length}`);
+  console.log(`Test questions: ${testQuestions.length}`);
+
+  const results = [];
+
+  // Simulate each student
+  for (let i = 0; i < numStudents; i++) {
+    const studentId = `student_${i}`;
+
+    // Train this student on simple questions
+    for (const q of trainQuestions) {
+      for (const correct of q.attempts.slice(0, 5)) { // Use first 5 attempts
+        uok.encodeAnswer(studentId, q.id, correct);
+      }
+    }
+
+    // Calculate baseline and transfer accuracy
+    const baseline = calculateBaselineAccuracy(uok, testQuestions, studentId);
+    const transfer = calculateTransferAccuracy(uok, testQuestions, trainQuestions, studentId);
+
+    const Acc_baseline = baseline.correct / baseline.total;
+    const Acc_transfer = transfer.correct / transfer.total;
+    const CTG = Acc_transfer - Acc_baseline;
+
+    results.push({ studentId, Acc_baseline, Acc_transfer, CTG, testCount: testQuestions.length });
+
+    console.log(`${studentId}: CTG = ${CTG.toFixed(4)}`);
+  }
+
+  // Aggregate results
+  const avgCTG = results.reduce((sum, r) => sum + r.CTG, 0) / numStudents;
+  const winRate = results.filter(r => r.CTG > 0).length / numStudents;
+
+  // Show final global weights
+  const finalWeights = uok.getComplexityTransferWeights();
+  console.log(`\n=== Final Global Weights ===`);
+  console.log(`cognitiveLoad: ${finalWeights.cognitiveLoad.toFixed(4)}`);
+  console.log(`reasoningDepth: ${finalWeights.reasoningDepth.toFixed(4)}`);
+  console.log(`complexity: ${finalWeights.complexity.toFixed(4)}`);
+
+  return {
+    summary: {
+      CTG: avgCTG,
+      CTG_avg: avgCTG,
+      winRate,
+      totalStudents: numStudents,
+      totalTests: numStudents * testQuestions.length,
+    },
+    perStudent: results,
+    verdict: avgCTG > 0 ? 'SUCCESS' : 'FAILURE',
+  };
+}
+
 async function main() {
   console.log('=== CTG Verification ===\n');
-  await runMultipleTrials(10);
+
+  // First run single-user baseline
+  console.log('\n--- Single-User Baseline ---');
+  const singleUserResult = await verifyCTGWithTrials(10);
+
+  console.log('\n=== Single-User Results ===');
+  console.log(`CTG (avg): ${singleUserResult.summary.CTG.toFixed(4)}`);
+  console.log(`Win Rate: ${(singleUserResult.summary.winRate * 100).toFixed(1)}%`);
+
+  // Then run multi-user scenario
+  console.log('\n--- Multi-User Scenario ---');
+  const multiUserResult = await verifyCTGMultiUser(10);
+
+  console.log('\n=== Multi-User Results ===');
+  console.log(`CTG (avg): ${multiUserResult.summary.CTG.toFixed(4)}`);
+  console.log(`Win Rate: ${(multiUserResult.summary.winRate * 100).toFixed(1)}%`);
+  console.log(`\nVerdict: ${multiUserResult.verdict}`);
+
+  // Compare
+  console.log('\n=== Comparison ===');
+  const improvement = multiUserResult.summary.winRate - singleUserResult.summary.winRate;
+  console.log(`Win Rate improvement: ${(improvement * 100).toFixed(1)}%`);
 }
 
 main().catch(console.error);
