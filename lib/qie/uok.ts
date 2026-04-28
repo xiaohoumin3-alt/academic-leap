@@ -217,32 +217,41 @@ export class UOK {
     const simpleQ = this.state.questions.get(simpleQuestionId);
     const complexQ = this.state.questions.get(complexQuestionId);
 
-    // Handle null/undefined question cases
     if (!simpleQ || !complexQ) {
       return 0.5;
     }
 
-    // Get base probability from simple question
     const simpleCtx: Context = {
       difficulty: simpleQ.features.difficulty,
       complexity: simpleQ.features.complexity,
     };
     const pSimple = this.predict(studentId, simpleQuestionId, simpleCtx);
 
-    // Calculate complexity delta (only penalize increased complexity)
-    const deltaCognitive = Math.max(0, complexQ.features.cognitiveLoad - simpleQ.features.cognitiveLoad);
-    const deltaReasoning = Math.max(0, complexQ.features.reasoningDepth - simpleQ.features.reasoningDepth);
-    const deltaComplexity = Math.max(0, complexQ.features.complexity - simpleQ.features.complexity);
+    // Calculate complexity delta
+    const deltaC: ComplexityDelta = {
+      cognitiveLoad: Math.max(0, complexQ.features.cognitiveLoad - simpleQ.features.cognitiveLoad),
+      reasoningDepth: Math.max(0, complexQ.features.reasoningDepth - simpleQ.features.reasoningDepth),
+      complexity: Math.max(0, complexQ.features.complexity - simpleQ.features.complexity),
+    };
 
-    // Calculate weighted projection: w · ΔC
-    const weights = this.state._ml.transfer.weights;
+    return this.applyTransfer(pSimple, deltaC);
+  }
+
+  /**
+   * Apply complexity transfer mapping with numerical stability
+   * P_complex = P_simple · exp(-clamp(w · ΔC, 0, 2.0))
+   */
+  private applyTransfer(pSimple: number, deltaC: ComplexityDelta): number {
+    const w = this.state._ml.transfer.weights;
     const weightedDelta =
-      weights.cognitiveLoad * deltaCognitive +
-      weights.reasoningDepth * deltaReasoning +
-      weights.complexity * deltaComplexity;
+      w.cognitiveLoad * deltaC.cognitiveLoad +
+      w.reasoningDepth * deltaC.reasoningDepth +
+      w.complexity * deltaC.complexity;
 
-    // Apply mapping function: P_complex = P_simple · exp(- w · ΔC)
-    return pSimple * Math.exp(-weightedDelta);
+    // Clamp: prevent exp from producing extremely small values
+    const clampedDelta = Math.max(0, Math.min(weightedDelta, 2.0));
+
+    return pSimple * Math.exp(-clampedDelta);
   }
 
   /**
