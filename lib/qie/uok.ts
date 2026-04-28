@@ -74,18 +74,18 @@ export class UOK {
 
   /**
    * Get a copy of the current complexity transfer weights
+   * Returns the global shared weights (same across all instances)
    */
   getComplexityTransferWeights(): ComplexityTransferWeights {
-    return { ...this.state._ml.transfer.weights };
+    return UOK.getGlobalTransferWeights();
   }
 
   /**
    * Get a copy of the current complexity transfer configuration
-   * Returns a new object to prevent external mutation
    */
   getComplexityTransferConfig(): ComplexityTransferConfig {
     return {
-      weights: { ...this.state._ml.transfer.weights },
+      weights: UOK.getGlobalTransferWeights(),
       gateThreshold: this.state._ml.transfer.gateThreshold,
       learningRate: this.state._ml.transfer.learningRate,
     };
