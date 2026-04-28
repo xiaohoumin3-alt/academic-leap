@@ -8,6 +8,8 @@ if (!API_KEY) {
 const genAI = new GoogleGenerativeAI(API_KEY);
 const MODEL_NAME = 'models/gemma-4-31b-it';
 
+const DEFAULT_BATCH_SIZE = 8;
+
 export interface QuestionContent {
   title?: string;
   description?: string;
@@ -128,6 +130,16 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+interface ParsedSingleResponse {
+  reasoning?: string;
+  features?: {
+    cognitiveLoad?: number;
+    reasoningDepth?: number;
+    complexity?: number;
+  };
+  confidence?: number;
+}
+
 function parseSingleResponse(text: string, questionId: string): ExtractionResult {
   let cleaned = text
     .replace(/```json\s*/gi, '')
@@ -139,7 +151,7 @@ function parseSingleResponse(text: string, questionId: string): ExtractionResult
     throw new Error('无法找到有效的JSON响应');
   }
 
-  const parsed = JSON.parse(jsonMatch[0]);
+  const parsed = JSON.parse(jsonMatch[0]) as ParsedSingleResponse;
   const features = {
     cognitiveLoad: clamp(parsed.features?.cognitiveLoad ?? 0.5, 0, 1),
     reasoningDepth: clamp(parsed.features?.reasoningDepth ?? 0.5, 0, 1),
@@ -154,6 +166,17 @@ function parseSingleResponse(text: string, questionId: string): ExtractionResult
   };
 }
 
+interface ParsedBatchItem {
+  id: string;
+  reasoning?: string;
+  features?: {
+    cognitiveLoad?: number;
+    reasoningDepth?: number;
+    complexity?: number;
+  };
+  confidence?: number;
+}
+
 function parseBatchResponse(text: string): Map<string, ExtractionResult> {
   let cleaned = text
     .replace(/```json\s*/gi, '')
@@ -166,9 +189,14 @@ function parseBatchResponse(text: string): Map<string, ExtractionResult> {
   }
 
   const parsed = JSON.parse(arrayMatch[0]);
+  if (!Array.isArray(parsed)) {
+    throw new Error('响应不是有效的数组');
+  }
+
   const results = new Map<string, ExtractionResult>();
 
-  for (const item of parsed) {
+  for (const item of parsed as ParsedBatchItem[]) {
+    if (!item.id) continue;
     results.set(item.id, {
       questionId: item.id,
       features: {
@@ -197,7 +225,8 @@ async function retryWithBackoff<T>(
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
-  throw new Error('重试失败');
+  // Unreachable - the loop either returns or throws on the last iteration
+  throw new Error('Unreachable');
 }
 
 export class ComplexityExtractor {
@@ -221,7 +250,7 @@ export class ComplexityExtractor {
     items: Array<{ id: string; content: QuestionContent }>,
     options: BatchExtractionOptions = {}
   ): Promise<Map<string, ExtractionResult>> {
-    const { batchSize = 8, delayMs = 1000, onProgress } = options;
+    const { batchSize = DEFAULT_BATCH_SIZE, delayMs = 1000, onProgress } = options;
     const allResults = new Map<string, ExtractionResult>();
 
     for (let i = 0; i < items.length; i += batchSize) {
