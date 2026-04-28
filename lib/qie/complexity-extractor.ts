@@ -126,7 +126,7 @@ ${questionsJson}
 ]`;
 }
 
-function clamp(value: number, min: number, max: number): number {
+export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
@@ -140,18 +140,23 @@ interface ParsedSingleResponse {
   confidence?: number;
 }
 
-function parseSingleResponse(text: string, questionId: string): ExtractionResult {
+export function parseSingleResponse(text: string, questionId: string): ExtractionResult {
   let cleaned = text
     .replace(/```json\s*/gi, '')
     .replace(/```\s*/g, '')
     .trim();
 
-  const jsonMatch = cleaned.match(/\{[^{}]*"features"[^{}]*\}/);
-  if (!jsonMatch) {
+  // Find JSON object - handle nested objects by matching from first { to last }
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+
+  if (firstBrace === -1 || lastBrace === -1 || firstBrace >= lastBrace) {
     throw new Error('无法找到有效的JSON响应');
   }
 
-  const parsed = JSON.parse(jsonMatch[0]) as ParsedSingleResponse;
+  const jsonStr = cleaned.substring(firstBrace, lastBrace + 1);
+  const parsed = JSON.parse(jsonStr) as ParsedSingleResponse;
+
   const features = {
     cognitiveLoad: clamp(parsed.features?.cognitiveLoad ?? 0.5, 0, 1),
     reasoningDepth: clamp(parsed.features?.reasoningDepth ?? 0.5, 0, 1),
@@ -177,7 +182,7 @@ interface ParsedBatchItem {
   confidence?: number;
 }
 
-function parseBatchResponse(text: string): Map<string, ExtractionResult> {
+export function parseBatchResponse(text: string): Map<string, ExtractionResult> {
   let cleaned = text
     .replace(/```json\s*/gi, '')
     .replace(/```\s*/g, '')
