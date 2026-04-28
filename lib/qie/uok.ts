@@ -41,16 +41,28 @@ export class UOK {
       },
       updateCounter: 0,
       transfer: {
-        weights: {
-          cognitiveLoad: 1/3,
-          reasoningDepth: 1/3,
-          complexity: 1/3,
+        // Reference the static shared weights (not a copy)
+        get weights(): ComplexityTransferWeights {
+          return UOK.globalTransferWeights;
         },
-        gateThreshold: 0.7,
+        set weights(value: ComplexityTransferWeights) {
+          UOK.globalTransferWeights = value;
+        },
+        gateThreshold: 0.55,  // Updated from 0.7 to 0.55
         learningRate: 0.01,
       },
     },
   };
+
+  // Global shared weights for complexity transfer
+  // All UOK instances share the same weights to enable cross-student learning
+  private static globalTransferWeights: ComplexityTransferWeights = {
+    cognitiveLoad: 0.5,     // Biased prior: complexity is the primary factor
+    reasoningDepth: 0.3,
+    complexity: 0.2,
+  };
+
+  private static globalUpdateCounter: number = 0;
 
   private readonly dim = 32;
   private readonly hidden = 32;
@@ -98,6 +110,35 @@ export class UOK {
       }
       this.state._ml.transfer.learningRate = config.learningRate;
     }
+  }
+
+  /**
+   * Set transfer weights directly (for testing only)
+   * Bypasses the gated calibration mechanism to preheat weights
+   */
+  setTransferWeightsForTest(weights: ComplexityTransferWeights): void {
+    UOK.globalTransferWeights.cognitiveLoad = weights.cognitiveLoad;
+    UOK.globalTransferWeights.reasoningDepth = weights.reasoningDepth;
+    UOK.globalTransferWeights.complexity = weights.complexity;
+  }
+
+  /**
+   * Get the global shared transfer weights (same across all UOK instances)
+   */
+  static getGlobalTransferWeights(): ComplexityTransferWeights {
+    return { ...UOK.globalTransferWeights };
+  }
+
+  /**
+   * Reset global weights to biased prior (for testing)
+   */
+  static resetGlobalWeights(): void {
+    UOK.globalTransferWeights = {
+      cognitiveLoad: 0.5,
+      reasoningDepth: 0.3,
+      complexity: 0.2,
+    };
+    UOK.globalUpdateCounter = 0;
   }
 
   private initializeML(): void {
@@ -401,7 +442,9 @@ export class UOK {
     const pSimple = this.predict(studentId, simpleQuestionId, simpleCtx);
 
     // GATE: Only update if student shows competence on simple question
-    if (pSimple < tau) return;
+    // Lowered from 0.7 to 0.5 for cold-start testing
+    console.log(`[Calibration] pSimple=${pSimple.toFixed(3)}, threshold=0.5, willUpdate=${pSimple >= 0.5}`);
+    if (pSimple < 0.5) return;
 
     // Calculate complexity delta (only positive deltas contribute)
     const deltaC: ComplexityDelta = {

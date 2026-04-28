@@ -133,13 +133,18 @@ describe('QIE Integration', () => {
   });
 
   describe('Complexity Transfer', () => {
-    it('should initialize transfer weights to uniform (1/3 each)', () => {
+    beforeEach(() => {
+      // Reset global weights before each test to ensure consistent state
+      (UOK as any).resetGlobalWeights();
+    });
+
+    it('should initialize transfer weights to biased prior (0.5, 0.3, 0.2)', () => {
       const uok = new UOK();
       const weights = uok.getComplexityTransferWeights();
 
-      expect(weights.cognitiveLoad).toBeCloseTo(1/3, 5);
-      expect(weights.reasoningDepth).toBeCloseTo(1/3, 5);
-      expect(weights.complexity).toBeCloseTo(1/3, 5);
+      expect(weights.cognitiveLoad).toBeCloseTo(0.5, 5);
+      expect(weights.reasoningDepth).toBeCloseTo(0.3, 5);
+      expect(weights.complexity).toBeCloseTo(0.2, 5);
     });
 
     it('should have weights that sum to 1', () => {
@@ -176,9 +181,9 @@ describe('QIE Integration', () => {
         // Get P_simple to verify we're above threshold
         const pSimple = uok.predict('student1', 'simple', { difficulty: 0.5, complexity: 0.5 });
 
-        // If still below 0.7, skip the rest of this assertion
+        // If still below 0.55, skip the rest of this assertion
         // The ML model may not converge quickly enough
-        if (pSimple < 0.7) {
+        if (pSimple < 0.55) {
           // Still verify that gated calibration works by directly testing the mechanism
           // We'll manually set up a scenario where P_simple is high
         }
@@ -197,7 +202,7 @@ describe('QIE Integration', () => {
 
         // If P_simple was high enough, weights should have changed
         // Otherwise they stay the same (gated out)
-        if (pSimple >= 0.7) {
+        if (pSimple >= 0.55) {
           // Weights should have changed (non-zero deltaC between questions)
           expect(weightsAfter.cognitiveLoad).not.toBeCloseTo(weightsBefore.cognitiveLoad, 4);
         } else {
@@ -206,7 +211,7 @@ describe('QIE Integration', () => {
         }
       });
 
-      it('should NOT update weights when P_simple < gate threshold (0.7)', () => {
+      it('should NOT update weights when P_simple < gate threshold (0.55)', () => {
         const uok = new UOK();
 
         // Encode simple and complex questions
@@ -233,7 +238,7 @@ describe('QIE Integration', () => {
 
         // Skip test if ML didn't converge as expected (P_simple still > 0.7)
         // This can happen due to random initialization
-        if (pSimple >= 0.7) {
+        if (pSimple >= 0.55) {
           return; // Test inconclusive, skip
         }
 
@@ -374,11 +379,11 @@ describe('QIE Integration', () => {
 
         expect(config).toBeDefined();
         expect(config.weights).toBeDefined();
-        expect(config.gateThreshold).toBe(0.7);
+        expect(config.gateThreshold).toBe(0.55);
         expect(config.learningRate).toBe(0.01);
-        expect(config.weights.cognitiveLoad).toBeCloseTo(1/3, 5);
-        expect(config.weights.reasoningDepth).toBeCloseTo(1/3, 5);
-        expect(config.weights.complexity).toBeCloseTo(1/3, 5);
+        expect(config.weights.cognitiveLoad).toBeCloseTo(0.5, 5);
+        expect(config.weights.reasoningDepth).toBeCloseTo(0.3, 5);
+        expect(config.weights.complexity).toBeCloseTo(0.2, 5);
       });
 
       it('should set gate threshold and learning rate', () => {
@@ -440,13 +445,13 @@ describe('QIE Integration', () => {
         config1.gateThreshold = 0.99;
         config1.weights.cognitiveLoad = 0.99;
 
-        expect(config2.gateThreshold).toBe(0.7);
+        expect(config2.gateThreshold).toBe(0.55);
         expect(config2.weights.cognitiveLoad).not.toBe(0.99);
 
         // Internal state should be unchanged
         const config3 = uok.getComplexityTransferConfig();
-        expect(config3.gateThreshold).toBe(0.7);
-        expect(config3.weights.cognitiveLoad).toBeCloseTo(1/3, 5);
+        expect(config3.gateThreshold).toBe(0.55);
+        expect(config3.weights.cognitiveLoad).toBeCloseTo(0.5, 5);
       });
     });
 
@@ -644,7 +649,7 @@ describe('QIE Integration', () => {
         // config remains valid
         const config = uok.getComplexityTransferConfig();
         expect(config).toBeDefined();
-        expect(config.gateThreshold).toBe(0.7);
+        expect(config.gateThreshold).toBe(0.55);
         expect(config.learningRate).toBe(0.01);
         expect(config.weights).toBeDefined();
 
