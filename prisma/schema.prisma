@@ -42,6 +42,8 @@ model User {
   sessions                   Session[]
   enabledKnowledge           UserEnabledKnowledge[]
   knowledge                  UserKnowledge[]
+  studentAbilities           StudentAbility[]
+  predictionLogs             PredictionLog[]
 }
 
 model Question {
@@ -58,7 +60,19 @@ model Question {
   params          String?        @default("{}")
   stepTypes       String?        @default("[]")
   templateId      String?
+
+  // Complexity feature extraction fields
+  cognitiveLoad      Float?   // [0, 1] 认知负荷
+  reasoningDepth     Float?   // [0, 1] 推理深度
+  complexity         Float?   // [0, 1] 综合复杂度
+  extractionStatus   String   @default("PENDING")  // PENDING | SUCCESS | FAILED
+  featuresExtractedAt DateTime?
+  extractionError    String?  // 失败原因记录
+  extractionModel    String?  @default("gemma-4-31b-it-v1")
+
   steps           QuestionStep[]
+
+  @@index([extractionStatus])
 }
 
 model QuestionStep {
@@ -264,6 +278,8 @@ model Template {
   version     Int               @default(1)
   status      String            @default("draft")
   knowledgeId String?
+  source      String            @default("manual")
+  skeletonIds String            @default("[]")
   createdBy   String
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
@@ -366,4 +382,50 @@ model WeeklyReport {
   path            LearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
 
   @@index([pathId, weekStart])
+}
+
+model Skeleton {
+  id         String   @id  // 如 "compute_sqrt"
+  stepType   String   // 如 "COMPUTE_SQRT"
+  name       String   // 中文名，如 "计算二次根式"
+  config     Json     // 输入类型、键盘类型、验证规则
+  status     String   @default("pending")  // pending | approved | production
+  source     String   // "ai_generated" | "manual"
+  createdAt  DateTime @default(now())
+  approvedBy String?
+}
+
+// ============================================================
+// Prediction Service - 学生预测相关
+// ============================================================
+
+model StudentAbility {
+  id          String   @id @default(cuid())
+  userId      String
+  nodeId      String   // 知识点 ID，如 "algebra"
+  ability     Float    // IRT theta 参数 [-2, 2]
+  sampleSize  Int      @default(0)  // 样本数量
+  lastUpdated DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, nodeId])
+  @@index([userId])
+  @@index([nodeId])
+}
+
+model PredictionLog {
+  id          String   @id @default(cuid())
+  userId      String
+  questionId  String?
+  predicted   Float    // 预测概率 [0, 1]
+  actual      Boolean? // 实际结果（后续更新）
+  metadata    Json?    // 额外元数据
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }
