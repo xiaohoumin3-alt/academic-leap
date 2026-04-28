@@ -417,7 +417,7 @@ export class UOK {
   ): void {
     const { _ml } = this.state;
     const config = _ml.transfer;
-    const tau = config.gateThreshold; // τ = 0.7
+    const tau = config.gateThreshold; // τ = 0.55
     const lr = config.learningRate;   // η = 0.01
 
     // Find the current question
