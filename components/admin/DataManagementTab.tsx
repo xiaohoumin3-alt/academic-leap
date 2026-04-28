@@ -4,8 +4,9 @@ import { useState } from 'react';
 import TextbookList from './TextbookList';
 import ChapterTreeEditor from './ChapterTreeEditor';
 import KnowledgePointList from './KnowledgePointList';
+import ComplexityAdminPanel from './ComplexityAdminPanel';
 
-type DataSubTab = 'textbooks' | 'chapters' | 'points';
+type DataSubTab = 'textbooks' | 'chapters' | 'points' | 'complexity';
 
 interface DataManagementTabProps {
   canEdit: boolean;
@@ -53,6 +54,16 @@ export default function DataManagementTab({ canEdit, canDelete }: DataManagement
         >
           知识点管理
         </button>
+        <button
+          onClick={() => setActiveSubTab('complexity')}
+          className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
+            activeSubTab === 'complexity'
+              ? 'bg-primary text-on-primary'
+              : 'bg-surface-container text-on-surface-variant'
+          }`}
+        >
+          题目特征
+        </button>
       </div>
 
       {/* 子页面 */}
@@ -68,6 +79,9 @@ export default function DataManagementTab({ canEdit, canDelete }: DataManagement
       )}
       {activeSubTab === 'points' && selectedChapter && (
         <KnowledgePointList chapterId={selectedChapter} canEdit={canEdit} canDelete={canDelete} />
+      )}
+      {activeSubTab === 'complexity' && (
+        <ComplexityAdminPanel canEdit={canEdit} />
       )}
     </div>
   );
