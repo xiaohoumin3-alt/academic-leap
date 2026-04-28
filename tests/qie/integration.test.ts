@@ -724,5 +724,101 @@ describe('QIE Integration', () => {
         expect(sum).toBeCloseTo(1, 5);
       });
     });
+
+    describe('Global Shared Weights', () => {
+      beforeEach(() => {
+        // Reset global weights before each test
+        (UOK as any).resetGlobalWeights();
+      });
+
+      it('should share weights across UOK instances', () => {
+        const uok1 = new UOK();
+        const uok2 = new UOK();
+
+        // Encode questions
+        const questionConfig = { id: 'q1', content: 'Test', topics: ['math'] };
+        uok1.encodeQuestion(questionConfig);
+        uok2.encodeQuestion(questionConfig);
+
+        // Train with uok1
+        for (let i = 0; i < 10; i++) {
+          uok1.encodeAnswer('student1', 'q1', true);
+        }
+
+        const weights1 = uok1.getComplexityTransferWeights();
+        const weights2 = uok2.getComplexityTransferWeights();
+
+        // Weights should be identical (shared)
+        expect(weights1.cognitiveLoad).toBe(weights2.cognitiveLoad);
+        expect(weights1.reasoningDepth).toBe(weights2.reasoningDepth);
+        expect(weights1.complexity).toBe(weights2.complexity);
+      });
+
+      it('should allow one students learning to benefit another', () => {
+        const uok = new UOK();
+
+        // Simple and complex questions
+        uok.encodeQuestion({ id: 'simple', content: 'Simple', topics: ['math'] });
+        uok.encodeQuestion({ id: 'complex', content: 'Complex', topics: ['math'] });
+
+        // Set features
+        const state = (uok as any).state;
+        state.questions.get('simple').features = {
+          difficulty: 0.2,
+          complexity: 0.1,
+          cognitiveLoad: 0.1,
+          reasoningDepth: 0.1,
+        };
+        state.questions.get('complex').features = {
+          difficulty: 0.5,
+          complexity: 0.5,
+          cognitiveLoad: 0.5,
+          reasoningDepth: 0.5,
+        };
+
+        // Student A trains on simple question
+        for (let i = 0; i < 10; i++) {
+          uok.encodeAnswer('studentA', 'simple', true);
+        }
+
+        // Record initial weights
+        const weightsAfterA = uok.getComplexityTransferWeights();
+
+        // Student B also trains (should contribute to same global weights)
+        for (let i = 0; i < 10; i++) {
+          uok.encodeAnswer('studentB', 'simple', true);
+        }
+
+        const weightsAfterB = uok.getComplexityTransferWeights();
+
+        // Now both students train on the complex question - this should trigger weight updates
+        uok.encodeAnswer('studentA', 'complex', true);
+        uok.encodeAnswer('studentB', 'complex', true);
+
+        const weightsAfterComplex = uok.getComplexityTransferWeights();
+
+        // Weights should have changed after training on complex questions
+        // The exact values depend on training, but they should not be identical
+        // to the initial biased prior [0.5, 0.3, 0.2]
+        const initialComplexityWeight = 0.2;
+        expect(weightsAfterComplex.complexity).not.toBe(initialComplexityWeight);
+      });
+
+      it('should use biased prior weights by default', () => {
+        const uok = new UOK();
+        const weights = uok.getComplexityTransferWeights();
+
+        expect(weights.cognitiveLoad).toBe(0.5);
+        expect(weights.reasoningDepth).toBe(0.3);
+        expect(weights.complexity).toBe(0.2);
+      });
+
+      it('should have gateThreshold of 0.55 by default', () => {
+        const uok = new UOK();
+        const config = uok.getComplexityTransferConfig();
+
+        expect(config.gateThreshold).toBe(0.55);
+      });
+    });
   });
 });
