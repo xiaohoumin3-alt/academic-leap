@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { RLModelStore } from '@/lib/rl/persistence/model-store';
 import { estimateAbilityEAP, type IRTResponse } from '@/lib/rl/irt/estimator';
 import { PrismaLEHistoryService } from '@/lib/rl/history/le-history-service';
 import { calculateHybridReward, type StudentResponse, type LETrackingContext } from '@/lib/rl/reward/le-reward';
+import { HealthMonitor } from '@/lib/rl/health/monitor';
+
+const healthMonitor = new HealthMonitor();
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -22,7 +24,8 @@ export async function POST(request: NextRequest) {
       attemptId,
       knowledgePointId,
       recommendationId,
-      preAccuracy
+      preAccuracy,
+      selectedDeltaC
     } = body;
 
     // Validate required fields
@@ -32,6 +35,10 @@ export async function POST(request: NextRequest) {
 
     if (!eventId || !attemptId || !knowledgePointId || !recommendationId) {
       return NextResponse.json({ error: 'Missing DFI/LE tracking fields' }, { status: 400 });
+    }
+
+    if (typeof selectedDeltaC !== 'number') {
+      return NextResponse.json({ error: 'selectedDeltaC must be a number' }, { status: 400 });
     }
 
     const modelStore = new RLModelStore(prisma);
@@ -73,7 +80,11 @@ export async function POST(request: NextRequest) {
         attempt: { userId: session.user.id }
       },
       include: {
-        question: true
+        questionStep: {
+          include: {
+            question: true
+          }
+        }
       },
       orderBy: { submittedAt: 'desc' },
       take: 50
@@ -81,10 +92,10 @@ export async function POST(request: NextRequest) {
 
     const irtResponses: IRTResponse[] = recentAttempts.map(a => ({
       correct: a.isCorrect,
-      deltaC: a.question?.difficulty ?? 5
+      deltaC: a.questionStep?.question?.difficulty ?? 5
     }));
 
-    irtResponses.push({ correct, deltaC: thetaBefore });
+    irtResponses.push({ correct, deltaC: selectedDeltaC });
 
     const { theta: thetaAfter, confidence } = estimateAbilityEAP(irtResponses);
 
@@ -110,7 +121,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to load model' }, { status: 500 });
     }
 
-    bandit.update(thetaBefore.toFixed(1), correct);
+    bandit.update(selectedDeltaC.toFixed(1), correct);
     await modelStore.saveModel(deployedModel.id, bandit);
 
     // Log training
@@ -123,11 +134,22 @@ export async function POST(request: NextRequest) {
       recommendationId,
       preAccuracy,
       stateTheta: thetaBefore,
-      selectedDeltaC: thetaBefore,
+      selectedDeltaC,
       reward: rewardResult.reward,
       postAccuracy: rewardResult.postAccuracy,
       leDelta: rewardResult.leDelta
     });
+
+    // 记录答题历史到健康监控
+    healthMonitor.recordResponse({
+      theta: thetaBefore,
+      deltaC: selectedDeltaC,
+      correct,
+      timestamp: Date.now(),
+    });
+
+    // 记录DFI事件
+    healthMonitor.recordEvent(!!logId);
 
     return NextResponse.json({
       reward: rewardResult.reward,
@@ -136,7 +158,7 @@ export async function POST(request: NextRequest) {
       preAccuracy: rewardResult.preAccuracy,
       postAccuracy: rewardResult.postAccuracy,
       leDelta: rewardResult.leDelta,
-      bucketUpdated: thetaBefore.toFixed(1),
+      bucketUpdated: selectedDeltaC.toFixed(1),
       logId
     });
 
