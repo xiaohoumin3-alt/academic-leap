@@ -60,6 +60,8 @@ model Question {
   params          String?        @default("{}")
   stepTypes       String?        @default("[]")
   templateId      String?
+  generatedFrom   String?   // Reference to GeneratedQuestion.id
+  complexitySpec  String?   @default("{}")  // Complexity spec from generation
 
   // Complexity feature extraction fields
   cognitiveLoad      Float?   // [0, 1] 认知负荷
