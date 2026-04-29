@@ -20,3 +20,12 @@ export {
 export type {
   AbilityDrift
 } from './ability-drift';
+
+export {
+  calculateMean,
+  detectRewardDrift
+} from './reward-drift';
+
+export type {
+  RewardDrift
+} from './reward-drift';
