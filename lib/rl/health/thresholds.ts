@@ -43,11 +43,11 @@ export const COLLAPSE_BOUNDARIES: ThresholdConfig = {
 export function getHealthLevel(
   value: number,
   config: typeof COLLAPSE_BOUNDARIES[keyof ThresholdConfig]
-): 'healthy' | 'warning' | 'danger' {
+): 'healthy' | 'warning' | 'danger' | 'collapsed' {
   if (value >= config.healthy) return 'healthy';
   if (value >= config.warning) return 'warning';
   if (value >= config.danger) return 'danger';
-  return 'danger';
+  return 'collapsed';
 }
 
 /**
@@ -57,9 +57,9 @@ export function getHealthLevel(
 export function getHealthLevelInverted(
   value: number,
   config: typeof COLLAPSE_BOUNDARIES[keyof ThresholdConfig]
-): 'healthy' | 'warning' | 'danger' {
+): 'healthy' | 'warning' | 'danger' | 'collapsed' {
   if (value <= config.healthy) return 'healthy';
   if (value <= config.warning) return 'warning';
   if (value <= config.danger) return 'danger';
-  return 'danger';
+  return 'collapsed';
 }
