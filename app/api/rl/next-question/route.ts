@@ -56,14 +56,21 @@ export async function POST(request: NextRequest) {
 
     if (degradationAction.type === 'switch_to_rule' || degradationAction.type === 'stop') {
       selectedDeltaC = ruleEngineRecommendation(theta);
-      console.warn(`[Health] ${degradationAction.reason}, using rule engine`);
+      // TODO: Add proper logging library for health monitoring
+      // console.warn(`[Health] ${degradationAction.reason}, using rule engine`);
     } else if (degradationAction.type === 'increase_exploration') {
       const banditRecommendation = parseFloat(bandit.selectArm(theta));
       const exploration = (Math.random() - 0.5) * 1;
       selectedDeltaC = Math.max(1, Math.min(5, banditRecommendation + exploration));
-      console.warn(`[Health] ${degradationAction.reason}, increasing exploration`);
+      // TODO: Add proper logging library for health monitoring
+      // console.warn(`[Health] ${degradationAction.reason}, increasing exploration`);
     } else {
       selectedDeltaC = parseFloat(bandit.selectArm(theta));
+    }
+
+    // Validate parseFloat result
+    if (isNaN(selectedDeltaC) || !isFinite(selectedDeltaC)) {
+      return NextResponse.json({ error: 'Invalid recommendation' }, { status: 500 });
     }
 
     healthMonitor.recordRecommendation({
