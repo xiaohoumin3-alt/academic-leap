@@ -167,6 +167,60 @@ pnpm test:stability
 
 ---
 
+## RL健康监控
+
+RL自适应引擎的安全壳保护层，位于 `lib/rl/health/`。
+
+### 架构
+
+```
+HealthMonitor (健康监控)
+    ↓
+FailureDetector (失效检测)
+    ↓
+DegradationController (降级控制)
+    ↓
+RuleEngine (规则引擎兜底)
+```
+
+### 健康指标
+
+| 指标 | 说明 | 目标值 |
+|------|------|--------|
+| LE | 学习有效性 | > 0.15 |
+| CS | 收敛稳定性 | > 0.85 |
+| DFI | 数据完整度 | > 0.99 |
+| labelNoiseRate | 标签噪声率 | < 0.10 |
+| feedbackDelaySteps | 反馈延迟步数 | < 5 |
+
+### 降级行动
+
+| 状态 | 行动 |
+|------|------|
+| healthy | 继续RL |
+| warning | 增大exploration |
+| danger | 切换规则引擎 |
+| collapsed | 停止RL |
+
+### API集成
+
+```typescript
+import { HealthMonitor } from '@/lib/rl/health/monitor';
+import { decideDegradation } from '@/lib/rl/health/controller';
+
+const healthMonitor = new HealthMonitor();
+const healthStatus = healthMonitor.check();
+const action = decideDegradation(healthStatus);
+
+if (action.type === 'switch_to_rule') {
+  // 降级到规则引擎
+}
+```
+
+详见 [lib/rl/health/README.md](./lib/rl/health/README.md)。
+
+---
+
 ## 产品原则映射
 
 当遇到技术冲突时，参考 [PRODUCT.md#权衡原则](./PRODUCT.md#8-权衡原则-trade-off-principles)：
