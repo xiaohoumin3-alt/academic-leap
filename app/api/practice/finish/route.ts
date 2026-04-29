@@ -57,8 +57,32 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // 更新每个知识点的掌握度（knowledgePoints 现在直接存储 id）
-    for (const [knowledgePointId, stats] of knowledgeStats) {
+    // 获取所有知识点 ID 映射（名称 -> ID）
+    const allKnowledgePoints = await prisma.knowledgePoint.findMany({
+      select: { id: true, name: true },
+    });
+
+    // 创建名称到 ID 的映射（支持模糊匹配）
+    const nameToIdMap = new Map<string, string>();
+    for (const kp of allKnowledgePoints) {
+      nameToIdMap.set(kp.name, kp.id);
+      // 添加别名映射（去除 E2E 前缀）
+      if (kp.name.startsWith('E2E知识点-')) {
+        const alias = kp.name.replace('E2E知识点-', '');
+        nameToIdMap.set(alias, kp.id);
+      }
+    }
+
+    // 更新每个知识点的掌握度
+    for (const [knowledgePointName, stats] of knowledgeStats) {
+      // 通过名称查找知识点 ID（支持模糊匹配）
+      const knowledgePointId = nameToIdMap.get(knowledgePointName);
+
+      // 如果找不到匹配的知识点，跳过
+      if (!knowledgePointId) {
+        console.warn(`知识点 "${knowledgePointName}" 未找到对应的 ID，跳过`);
+        continue;
+      }
       // 获取该知识点最近的练习记录（从 attemptStep 通过 questionStep -> question 获取）
       const recentAttempts = await prisma.attempt.findMany({
         where: {
@@ -89,7 +113,8 @@ export async function POST(req: NextRequest) {
           if (kps) {
             try {
               const points = JSON.parse(kps);
-              if (points.includes(knowledgePointId)) {
+              // 检查是否包含当前知识点名称
+              if (points.includes(knowledgePointName)) {
                 totalSteps++;
                 if (s.isCorrect) totalCorrect++;
               }

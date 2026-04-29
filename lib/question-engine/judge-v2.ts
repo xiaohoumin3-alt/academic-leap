@@ -10,6 +10,24 @@ import { JudgeResult, ErrorType } from './types/judge';
 import { ErrorType as ProtocolErrorType } from './protocol';
 
 /**
+ * 格式化数字用于显示
+ * 对于大多数答案，保留两位小数
+ * 对于整数或特殊值，返回原始格式
+ */
+function formatNumberForDisplay(value: number): string {
+  // 如果是整数，返回整数格式
+  if (Number.isInteger(value)) {
+    return value.toString();
+  }
+  // 如果值很小（绝对值 < 0.01），显示更多小数位
+  if (Math.abs(value) < 0.01 && value !== 0) {
+    return value.toPrecision(4);
+  }
+  // 否则保留两位小数（与默认 tolerance 0.01 对应）
+  return value.toFixed(2);
+}
+
+/**
  * 扩展的判题结果（包含 behaviorTag）
  * 与 v1 判题结果格式兼容
  */
@@ -112,6 +130,8 @@ export function judgeStepV2(
 
 /**
  * 数值判题函数
+ * 根据 tolerance 自动将期望值四舍五入到相应小数位进行判题
+ * 例如：tolerance=0.01 时，期望值 6.403124 四舍五入为 6.40 后比较
  */
 function judgeNumber(
   userInput: string,
@@ -128,15 +148,21 @@ function judgeNumber(
     };
   }
 
-  const tolerance = expected.tolerance ?? 0.001;
-  const diff = Math.abs(userNum - expected.value);
+  const tolerance = expected.tolerance ?? 0.01;  // 默认保留两位小数 (0.01 = ±0.01)
+
+  // 根据 tolerance 计算应保留的小数位数
+  const decimalPlaces = Math.max(0, -Math.floor(Math.log10(tolerance)));
+  const roundedExpected = Math.round(expected.value * Math.pow(10, decimalPlaces)) / Math.pow(10, decimalPlaces);
+
+  const diff = Math.abs(userNum - roundedExpected);
   const isCorrect = diff <= tolerance;
 
+  const correctAnswerFormatted = formatNumberForDisplay(roundedExpected);
   return {
     isCorrect,
-    correctAnswer: expected.value.toString(),
+    correctAnswer: correctAnswerFormatted,
     errorType: isCorrect ? null : 'calculation_error',
-    hint: isCorrect ? undefined : `正确答案是 ${expected.value}`,
+    hint: isCorrect ? undefined : `正确答案是 ${correctAnswerFormatted}（保留${decimalPlaces}位小数）`,
   };
 }
 

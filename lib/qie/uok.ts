@@ -335,6 +335,11 @@ export class UOK {
     }
 
     if (intent === 'next_question') {
+      // 新学生：knowledge 为空，需要 gap_analysis
+      if (student.knowledge.size === 0) {
+        return { type: 'gap_report', gaps: [] };
+      }
+
       const weakTopic = this.findWeakestTopic(student);
       if (!weakTopic) {
         return { type: 'done', reason: 'All topics mastered' };
@@ -772,8 +777,151 @@ export class UOK {
     return out;
   }
 
-  private sigmoid(z: number): number {
+private sigmoid(z: number): number {
     return 1 / (1 + Math.exp(-z));
+  }
+
+  // ========== Persistence Methods ==========
+
+  /**
+   * Save student state to database
+   */
+  async saveStudentState(studentId: string): Promise<void> {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      const student = this.state.students.get(studentId);
+      if (!student) return;
+
+      const embedding = this.state._ml.embeddings.students.get(studentId);
+      const embeddingBase64 = embedding
+        ? Buffer.from(embedding.buffer).toString('base64')
+        : null;
+
+      await prisma.uOKState.upsert({
+        where: { studentId },
+        create: {
+          studentId,
+          knowledge: JSON.stringify(Object.fromEntries(student.knowledge)),
+          attemptCount: student.attemptCount,
+          correctCount: student.correctCount,
+          embedding: embeddingBase64,
+        },
+        update: {
+          knowledge: JSON.stringify(Object.fromEntries(student.knowledge)),
+          attemptCount: student.attemptCount,
+          correctCount: student.correctCount,
+          embedding: embeddingBase64,
+          lastUpdated: new Date(),
+        },
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
+  }
+
+  /**
+   * Load student state from database
+   */
+  async loadStudentState(studentId: string): Promise<StudentState | null> {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      const record = await prisma.uOKState.findUnique({
+        where: { studentId },
+      });
+
+      if (!record) return null;
+
+      const knowledge = JSON.parse(record.knowledge);
+      const knowledgeMap = new Map<string, number>();
+      for (const [topic, mastery] of Object.entries(knowledge)) {
+        knowledgeMap.set(topic, mastery as number);
+      }
+
+      const student: StudentState = {
+        id: studentId,
+        knowledge: knowledgeMap,
+        attemptCount: record.attemptCount,
+        correctCount: record.correctCount,
+      };
+
+      this.state.students.set(studentId, student);
+
+      // Load embedding if available
+      if (record.embedding) {
+        const buffer = Buffer.from(record.embedding, 'base64');
+        const floats = new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 4);
+        this.state._ml.embeddings.students.set(studentId, floats);
+      }
+
+      return student;
+    } finally {
+      await prisma.$disconnect();
+    }
+  }
+
+  /**
+   * Save question state to database
+   */
+  async saveQuestionState(questionId: string): Promise<void> {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      const question = this.state.questions.get(questionId);
+      if (!question) return;
+
+      const embedding = this.state._ml.embeddings.questions.get(questionId);
+      const embeddingBase64 = embedding
+        ? Buffer.from(embedding.buffer).toString('base64')
+        : null;
+
+      await prisma.uOKQuestionState.upsert({
+        where: { questionId },
+        create: {
+          questionId,
+          topic: question.topics[0] || null,
+          attemptCount: question.attemptCount,
+          correctCount: question.correctCount,
+          embedding: embeddingBase64,
+        },
+        update: {
+          topic: question.topics[0] || null,
+          attemptCount: question.attemptCount,
+          correctCount: question.correctCount,
+          embedding: embeddingBase64,
+          lastUpdated: new Date(),
+        },
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
+  }
+
+  /**
+   * Get or create student with database state
+   */
+  async getOrCreateStudentWithState(id: string): Promise<StudentState> {
+    // Check in-memory first
+    const cached = this.state.students.get(id);
+    if (cached) return cached;
+
+    // Try to load from database
+    const loaded = await this.loadStudentState(id);
+    if (loaded) return loaded;
+
+    // Create new student
+    const newStudent: StudentState = {
+      id,
+      knowledge: new Map(),
+      attemptCount: 0,
+      correctCount: 0,
+    };
+    this.state.students.set(id, newStudent);
+    return newStudent;
   }
 }
 

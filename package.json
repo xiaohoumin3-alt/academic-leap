@@ -16,7 +16,12 @@
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "test:report": "playwright show-report",
-    "test:unit": "jest"
+    "test:unit": "jest",
+    "test:dfi": "npx tsx scripts/test-dfi.ts",
+    "test:le": "npx tsx scripts/test-le.ts",
+    "test:cs": "npx tsx scripts/test-cs.ts",
+    "test:convergence": "npx tsx scripts/test-convergence.ts",
+    "test:convergence:json": "npx tsx scripts/test-convergence.ts --json"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -38,6 +43,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.91.1",
     "@jest/globals": "^30.3.0",
     "@playwright/test": "^1.59.1",
     "@types/jest": "^30.0.0",
@@ -50,6 +56,7 @@
     "prisma": "6.19.3",
     "tailwindcss": "^3.4.19",
     "ts-jest": "^29.4.9",
+    "tsx": "^4.21.0",
     "typescript": "~5.8.2"
   }
 }

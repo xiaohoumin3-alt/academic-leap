@@ -2,22 +2,19 @@
  * 勾股定理题目模板
  */
 
-import {
-  QuestionTemplate,
-  StepType,
-} from '../protocol';
+import { QuestionTemplate } from '../protocol';
+import { AnswerMode, StepProtocolV2 } from '../protocol-v2';
 import {
   DIFFICULTY_CONFIG,
   generateRandomParams,
-  formatNumber,
 } from '../difficulty';
 
 /**
  * 勾股定理模板
  */
 export const PythagorasTemplate: QuestionTemplate = {
-  id: 'pythagoras_v1',
-  knowledgePoint: 'pythagoras_theorem',
+  id: 'pythagoras',
+  knowledgePoint: '勾股定理',
 
   generateParams: (level: number) => {
     const config = DIFFICULTY_CONFIG.pythagoras[level] ||
@@ -25,36 +22,46 @@ export const PythagorasTemplate: QuestionTemplate = {
     return generateRandomParams(config);
   },
 
-  buildSteps: (params) => {
+  buildSteps: (params): StepProtocolV2[] => {
     const { a, b } = params;
-    const cSquared = a * a + b * b;
-    const c = Math.sqrt(cSquared);
+    const c = Math.sqrt(a * a + b * b);
+    const cSquare = a * a + b * b;
 
     return [
       {
         stepId: 's1',
-        type: StepType.PYTHAGOREAN_C_SQUARE,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0.001,
+        answerMode: AnswerMode.NUMBER,
         ui: {
-          instruction: '将两条直角边代入勾股定理，求 c² 的值',
-          inputTarget: 'c² 的值',
-          inputHint: '输入数字',
+          instruction: `直角三角形，a=${a}, b=${b}，求斜边 c²`,
+          hint: '使用勾股定理 c² = a² + b²',
+          inputPlaceholder: '输入 c² 的值',
+        },
+        keyboard: {
+          type: 'numeric',
+          extraKeys: ['√', 'π', '.'],
+        },
+        expectedAnswer: {
+          type: 'number',
+          value: cSquare,
+          tolerance: 0.01,
         },
       },
       {
         stepId: 's2',
-        type: StepType.PYTHAGOREAN_C,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0.01,
+        answerMode: AnswerMode.NUMBER,
         ui: {
-          instruction: '对 c² 开平方，求斜边长度（保留两位小数）',
-          inputTarget: '斜边长度 c',
-          inputHint: '输入数字，保留两位小数',
+          instruction: `求斜边 c`,
+          hint: `c = √${cSquare}`,
+          inputPlaceholder: '输入 c 的值',
+        },
+        keyboard: {
+          type: 'numeric',
+          extraKeys: ['√', '.'],
+        },
+        expectedAnswer: {
+          type: 'number',
+          value: c,
+          tolerance: 0.01,
         },
       },
     ];
@@ -62,10 +69,12 @@ export const PythagorasTemplate: QuestionTemplate = {
 
   render: (params) => {
     const { a, b } = params;
+    const cSquare = a * a + b * b;
+    const c = Math.sqrt(cSquare);
     return {
-      title: `直角三角形两条直角边长分别为 ${a} 和 ${b}，求斜边长度（保留两位小数）`,
-      description: '勾股定理',
-      context: '使用勾股定理：c² = a² + b²',
+      title: `勾股定理：a=${a}, b=${b}`,
+      description: '求斜边长度',
+      context: `直角三角形中，c² = a² + b²，已知 c² = ${cSquare}，求 c（保留两位小数：输入 ${c.toFixed(2)}）`,
     };
   },
 };

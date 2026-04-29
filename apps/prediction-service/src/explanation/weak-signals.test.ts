@@ -103,11 +103,11 @@ describe('computeWeakSignals', () => {
   describe('computes correlations when enough time data exists', () => {
     test('returns null correlation when less than 10 time samples', () => {
       const answers = [
-        { correct: true, timeSpent: 30 },
-        { correct: true, timeSpent: 45 },
-        { correct: false, timeSpent: 60 },
-        { correct: true, timeSpent: 40 },
-        { correct: false, timeSpent: 55 }
+        { correct: true, timestamp: Date.now(), knowledgeNodes: ['test'], timeSpent: 30 },
+        { correct: true, timestamp: Date.now(), knowledgeNodes: ['test'], timeSpent: 45 },
+        { correct: false, timestamp: Date.now(), knowledgeNodes: ['test'], timeSpent: 60 },
+        { correct: true, timestamp: Date.now(), knowledgeNodes: ['test'], timeSpent: 40 },
+        { correct: false, timestamp: Date.now(), knowledgeNodes: ['test'], timeSpent: 55 }
       ];
 
       const result = computeWeakSignals(answers, new Map());
@@ -155,16 +155,16 @@ describe('computeWeakSignals', () => {
       // Note: hasTimeData requires timeSpent > 0, but once triggered,
       // computeTimeCorrectnessCorrelation includes all samples with timeSpent
       const answers = [
-        { correct: true, timeSpent: 0 },
-        { correct: false, timeSpent: 0 },
-        { correct: true, timeSpent: 30 },
-        { correct: false, timeSpent: 45 },
-        { correct: true, timeSpent: 60 },
-        { correct: false, timeSpent: 75 },
-        { correct: true, timeSpent: 90 },
-        { correct: false, timeSpent: 105 },
-        { correct: true, timeSpent: 120 },
-        { correct: false, timeSpent: 135 }
+        { correct: true, timestamp: Date.now(), knowledgeNodes: ['test'], timeSpent: 0 },
+        { correct: false, timestamp: Date.now(), knowledgeNodes: ['test'], timeSpent: 0 },
+        { correct: true, timestamp: Date.now(), knowledgeNodes: ['test'], timeSpent: 30 },
+        { correct: false, timestamp: Date.now(), knowledgeNodes: ['test'], timeSpent: 45 },
+        { correct: true, timestamp: Date.now(), knowledgeNodes: ['test'], timeSpent: 60 },
+        { correct: false, timestamp: Date.now(), knowledgeNodes: ['test'], timeSpent: 75 },
+        { correct: true, timestamp: Date.now(), knowledgeNodes: ['test'], timeSpent: 90 },
+        { correct: false, timestamp: Date.now(), knowledgeNodes: ['test'], timeSpent: 105 },
+        { correct: true, timestamp: Date.now(), knowledgeNodes: ['test'], timeSpent: 120 },
+        { correct: false, timestamp: Date.now(), knowledgeNodes: ['test'], timeSpent: 135 }
       ];
 
       const result = computeWeakSignals(answers, new Map());
@@ -279,8 +279,8 @@ describe('hasTimeData', () => {
 
   test('returns false when answers have no time data', () => {
     const answers = [
-      { correct: true },
-      { correct: false }
+      { timeSpent: undefined },
+      { timeSpent: undefined }
     ];
 
     expect(hasTimeData(answers)).toBe(false);

@@ -5,12 +5,15 @@
 
 import {
   QuestionTemplate,
-  StepType,
 } from '../../protocol';
 import {
   DIFFICULTY_CONFIG,
   generateRandomParams,
 } from '../../difficulty';
+import {
+  StepProtocolV2,
+  AnswerMode,
+} from '../../protocol-v2';
 
 /**
  * 菱形判定模板
@@ -25,47 +28,24 @@ export const RhombusVerifyTemplate: QuestionTemplate = {
     return generateRandomParams(config);
   },
 
-  buildSteps: (params) => {
-    const { sideAB, sideBC, sideCD, sideDA, isEqual, parallelogram } = params;
+  buildSteps: (params): StepProtocolV2[] => {
+    const { isRhombus } = params;
 
     return [
       {
         stepId: 's1',
-        type: StepType.VERIFY_RHOMBUS,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0.001,
+        answerMode: AnswerMode.YES_NO,
         ui: {
-          instruction: '根据已知条件，计算各边长度以判断是否满足菱形判定条件',
-          inputTarget: 'AB 的值',
-          inputHint: '输入数字',
+          instruction: '根据已知条件，判断四边形是否满足菱形判定条件（四条边相等）',
+          hint: '菱形判定：①四条边相等；②对角线互相垂直的平行四边形',
         },
-      },
-      {
-        stepId: 's2',
-        type: StepType.VERIFY_RHOMBUS,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0.001,
-        ui: {
-          instruction: '计算 BC 的长度',
-          inputTarget: 'BC 的值',
-          inputHint: '输入数字',
+        expectedAnswer: {
+          type: 'yes_no',
+          value: isRhombus === 1,
         },
-      },
-      {
-        stepId: 's3',
-        type: StepType.VERIFY_RHOMBUS,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0.001,
-        ui: {
-          instruction: '综合判定，计算 CD 的长度',
-          inputTarget: 'CD 的值',
-          inputHint: '输入数字',
+        options: {
+          yes: '是',
+          no: '否',
         },
       },
     ];

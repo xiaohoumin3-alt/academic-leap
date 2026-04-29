@@ -4,24 +4,33 @@
  */
 
 export interface AnswerRecord {
-  knowledgePoint: string;
+  knowledgePointId: string;
+  knowledgePointName: string;
   isCorrect: boolean;
   duration?: number;
 }
 
 export interface KnowledgePointInfo {
+  id: string;
   name: string;
   weight: number;
+}
+
+export interface KnowledgeLevelEntry {
+  id: string;
+  name: string;
+  level: number;
 }
 
 export interface ScoreResult {
   score: number;
   range: [number, number];
-  knowledgeLevels: Record<string, number>;
+  knowledgeLevels: Record<string, KnowledgeLevelEntry>; // ID -> { id, name, level }
 }
 
 export interface KnowledgeMastery {
-  knowledgePoint: string;
+  knowledgePointId: string;
+  knowledgePointName: string;
   mastery: number; // 0-1
   correctCount: number;
   totalCount: number;
@@ -30,18 +39,24 @@ export interface KnowledgeMastery {
 
 /**
  * 计算考试等效分
- * 算法：预估分 = Σ(单知识点考试分值 × 知识点掌握率) - 波动修正分(2-5分)
+ * 算法：预估分 = Σ(实测知识点分值 × 知识点掌握率) - 波动修正分(2-5分)
  *
- * @param answers 答题记录
- * @param knowledgePoints 知识点列表（含权重）
+ * 关键改进：
+ * 1. 只基于实测知识点计算分数（不再把未测知识点算0%）
+ * 2. 未测知识点标记为 L-1（未测试），不参与分数计算
+ * 3. 对于有多个知识点的题目，答题结果计入所有相关知识点
+ * 4. 使用知识点 ID 作为主键存储知识等级数据
+ *
+ * @param answers 答题记录（每条记录应包含该题覆盖的所有知识点）
+ * @param knowledgePoints 知识点列表（含 ID 和权重）
  * @returns 等效分和波动区间
  */
 export function calculateEquivalentScore(
   answers: AnswerRecord[],
   knowledgePoints: KnowledgePointInfo[]
 ): ScoreResult {
-  // Handle empty knowledge points array
-  if (knowledgePoints.length === 0) {
+  // Handle empty answers
+  if (answers.length === 0) {
     return {
       score: 0,
       range: [0, 0] as [number, number],
@@ -49,17 +64,38 @@ export function calculateEquivalentScore(
     };
   }
 
-  // 计算每个知识点的掌握率和等级
+  // 构建 name -> KnowledgePointInfo 映射
+  const kpNameToInfo = new Map<string, KnowledgePointInfo>();
+  for (const kp of knowledgePoints) {
+    kpNameToInfo.set(kp.name, kp);
+  }
+
+  // 构建 ID -> KnowledgePointInfo 映射
+  const kpIdToInfo = new Map<string, KnowledgePointInfo>();
+  for (const kp of knowledgePoints) {
+    kpIdToInfo.set(kp.id, kp);
+  }
+
+  // 获取实际被测试到的知识点名称（从答题记录中提取）
+  const testedKpNames = new Set<string>(answers.map(a => a.knowledgePointName));
+  const testedKpNamesArray = Array.from(testedKpNames);
+
+  // 计算每个实测知识点的掌握率和等级
   const knowledgeMasteries: Record<string, KnowledgeMastery> = {};
 
-  for (const kp of knowledgePoints) {
-    const kpAnswers = answers.filter(a => a.knowledgePoint === kp.name);
+  for (const kpName of testedKpNamesArray) {
+    const kpAnswers = answers.filter(a => a.knowledgePointName === kpName);
     const totalCount = kpAnswers.length;
     const correctCount = kpAnswers.filter(a => a.isCorrect).length;
     const mastery = totalCount > 0 ? correctCount / totalCount : 0;
 
-    knowledgeMasteries[kp.name] = {
-      knowledgePoint: kp.name,
+    // 尝试获取知识点 ID
+    const kpInfo = kpNameToInfo.get(kpName);
+    const kpId = kpInfo?.id ?? kpName; // 如果找不到，用名称作为 fallback
+
+    knowledgeMasteries[kpId] = {
+      knowledgePointId: kpId,
+      knowledgePointName: kpName,
       mastery,
       correctCount,
       totalCount,
@@ -67,18 +103,28 @@ export function calculateEquivalentScore(
     };
   }
 
-  // 计算加权总分（需要归一化权重）
+  // 只基于实测知识点计算分数
+  const testedKnowledgePoints = knowledgePoints.filter(kp => testedKpNames.has(kp.name));
+
+  // 如果没有实测知识点（不应该发生），返回0
+  if (testedKnowledgePoints.length === 0) {
+    return {
+      score: 0,
+      range: [0, 0] as [number, number],
+      knowledgeLevels: {},
+    };
+  }
+
+  // 计算加权总分（只基于实测知识点）
   let totalWeightedScore = 0;
-  const totalWeights = knowledgePoints.reduce((sum, kp) => sum + kp.weight, 0);
+  const totalWeights = testedKnowledgePoints.reduce((sum, kp) => sum + kp.weight, 0);
 
   // 当总权重为0时（所有权重未设置），使用均匀分布
   const useEqualWeight = totalWeights === 0;
-  const equalWeight = useEqualWeight ? 1.0 / knowledgePoints.length : 0;
+  const equalWeight = useEqualWeight ? 1.0 / testedKnowledgePoints.length : 0;
 
-  for (const kp of knowledgePoints) {
-    const mastery = knowledgeMasteries[kp.name]?.mastery ?? 0;
-    // 权重归一化：(weight / totalWeights) × mastery × 100
-    // 当 totalWeights 为 0 时，使用均匀权重
+  for (const kp of testedKnowledgePoints) {
+    const mastery = knowledgeMasteries[kp.id]?.mastery ?? 0;
     const normalizedWeight = useEqualWeight ? equalWeight : kp.weight / totalWeights;
     totalWeightedScore += normalizedWeight * mastery * 100;
   }
@@ -91,10 +137,15 @@ export function calculateEquivalentScore(
   const rangeLow = Math.max(0, Math.round(baseScore - 3));
   const rangeHigh = Math.min(100, Math.round(baseScore + 3));
 
-  // 提取知识点等级
-  const knowledgeLevels: Record<string, number> = {};
-  for (const [name, data] of Object.entries(knowledgeMasteries)) {
-    knowledgeLevels[name] = data.level;
+  // 提取知识点等级（使用 ID 作为主键）
+  const knowledgeLevels: Record<string, KnowledgeLevelEntry> = {};
+  for (const [kpId, data] of Object.entries(knowledgeMasteries)) {
+    const kpInfo = kpIdToInfo.get(kpId);
+    knowledgeLevels[kpId] = {
+      id: kpId,
+      name: kpInfo?.name ?? data.knowledgePointName,
+      level: data.level,
+    };
   }
 
   return {
@@ -307,13 +358,14 @@ export function calculateImprovement(
 
   const knowledgeProgress: ImprovementReport['knowledgeProgress'] = [];
 
-  for (const [name, initialLevel] of Object.entries(initialAssessment.knowledgeLevels)) {
-    const reviewLevel = reviewAssessment.knowledgeLevels[name] ?? initialLevel;
+  for (const [kpId, initialData] of Object.entries(initialAssessment.knowledgeLevels)) {
+    const reviewData = reviewAssessment.knowledgeLevels[kpId];
+    const reviewLevel = reviewData?.level ?? initialData.level;
     knowledgeProgress.push({
-      name,
-      initialLevel,
+      name: initialData.name,
+      initialLevel: initialData.level,
       reviewLevel,
-      improvement: reviewLevel - initialLevel,
+      improvement: reviewLevel - initialData.level,
     });
   }
 

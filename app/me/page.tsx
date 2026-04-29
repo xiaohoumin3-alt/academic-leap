@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 import MaterialIcon from '../../components/MaterialIcon';
 import { BottomNavigation } from '../../components/BottomNavigation';
 import LearningSettings from '@/components/LearningSettings';
@@ -23,32 +24,31 @@ interface UserSettings {
 
 export default function MePage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
-  // 获取用户信息和学习设置
+  // 获取学习设置
   useEffect(() => {
-    Promise.all([
-      fetch('/api/auth/session').then(res => res.json()),
-      fetch('/api/user/settings').then(res => res.json()).catch(() => ({ data: null }))
-    ])
-      .then(([sessionData, settingsData]) => {
-        if (sessionData && sessionData.user) {
-          setUser(sessionData.user);
-          if (settingsData.data) {
-            setSettings(settingsData.data);
-          }
-        } else {
-          setUser(null);
+    if (status === 'loading') return;
+    if (!session) {
+      setLoading(false);
+      return;
+    }
+
+    fetch('/api/user/settings')
+      .then(res => res.json())
+      .then(settingsData => {
+        if (settingsData.data) {
+          setSettings(settingsData.data);
         }
       })
       .catch(() => {
-        // Silently handle error, show empty state
+        // Silently handle error
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [session, status]);
 
   const refreshSettings = async () => {
     try {
@@ -66,7 +66,7 @@ export default function MePage() {
     }
   };
 
-  if (loading) {
+  if (loading || status === 'loading') {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4">
         <div className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
@@ -76,7 +76,7 @@ export default function MePage() {
   }
 
   // 未登录 - 显示登录引导
-  if (!user) {
+  if (!session) {
     return (
       <div className="flex flex-col h-full">
         <div className="flex-1 px-6 py-12 flex flex-col items-center justify-center">
@@ -119,7 +119,7 @@ export default function MePage() {
   // 已登录 - 显示用户信息
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 px-6 py-8">
+      <div className="flex-1 px-6 py-8 overflow-y-auto pb-24">
         {/* 用户信息 & 设置卡片 */}
         <div className="bg-surface-container-low rounded-[2rem] p-6 mb-6">
           <div className="flex items-center gap-4 mb-6">
@@ -128,9 +128,9 @@ export default function MePage() {
             </div>
             <div className="flex-1">
               <h2 className="text-xl font-display font-bold text-on-surface">
-                {user.name || '学习者'}
+                {session.user?.name || '学习者'}
               </h2>
-              <p className="text-sm text-on-surface-variant">{user.email}</p>
+              <p className="text-sm text-on-surface-variant">{session.user?.email}</p>
             </div>
           </div>
 
@@ -176,10 +176,7 @@ export default function MePage() {
         {/* 退出登录 */}
         <button
           onClick={() => {
-            fetch('/api/auth/signout', { method: 'POST' }).then(() => {
-              router.push('/login');
-              router.refresh();
-            });
+            signOut({ callbackUrl: '/login' });
           }}
           className="w-full mt-3 py-4 text-error font-medium hover:bg-error-container/10 rounded-2xl transition-colors flex items-center justify-center gap-2"
         >

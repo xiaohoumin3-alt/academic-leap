@@ -3,10 +3,8 @@
  * 覆盖：等腰梯形、直角梯形、梯形中位线
  */
 
-import {
-  QuestionTemplate,
-  StepType,
-} from '../../protocol';
+import { QuestionTemplate } from '../../protocol';
+import { AnswerMode, StepProtocolV2 } from '../../protocol-v2';
 import {
   DIFFICULTY_CONFIG,
   generateRandomParams,
@@ -28,13 +26,15 @@ function generateTrapezoidPropertyParams(level: number): Record<string, number> 
   params.level = level;
 
   // 确定梯形类型
+  // 注意：types数组顺序必须与buildSteps中的typeIndex检查顺序一致
+  // typeIndex 1=isosceles, 2=right, 3=midsegment
   let types: TrapezoidType[];
   if (level <= 2) {
-    // 基础：梯形中位线（最直接）
+    // 基础：只有中位线（对应typeIndex=3）
     types = ['midsegment'];
   } else if (level <= 4) {
-    // 中等：增加直角梯形
-    types = ['midsegment', 'right'];
+    // 中等：等腰梯形和直角梯形
+    types = ['isosceles', 'right'];
   } else {
     // 高级：全部类型
     types = ['isosceles', 'right', 'midsegment'];
@@ -42,13 +42,18 @@ function generateTrapezoidPropertyParams(level: number): Record<string, number> 
 
   const typeIndex = Math.floor(Math.random() * types.length);
   const trapezoidType = types[typeIndex];
-  params.typeIndex = typeIndex + 1;
+  // 由于types顺序与buildSteps一致，需要映射到正确的typeIndex
+  const typeIndexMap: Record<TrapezoidType, number> = {
+    isosceles: 1,
+    right: 2,
+    midsegment: 3
+  };
+  params.typeIndex = typeIndexMap[trapezoidType];
 
   // 根据类型生成参数
   switch (trapezoidType) {
     case 'isosceles':
       // 等腰梯形：上底、下底、腰长
-      // 确保是合法等腰梯形
       params.upperBase = params.upperBase || Math.floor(Math.random() * 6) + 3;
       params.lowerBase = params.lowerBase || params.upperBase + Math.floor(Math.random() * 8) + 4;
       params.leg = params.leg || Math.floor(Math.random() * 5) + 4;
@@ -93,7 +98,7 @@ export const TrapezoidPropertyTemplate: QuestionTemplate = {
     return generateTrapezoidPropertyParams(level);
   },
 
-  buildSteps: (params) => {
+  buildSteps: (params): StepProtocolV2[] => {
     const typeIndex = params.typeIndex as number;
 
     // 等腰梯形
@@ -101,33 +106,28 @@ export const TrapezoidPropertyTemplate: QuestionTemplate = {
       const upperBase = params.upperBase!;
       const lowerBase = params.lowerBase!;
       const leg = params.leg!;
+      const perimeter = params.perimeter!;
 
       return [
         {
           stepId: 's1',
-          type: StepType.VERIFY_PARALLELOGRAM,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '识别等腰梯形的性质',
-            inputTarget: '等腰梯形的腰长',
-            inputHint: `等腰梯形两腰相等，已知一条腰长为${leg}，另一条腰长为？`,
+            hint: `等腰梯形两腰相等，已知一条腰长为${leg}，另一条腰长为？`,
           },
+          expectedAnswer: { type: 'number', value: leg },
+          keyboard: { type: 'numeric' },
         },
         {
           stepId: 's2',
-          type: StepType.VERIFY_PARALLELOGRAM,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '计算等腰梯形的周长',
-            inputTarget: '梯形周长',
-            inputHint: `周长 = 上底 + 下底 + 2 × 腰 = ${upperBase} + ${lowerBase} + 2 × ${leg} = ${params.perimeter}`,
+            hint: `周长 = 上底 + 下底 + 2 × 腰 = ${upperBase} + ${lowerBase} + 2 × ${leg}`,
           },
+          expectedAnswer: { type: 'number', value: perimeter },
+          keyboard: { type: 'numeric' },
         },
       ];
     }
@@ -138,33 +138,28 @@ export const TrapezoidPropertyTemplate: QuestionTemplate = {
       const lowerBase = params.lowerBase!;
       const height = params.height!;
       const leg = params.leg!;
+      const perimeter = params.perimeter!;
 
       return [
         {
           stepId: 's1',
-          type: StepType.VERIFY_RECTANGLE,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '识别直角梯形的性质',
-            inputTarget: '直角的数量',
-            inputHint: '直角梯形有2个直角',
+            hint: '直角梯形有几个直角？',
           },
+          expectedAnswer: { type: 'number', value: 2 },
+          keyboard: { type: 'numeric' },
         },
         {
           stepId: 's2',
-          type: StepType.VERIFY_RECTANGLE,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '计算直角梯形的周长',
-            inputTarget: '梯形周长',
-            inputHint: `周长 = 上底 + 下底 + 高 + 斜腰 = ${upperBase} + ${lowerBase} + ${height} + ${leg} = ${params.perimeter}`,
+            hint: `周长 = 上底 + 下底 + 高 + 斜腰 = ${upperBase} + ${lowerBase} + ${height} + ${leg}`,
           },
+          expectedAnswer: { type: 'number', value: perimeter },
+          keyboard: { type: 'numeric' },
         },
       ];
     }
@@ -178,29 +173,23 @@ export const TrapezoidPropertyTemplate: QuestionTemplate = {
       return [
         {
           stepId: 's1',
-          type: StepType.VERIFY_PARALLELOGRAM,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '应用梯形中位线定理',
-            inputTarget: '上底 + 下底',
-            inputHint: `梯形中位线 = (上底 + 下底) ÷ 2，先算 ${upperBase} + ${lowerBase} = ?`,
+            hint: `梯形中位线 = (上底 + 下底) ÷ 2，先算 ${upperBase} + ${lowerBase} = ?`,
           },
+          expectedAnswer: { type: 'number', value: upperBase + lowerBase },
+          keyboard: { type: 'numeric' },
         },
         {
           stepId: 's2',
-          type: StepType.VERIFY_PARALLELOGRAM,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '计算中位线长度',
-            inputTarget: '中位线长度',
-            inputHint: `中位线 = (${upperBase} + ${lowerBase}) ÷ 2 = ${midsegment}`,
+            hint: `中位线 = (${upperBase} + ${lowerBase}) ÷ 2`,
           },
+          expectedAnswer: { type: 'number', value: midsegment },
+          keyboard: { type: 'numeric' },
         },
       ];
     }
@@ -213,7 +202,7 @@ export const TrapezoidPropertyTemplate: QuestionTemplate = {
 
     if (typeIndex === 1) {
       return {
-        title: `等腰梯形上底为${params.upperBase}，下底为${params.lowerBase}，腰长为${params.leg}，求周长`,
+        title: `等腰梯形上底为${params.upperBase}，下底为${params.lowerBase}，腰长为${params.leg ?? '?'}，求周长`,
         description: '梯形性质计算 - 等腰梯形',
         context: `等腰梯形：两腰相等，周长 = 上底 + 下底 + 2 × 腰`,
       };
@@ -221,7 +210,7 @@ export const TrapezoidPropertyTemplate: QuestionTemplate = {
 
     if (typeIndex === 2) {
       return {
-        title: `直角梯形上底为${params.upperBase}，下底为${params.lowerBase}，高为${params.height}，斜腰为${params.leg}，求周长`,
+        title: `直角梯形上底为${params.upperBase}，下底为${params.lowerBase}，高为${params.height}，斜腰为${params.leg ?? '?'}，求周长`,
         description: '梯形性质计算 - 直角梯形',
         context: `直角梯形：有2个直角，周长 = 上底 + 下底 + 高 + 斜腰`,
       };

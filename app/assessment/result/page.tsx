@@ -42,8 +42,10 @@ interface AssessmentResultData {
   rangeLow?: number;
   rangeHigh?: number;
   knowledgeLevels?: Record<string, string>;
+  knowledgeData?: Record<string, number>;  // 原始等级数据（L0-L4）
   weakKnowledgePoints?: string[];
   masteredKnowledgePoints?: string[];
+  untestedKnowledgePoints?: string[];  // 新增：未测试的知识点
   recommendedDifficulty?: number;
   message?: string;
   guidance?: GuidanceData;
@@ -121,7 +123,7 @@ const AssessmentResultContent: React.FC = () => {
     loadAssessmentResult();
   }, [searchParams, router, attemptId]);
 
-  // 生成学习路径
+  // 生成学习路径并跳转到AI建议页面
   const handleGenerateLearningPath = async () => {
     setGeneratingPath(true);
     try {
@@ -133,9 +135,9 @@ const AssessmentResultContent: React.FC = () => {
       const data = await res.json();
 
       if (data.success) {
-        setPathGenerated(true);
+        // 生成成功，跳转到学情解析-成长分析页面（AI建议）
+        router.push('/analyze?tab=growth');
       } else {
-        // 显示错误信息给用户
         const errorMsg = data.error || data.details || '生成学习路径失败，请重试';
         alert(errorMsg);
       }
@@ -295,6 +297,26 @@ const AssessmentResultContent: React.FC = () => {
           </div>
         )}
 
+        {/* 未测试的知识点 */}
+        {!!result.untestedKnowledgePoints?.length && (
+          <div className="bg-surface-container-low rounded-2xl p-4 mb-4">
+            <h3 className="font-bold text-on-surface mb-2 flex items-center gap-2">
+              <MaterialIcon icon="info" className="text-secondary" style={{ fontSize: '20px' }} />
+              未测评（测评未涉及）
+            </h3>
+            <p className="text-xs text-on-surface-variant mb-2">
+              这些知识点在本次测评中没有测试到，后续练习时会覆盖
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {result.untestedKnowledgePoints?.map(kp => (
+                <span key={kp} className="text-xs bg-surface-container text-on-surface-variant px-3 py-1 rounded-full opacity-60">
+                  {kp}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* 学习路径生成引导 (60-89分) */}
         {canGeneratePath && !pathGenerated && (
           <div className="bg-surface-container-low rounded-2xl p-4 mb-4">
@@ -337,8 +359,7 @@ const AssessmentResultContent: React.FC = () => {
             </p>
             <button
               onClick={() => {
-                router.refresh(); // 刷新当前页数据
-                router.push('/me'); // 跳转到"我的"页
+                router.push('/analyze?tab=path'); // 跳转到学习路径页签
               }}
               className="w-full py-3 rounded-xl font-medium bg-success text-on-success transition-colors flex items-center justify-center gap-2"
             >

@@ -293,14 +293,50 @@ export const analyticsApi = {
   },
 
   /**
-   * 获取AI建议
+   * 获取AI建议（新版）
    */
   async getRecommendations() {
     const res = await fetch(`${API_BASE}/analytics/recommendations`);
     return res.json() as Promise<ApiResponse<{
-      recommendations: Array<{ type: string; title: string; description: string; priority: number }>;
-      todayPractice: Array<{ knowledgePoint: string; suggestedCount: number; reason: string }>;
-      insights: { weakPoints: string[]; strongPoints: string[]; avgScore: number; speedLevel: string };
+      // 路径状态
+      overallStatus?: 'on_track' | 'behind' | 'ahead' | 'stagnant' | null;
+      overallStatusLabel?: string;
+      overallStatusColor?: string;
+      // 分数分析
+      scoreGapAnalysis?: {
+        diagnosticScore: number;
+        targetScore: number;
+        gap: number;
+        percentage: number;
+        urgent: boolean;
+      };
+      // 路径进度
+      pathProgress?: {
+        masteredCount: number;
+        totalCount: number;
+        progressPercentage: number;
+        currentIndex: number;
+      };
+      // 路径调整建议
+      recommendations?: Array<{
+        id: string;
+        type: string;
+        title: string;
+        description: string;
+        reason?: string;
+        impact?: string;
+        actionable?: boolean;
+        priority: number;
+      }>;
+      // 引导信息（无测评数据时返回）
+      message?: {
+        title: string;
+        subtitle: string;
+        primaryAction?: {
+          text: string;
+          action: string;
+        };
+      };
     }>>;
   },
 };
@@ -358,6 +394,10 @@ export interface Question {
   knowledgePoints: string[];
   steps?: QuestionStep[];
   isAI?: boolean;
+  // Complexity features (QIE)
+  cognitiveLoad?: number;
+  reasoningDepth?: number;
+  complexity?: number;
 }
 
 export interface QuestionStep {

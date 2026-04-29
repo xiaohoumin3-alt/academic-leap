@@ -45,15 +45,19 @@ function compareNumber(
     return { isCorrect: false, errorType: 'format_error' };
   }
 
+  // 四舍五入到2位小数进行比较（与formatNumber显示精度一致）
+  const roundedCorrect = Math.round(correctAnswer * 100) / 100;
+  const roundedUser = Math.round(userNum * 100) / 100;
+
   const tol = tolerance ?? 0.001;
-  const diff = Math.abs(userNum - correctAnswer);
+  const diff = Math.abs(roundedUser - roundedCorrect);
 
   if (diff <= tol) {
     return { isCorrect: true, errorType: null };
   }
 
   // 判断错误类型
-  if (diff > Math.abs(correctAnswer) * 0.5) {
+  if (diff > Math.abs(roundedCorrect) * 0.5) {
     // 差距太大，可能是概念错误
     return { isCorrect: false, errorType: 'concept_error' };
   }
@@ -306,14 +310,16 @@ export function judgeStep(
     }
 
     case StepType.SQRT_MIXED: {
-      // 二次根式混合运算，如 √a × √b = √(ab)
+      // 二次根式混合运算，如 √a × √b = √(ab) 或 √a / √b = √(a/b)
       const { a, b, result: correct } = params;
-      const compare = compareNumber(userInput, correct, step.tolerance);
+      // 如果 result 未提供，动态计算
+      const computedCorrect = correct !== undefined ? correct : Math.sqrt(a / b);
+      const compare = compareNumber(userInput, computedCorrect, step.tolerance);
       result = {
         isCorrect: compare.isCorrect,
-        correctAnswer: formatNumber(correct),
+        correctAnswer: formatNumber(computedCorrect),
         errorType: compare.isCorrect ? null : compare.errorType,
-        hint: compare.isCorrect ? undefined : `√${a} × √${b} = √${a * b} = ${formatNumber(correct)}`,
+        hint: compare.isCorrect ? undefined : `√${a} / √${b} = √(${a}/${b}) = ${formatNumber(computedCorrect)}`,
       };
       break;
     }

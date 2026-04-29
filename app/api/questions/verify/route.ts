@@ -66,9 +66,26 @@ export async function POST(req: NextRequest) {
     const params = JSON.parse(question.params || '{}');
     const stepType = step.type as any;
 
+    // 安全解析 step.answer（可能是 JSON 字符串或普通值）
+    let stepAnswer: any = {};
+    try {
+      if (step.answer) {
+        // 如果已经是对象（从数据库返回），直接使用
+        if (typeof step.answer === 'object') {
+          stepAnswer = step.answer;
+        } else {
+          // 尝试解析 JSON 字符串
+          stepAnswer = JSON.parse(step.answer);
+        }
+      }
+    } catch (e) {
+      // 解析失败，记录日志但继续处理
+      console.warn('解析 step.answer 失败，使用默认值:', step.answer);
+      stepAnswer = {};
+    }
+
     // 检测协议版本：v2 协议的 type 字段为 'v2' 且 answer 包含 expectedAnswer
-    const stepAnswer = JSON.parse(step.answer || '{}');
-    const isV2 = step.type === 'v2' || 'expectedAnswer' in stepAnswer;
+    const isV2 = step.type === 'v2' || (stepAnswer && 'expectedAnswer' in stepAnswer);
 
     let result;
 

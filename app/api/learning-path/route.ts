@@ -7,10 +7,26 @@ import { prisma } from '@/lib/prisma';
  *
  * 获取用户当前的学习路径和进度概览
  *
+ * === 数据来源规范 ===
+ * - mastery: 来自 UserKnowledge.mastery (掌握度真相来源)
+ * - status: 根据 mastery 实时计算 (completed/mastery>=0.9, current/第一个未完成, pending)
+ * - LearningPath.knowledgeData: 存储路径配置 (节点ID、优先级、添加时间、原因)
+ * - 练习数据: 来自 Attempt 表 (practiceSessions, practicedKnowledgePoints, totalPracticeMinutes)
+ *
+ * === 设计原则 ===
+ * 1. 单一真相来源: UserKnowledge.mastery 是掌握度的唯一来源
+ * 2. 路径即配置: LearningPath 存储学习计划配置，不存储掌握度快照
+ * 3. 实时计算: status 和 completionPercent 根据最新 mastery 动态计算
+ *
  * Returns:
- * - path: 活跃路径信息
- * - roadmap: 知识点路径节点数组（含状态、掌握度、优先级）
- * - weeklySummary: 本周学习统计（练习次数、掌握数、待加强数）
+ * - path: 活跃路径信息 (id, name, status, currentIndex, completionPercent)
+ * - roadmap: 知识点路径节点数组 (nodeId, name, status, mastery, priority)
+ *   - mastery 来自 UserKnowledge (实时)
+ *   - status 根据 mastery 实时计算
+ * - weeklySummary: 本周学习统计
+ *   - 练习维度: practiceSessions, practicedKnowledgePoints, totalPracticeMinutes (来自 Attempt)
+ *   - 路径维度: masteredInPath, currentInPath, pendingInPath (来自 roadmap 计算)
+ *   - 进步对比: progress.newMastered, progress.masteryDelta (对比上周)
  */
 export async function GET(): Promise<NextResponse> {
   try {
@@ -209,6 +225,10 @@ export async function GET(): Promise<NextResponse> {
       });
     }
 
+    // Calculate path stats for completion percent
+    const completedCount = roadmap.filter((node) => node.status === 'completed').length;
+    const totalCount = roadmap.length;
+
     // 8. Calculate weekly summary (natural week: Monday 00:00:00 to now)
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -273,22 +293,102 @@ export async function GET(): Promise<NextResponse> {
 
     // Return unique knowledge point count (only from current textbook)
     const practicedCount = new Set(practicedKnowledgePoints).size;
+    const practiceSessions = recentAttempts.length;
 
-    // 统计路径内已掌握的知识点（保持数据一致性）
-    const masteredCount = roadmap.filter(
-      (node) => node.status === 'completed'
-    ).length;
+    // Calculate total practice minutes (from attempt duration)
+    const totalPracticeMinutes = recentAttempts.reduce((sum, attempt) => {
+      if (attempt.completedAt && attempt.startedAt) {
+        return sum + (new Date(attempt.completedAt).getTime() - new Date(attempt.startedAt).getTime()) / 60000;
+      }
+      return sum;
+    }, 0);
 
-    // 统计路径内待加强的知识点（pending + current）
-    const weakCount = roadmap.filter(
-      (node) => node.status !== 'completed'
-    ).length;
+    // === 路径维度统计 (来自 roadmap 计算) ===
+    // 已完成：mastery >= 0.9
+    const masteredInPath = roadmap.filter((node) => node.status === 'completed').length;
+    // 进行中：第一个未完成的节点
+    const currentInPath = roadmap.filter((node) => node.status === 'current').length;
+    // 待加强：未完成的节点
+    const pendingInPath = roadmap.filter((node) => node.status === 'pending').length;
+
+    // 计算本周进步（对比上周）
+    // 获取上周的掌握度快照
+    const lastWeekStart = new Date(startOfWeek);
+    lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+
+    const lastWeekAssessment = await prisma.assessment.findFirst({
+      where: {
+        userId,
+        completedAt: {
+          gte: lastWeekStart,
+          lt: startOfWeek,
+        },
+      },
+      select: {
+        knowledgeData: true,
+      },
+    });
+
+    // 计算上周平均掌握度
+    let lastWeekAvgMastery = 0;
+    if (lastWeekAssessment?.knowledgeData) {
+      try {
+        const lastWeekData = JSON.parse(lastWeekAssessment.knowledgeData as string);
+        const levelToMastery = (level: number): number => {
+          if (level <= 0) return 0.3;
+          if (level === 1) return 0.55;
+          if (level === 2) return 0.8;
+          if (level === 3) return 0.95;
+          return 1.0;
+        };
+
+        const nameToIdMap = new Map(knowledgePoints.map((kp) => [kp.name, kp.id]));
+        let totalMastery = 0;
+        let count = 0;
+
+        for (const [kpName, level] of Object.entries(lastWeekData)) {
+          const kpId = nameToIdMap.get(kpName);
+          if (kpId && roadmap.find((r) => r.nodeId === kpId)) {
+            totalMastery += levelToMastery(typeof level === 'number' ? level : 0);
+            count++;
+          }
+        }
+
+        if (count > 0) {
+          lastWeekAvgMastery = totalMastery / count;
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    }
+
+    // 计算当前平均掌握度（路径内节点）
+    const currentAvgMastery = roadmap.reduce((sum, node) => sum + node.mastery, 0) / roadmap.length;
+    const masteryDelta = currentAvgMastery - lastWeekAvgMastery;
+
+    // 计算本周新掌握的节点数（上周未完成，本周已完成）
+    const newMastered = masteredInPath - Math.round(lastWeekAvgMastery * roadmap.length / 0.9);
 
     const weeklySummary = {
+      // === 练习维度 (来自 Attempt 表) ===
+      practiceSessions,
       practicedKnowledgePoints: practicedCount,
-      masteredCount,
-      weakCount,
+      totalPracticeMinutes: Math.round(totalPracticeMinutes),
+
+      // === 路径维度 (来自 roadmap 计算) ===
+      masteredInPath,
+      currentInPath,
+      pendingInPath,
+
+      // === 本周进步 (对比上周) ===
+      progress: {
+        newMastered: Math.max(0, newMastered),
+        masteryDelta: Math.round(masteryDelta * 100) / 100,
+      },
     };
+
+    // Calculate completion percent
+    const completionPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
     // 8. Calculate currentIndex for path response
     const currentIndexValue = roadmap.findIndex(item => item.status === 'current');
@@ -302,6 +402,7 @@ export async function GET(): Promise<NextResponse> {
           name: activePath.name,
           status: activePath.status,
           currentIndex: currentIndexValue >= 0 ? currentIndexValue : 0,
+          completionPercent,
         },
         roadmap,
         weeklySummary,

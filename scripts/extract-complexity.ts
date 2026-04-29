@@ -1,9 +1,13 @@
 #!/usr/bin/env tsx
 
 import { PrismaClient } from '@prisma/client';
-import { ComplexityExtractor, ExtractionFailedError } from '../lib/qie/complexity-extractor';
+import { HybridExtractor } from '../lib/qie/rule-based-extractor';
 
-const prisma = new PrismaClient();
+function createPrismaClient() {
+  return new PrismaClient({
+    log: ['error'],
+  });
+}
 
 interface Options {
   limit?: number;
@@ -67,8 +71,16 @@ function parseQuestionContent(content: string): any {
 async function main() {
   console.log('=== 题目复杂度特征批量提取 ===\n');
 
+  const prisma = createPrismaClient();
   const options = parseArgs();
-  const extractor = new ComplexityExtractor();
+
+  // Use LLM if available, otherwise fall back to rule-based
+  const useLLM = !process.env.NO_LLM;
+  const extractor = new HybridExtractor();
+  await extractor.init(useLLM);
+
+  console.log(`提取模式: ${useLLM ? 'LLM优先 + 规则后备' : '纯规则'}`);
+  console.log();
 
   console.log('配置:');
   console.log(`  限制: ${options.limit || '无'}`);
@@ -91,7 +103,7 @@ async function main() {
 
   const questions = await prisma.question.findMany({
     where,
-    take: options.limit || 100,
+    take: options.limit || undefined,  // undefined = no limit
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
@@ -159,21 +171,20 @@ async function main() {
 
     for (const [questionId, result] of results) {
       try {
-        await prisma.question.update({
-          where: { id: questionId },
-          data: {
-            cognitiveLoad: result.features.cognitiveLoad,
-            reasoningDepth: result.features.reasoningDepth,
-            complexity: result.features.complexity,
-            extractionStatus: 'SUCCESS',
-            featuresExtractedAt: new Date(),
-            extractionModel: 'gemma-4-31b-it-v1',
-            extractionError: null,
-          },
-        });
+        await prisma.$executeRaw`
+          UPDATE "Question"
+          SET "cognitiveLoad" = ${result.features.cognitiveLoad},
+              "reasoningDepth" = ${result.features.reasoningDepth},
+              "complexity" = ${result.features.complexity},
+              "extractionStatus" = 'SUCCESS',
+              "featuresExtractedAt" = datetime('now'),
+              "extractionModel" = ${useLLM ? 'gemma-4-31b-it-v1' : 'rule-based-v1'}
+          WHERE id = ${questionId}
+        `;
         successCount++;
-      } catch (error) {
-        console.error(`  更新失败 ${questionId}:`, error);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`  更新失败 ${questionId}:`, message);
         errorCount++;
       }
     }
@@ -185,6 +196,7 @@ async function main() {
   }
 
   console.log('\n完成!');
+  await prisma.$disconnect();
 }
 
 main().catch(console.error);

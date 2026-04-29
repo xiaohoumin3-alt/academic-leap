@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import MaterialIcon from './MaterialIcon';
 import { StartingScoreCalibrationCard } from './StartingScoreCalibrationCard';
@@ -10,6 +11,7 @@ import TabSwitcher, { TabValue } from './TabSwitcher';
 import GrowthAnalysisTab from './AnalyzePage/GrowthAnalysisTab';
 import LearningPathTab from './AnalyzePage/LearningPathTab';
 import PracticeStatsTab from './AnalyzePage/PracticeStatsTab';
+import ComplexityOverview from './AnalyzePage/ComplexityOverview';
 import HistoryModal from './AnalyzePage/HistoryModal';
 import MistakesModal from './AnalyzePage/MistakesModal';
 import { analyticsApi } from '../lib/api';
@@ -43,9 +45,20 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
   const [selectedModule, setSelectedModule] = useState<KnowledgeData | null>(null);
   const [selectedTrainingModule, setSelectedTrainingModule] = useState<KnowledgeData | null>(null);
   const [activeTab, setActiveTab] = useState<TabValue>('growth');
+  const [complexityStats, setComplexityStats] = useState<any>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showMistakesModal, setShowMistakesModal] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'info' | 'error' } | null>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // 从 URL 读取 tab 参数
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['growth', 'path', 'practice'].includes(tabParam)) {
+      setActiveTab(tabParam as TabValue);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -92,8 +105,33 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
         setTrainingKnowledgeData(trainingTransformed);
       }
 
-      // Extract recommendations data from ApiResponse
-      setRecommendations(recommendationsRes as any);
+      // Extract recommendations data from ApiResponse (unwrap data field)
+      if (recommendationsRes?.data) {
+        setRecommendations(recommendationsRes.data as any);
+      }
+
+      // Load complexity stats
+      try {
+        const complexityRes = await fetch('/api/learning-path/recommend');
+        if (complexityRes.ok) {
+          const data = await complexityRes.json();
+          if (data.data) {
+            setComplexityStats({
+              totalQuestions: data.data.totalQuestions,
+              questionsWithFeatures: data.data.questionsWithFeatures,
+              coverage: data.data.featureCoverage,
+              averages: {
+                complexity: data.data.averageComplexity,
+                cognitiveLoad: data.data.averageCognitiveLoad,
+                reasoningDepth: data.data.averageReasoningDepth,
+              },
+              distribution: { low: 0, medium: 0, high: 0 }, // Will be populated from API
+            });
+          }
+        }
+      } catch {
+        // Complexity stats are optional, don't fail if unavailable
+      }
     } catch (error) {
       console.error('加载分析数据失败:', error);
       // 不使用降级数据，保持空状态
@@ -122,6 +160,78 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
       console.error('校准失败:', error);
       setToast({
         msg: '校准失败: ' + (error instanceof Error ? error.message : '未知错误'),
+        type: 'error',
+      });
+    }
+  };
+
+  const handleRecommendationAction = async (type: string, data?: unknown) => {
+    try {
+      let response: Response;
+
+      switch (type) {
+        case 'regenerate_path':
+          // 调用路径生成API，传递最新测评ID以获取薄弱知识点
+          response = await fetch('/api/learning-path/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              assessmentId: recommendations?.latestAssessmentId ?? undefined,
+            }),
+          });
+          break;
+
+        case 'add_weak_points':
+          // 调用路径生成API添加薄弱知识点
+          // 优先使用 assessmentId，如果没有则使用 targetNodeIds
+          const actionData = data as { targetNodeIds?: string[]; assessmentId?: string | null };
+          response = await fetch('/api/learning-path/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              assessmentId: actionData.assessmentId ?? recommendations?.latestAssessmentId ?? undefined,
+              userEdits: actionData.assessmentId ? undefined : {
+                add: actionData.targetNodeIds ?? [],
+              },
+            }),
+          });
+          break;
+
+        default:
+          setToast({ msg: '未知操作类型', type: 'info' });
+          return;
+      }
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || '操作失败');
+      }
+
+      // 检查是否添加了所有请求的节点
+      if (result.data?.stats) {
+        const { requestedAddCount, matchedAddCount } = result.data.stats;
+        if (requestedAddCount > 0 && matchedAddCount < requestedAddCount) {
+          setToast({
+            msg: `已添加${matchedAddCount}/${requestedAddCount}个薄弱知识点`,
+            type: 'info',
+          });
+        } else {
+          setToast({ msg: '操作成功', type: 'success' });
+        }
+      } else {
+        setToast({ msg: '操作成功', type: 'success' });
+      }
+
+      // 导航到学习路径 Tab（在 analyze 页面内）
+      setTimeout(() => router.push('/analyze?tab=path'), 500);
+
+      // 重新加载数据
+      await loadAnalytics();
+    } catch (error) {
+      console.error('执行建议操作失败:', error);
+      setToast({
+        msg: '操作失败: ' + (error instanceof Error ? error.message : '未知错误'),
         type: 'error',
       });
     }
@@ -210,6 +320,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
             { value: 'growth', label: '成长分析' },
             { value: 'path', label: '学习路径' },
             { value: 'practice', label: '练习统计' },
+            { value: 'complexity', label: '复杂度分析' },
           ]}
           value={activeTab}
           onChange={setActiveTab}
@@ -226,6 +337,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
           setSelectedModule={setSelectedModule}
           currentScore={currentScore ?? overview?.overview?.averageScore ?? 0}
           onCalibration={handleCalibration}
+          onRecommendationAction={handleRecommendationAction}
         />
       )}
       {activeTab === 'path' && <LearningPathTab />}
@@ -241,14 +353,40 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onBack }) => {
           onOpenMistakes={() => setShowMistakesModal(true)}
         />
       )}
-
-      <button
-        onClick={onBack}
-        className="w-full py-5 rounded-full bg-on-surface text-surface font-display font-black text-lg shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3"
-      >
-        继续今日训练
-        <MaterialIcon icon="chevron_right" className="" style={{ fontSize: '24px' }} />
-      </button>
+      {activeTab === 'complexity' && (
+        <div className="space-y-6">
+          <ComplexityOverview
+            stats={complexityStats}
+            onExplore={() => router.push('/admin/complexity')}
+          />
+          <div className="bg-surface-container-low rounded-[2rem] p-6">
+            <h3 className="text-lg font-bold text-on-surface mb-4">复杂度推荐</h3>
+            <p className="text-sm text-on-surface-variant mb-4">
+              基于题目复杂度特征的智能推荐，帮助选择最适合当前水平的题目。
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-blue-50 rounded-xl p-4">
+                <div className="text-xs text-blue-600 mb-1">认知负荷</div>
+                <div className="text-sm text-blue-700">
+                  题目所需的注意力资源和工作记忆
+                </div>
+              </div>
+              <div className="bg-purple-50 rounded-xl p-4">
+                <div className="text-xs text-purple-600 mb-1">推理深度</div>
+                <div className="text-sm text-purple-700">
+                  解决问题需要的逻辑推理步骤
+                </div>
+              </div>
+              <div className="bg-orange-50 rounded-xl p-4 col-span-2">
+                <div className="text-xs text-orange-600 mb-1">综合复杂度</div>
+                <div className="text-sm text-orange-700">
+                  认知负荷和推理深度的加权组合，全面评估题目难度
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
 
     {/* 模态组件 */}

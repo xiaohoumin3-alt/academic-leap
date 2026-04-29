@@ -26,7 +26,9 @@ function generateSqrtMultiplyParams(level: number): Record<string, number> {
     const perfectSquares = [1, 4, 9, 16, 25, 36, 49];
     const a = perfectSquares[Math.floor(Math.random() * 4)]; // 1, 4, 9, 16
     const b = perfectSquares[Math.floor(Math.random() * 4)];
-    return { a, b };
+    // 计算 result = √(a*b)
+    const result = Math.sqrt(a * b);
+    return { a, b, result };
   }
 
   // 中高级别：更复杂的组合
@@ -38,7 +40,9 @@ function generateSqrtMultiplyParams(level: number): Record<string, number> {
     return generateSqrtMultiplyParams(level);
   }
 
-  return { a, b };
+  // 计算 result = √(a*b)
+  const result = Math.sqrt(a * b);
+  return { a, b, result };
 }
 
 /**

@@ -3,53 +3,12 @@
  * 判断三角形是否为直角三角形
  */
 
-import {
-  QuestionTemplate,
-  StepType,
-} from '../../protocol';
+import { QuestionTemplate } from '../../protocol';
+import { AnswerMode, StepProtocolV2 } from '../../protocol-v2';
 import {
   DIFFICULTY_CONFIG,
   generateRandomParams,
 } from '../../difficulty';
-
-/**
- * 生成勾股定理逆定理判定数据
- */
-function generateVerifyData(
-  params: Record<string, number>
-): {
-  side1: number;
-  side2: number;
-  side3: number;
-  isRightTriangle: boolean;
-  rightAngleVertex: string;
-  sortedSides: number[];
-  description: string;
-} {
-  const { side1, side2, side3, isRight } = params;
-
-  // 将三边排序
-  const sortedSides = [side1, side2, side3].sort((a, b) => a - b);
-  const [a, b, c] = sortedSides;
-
-  // 判断是否为直角三角形
-  const cSquared = a * a + b * b;
-  const cSquare = c * c;
-  const isRightTriangle = Math.abs(cSquared - cSquare) < 0.0001;
-
-  // 确定直角顶点（假设c是最长边）
-  const rightAngleVertex = isRightTriangle ? 'C' : 'N/A';
-
-  return {
-    side1,
-    side2,
-    side3,
-    isRightTriangle,
-    rightAngleVertex,
-    sortedSides,
-    description: isRightTriangle ? '直角三角形' : '非直角三角形',
-  };
-}
 
 /**
  * 勾股定理逆定理模板
@@ -133,40 +92,63 @@ export const TriangleVerifyTemplate: QuestionTemplate = {
     return params;
   },
 
-  buildSteps: (params: Record<string, number>) => {
+  buildSteps: (params): StepProtocolV2[] => {
     const isRightTriangle = params.isRight === 1;
+    const { side1, side2, side3 } = params;
+
+    // 将三边排序
+    const sides = [side1, side2, side3].sort((a, b) => a - b);
+    const [a, b, c] = sides;
+
+    // 判断是否为直角三角形
+    const cSquared = a * a + b * b;
+    const cSquare = c * c;
+    const isRight = Math.abs(cSquared - cSquare) < 0.0001;
 
     return [
       {
         stepId: 's1',
-        type: StepType.VERIFY_RIGHT_ANGLE,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0,
+        answerMode: AnswerMode.YES_NO,
         ui: {
-          instruction: '计算三边平方',
-          inputTarget: '最长边的平方 c²',
-          inputHint: '将三边按从大到小排列，计算最大边的平方',
+          instruction: '将三边按从小到大排列，识别最长边',
+          hint: `三边排序后为：${a}, ${b}, ${c}，最长边是${c}`,
+        },
+        expectedAnswer: { type: 'yes_no', value: true },
+        options: {
+          yes: `${c}是最长边`,
+          no: '识别错误',
         },
       },
       {
         stepId: 's2',
-        type: StepType.VERIFY_RIGHT_ANGLE,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0,
+        answerMode: AnswerMode.YES_NO,
         ui: {
-          instruction: '验证勾股定理逆定理',
-          inputTarget: 'a² + b² 是否等于 c²',
-          inputHint: '输入1表示相等（是直角三角形），0表示不相等',
+          instruction: '验证勾股定理逆定理：较短两边的平方和是否等于最长边的平方？',
+          hint: `计算：${a}² + ${b}² = ${a * a + b * b}，${c}² = ${c * c}`,
+        },
+        expectedAnswer: { type: 'yes_no', value: isRight },
+        options: {
+          yes: '相等（是直角三角形）',
+          no: '不相等（不是直角三角形）',
+        },
+      },
+      {
+        stepId: 's3',
+        answerMode: AnswerMode.YES_NO,
+        ui: {
+          instruction: '综合判断：该三角形是否为直角三角形？',
+          hint: isRight ? '满足勾股定理逆定理，是直角三角形' : '不满足勾股定理逆定理，不是直角三角形',
+        },
+        expectedAnswer: { type: 'yes_no', value: isRightTriangle },
+        options: {
+          yes: '是直角三角形',
+          no: '不是直角三角形',
         },
       },
     ];
   },
 
-  render: (params: Record<string, number>) => {
+  render: (params) => {
     const { side1, side2, side3 } = params;
     const isRightTriangle = params.isRight === 1;
 

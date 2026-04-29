@@ -7,10 +7,8 @@
  * 4. 对角线互相平分
  */
 
-import {
-  QuestionTemplate,
-  StepType,
-} from '../../protocol';
+import { QuestionTemplate } from '../../protocol';
+import { AnswerMode, StepProtocolV2 } from '../../protocol-v2';
 import {
   DIFFICULTY_CONFIG,
   generateRandomParams,
@@ -20,106 +18,6 @@ import {
  * 判定方法类型
  */
 type VerifyMethod = 'both_parallel' | 'both_equal' | 'one_parallel_equal' | 'diagonals_bisect';
-
-/**
- * 生成四边形边长信息
- */
-function generateQuadrilateralData(
-  method: VerifyMethod,
-  params: Record<string, number>
-): {
-  sideAB: number;
-  sideBC: number;
-  sideCD: number;
-  sideDA: number;
-  isParallelogram: boolean;
-  method: VerifyMethod;
-  description: string;
-} {
-  switch (method) {
-    case 'both_parallel':
-      // 两组对边分别平行（经典平行四边形）
-      return {
-        sideAB: params.side1,
-        sideBC: params.side2,
-        sideCD: params.side1,  // AB = CD
-        sideDA: params.side2,  // BC = DA
-        isParallelogram: true,
-        method: 'both_parallel',
-        description: '两组对边分别平行',
-      };
-
-    case 'both_equal':
-      // 两组对边分别相等
-      return {
-        sideAB: params.side1,
-        sideBC: params.side2,
-        sideCD: params.side1,  // AB = CD
-        sideDA: params.side2,   // BC = DA
-        isParallelogram: true,
-        method: 'both_equal',
-        description: '两组对边分别相等',
-      };
-
-    case 'one_parallel_equal':
-      // 一组对边平行且相等
-      return {
-        sideAB: params.side1,
-        sideBC: params.side2,
-        sideCD: params.side1,  // AB = CD 且平行
-        sideDA: params.side2,
-        isParallelogram: true,
-        method: 'one_parallel_equal',
-        description: '一组对边平行且相等',
-      };
-
-    case 'diagonals_bisect':
-      // 对角线互相平分
-      return {
-        sideAB: params.side1,
-        sideBC: params.side2,
-        sideCD: params.side1,
-        sideDA: params.side2,
-        isParallelogram: true,
-        method: 'diagonals_bisect',
-        description: '对角线互相平分',
-      };
-
-    default:
-      return {
-        sideAB: params.side1,
-        sideBC: params.side2,
-        sideCD: params.side1,
-        sideDA: params.side2,
-        isParallelogram: true,
-        method: 'both_parallel',
-        description: '两组对边分别平行',
-      };
-  }
-}
-
-/**
- * 生成非平行四边形数据（用于干扰项）
- */
-function generateNonParallelogram(
-  params: Record<string, number>
-): {
-  sideAB: number;
-  sideBC: number;
-  sideCD: number;
-  sideDA: number;
-  isParallelogram: boolean;
-  description: string;
-} {
-  return {
-    sideAB: params.side1,
-    sideBC: params.side2,
-    sideCD: params.side3,
-    sideDA: params.side4,
-    isParallelogram: false,
-    description: '四边不相等或对边不平行',
-  };
-}
 
 /**
  * 平行四边形判定模板
@@ -177,50 +75,138 @@ export const ParallelogramVerifyTemplate: QuestionTemplate = {
     return params;
   },
 
-  buildSteps: (params) => {
+  buildSteps: (params): StepProtocolV2[] => {
     const isParallelogram = params.isParallelogram === 1;
+    const method: VerifyMethod =
+      params.method === 1 ? 'both_equal' :
+      params.method === 2 ? 'one_parallel_equal' :
+      params.method === 3 ? 'diagonals_bisect' : 'both_parallel';
 
-    return [
-      {
-        stepId: 's1',
-        type: StepType.VERIFY_PARALLELOGRAM,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0,
-        ui: {
-          instruction: '识别题目中给出的条件',
-          inputTarget: '条件类型',
-          inputHint: '输入数字：0=两组对边平行，1=两组对边相等，2=一对边平行相等，3=对角线平分',
-        },
-      },
-      {
-        stepId: 's2',
-        type: StepType.VERIFY_PARALLELOGRAM,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0,
-        ui: {
-          instruction: '应用平行四边形判定定理进行判断',
-          inputTarget: '判定依据',
-          inputHint: '根据条件选择判定方法',
-        },
-      },
-      {
-        stepId: 's3',
-        type: StepType.VERIFY_PARALLELOGRAM,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0,
-        ui: {
-          instruction: '得出结论：是否为平行四边形',
-          inputTarget: '结论',
-          inputHint: '是平行四边形输入1，不是输入0',
-        },
-      },
-    ];
+    // 根据判定方法生成不同的步骤
+    switch (method) {
+      case 'both_parallel':
+        return [
+          {
+            stepId: 's1',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '题目中的四边形有两组对边分别平行吗？',
+              hint: '题目中AB∥CD，BC∥DA',
+            },
+            expectedAnswer: { type: 'yes_no', value: true },
+            options: {
+              yes: '两组对边分别平行',
+              no: '对边不平行',
+            },
+          },
+          {
+            stepId: 's2',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '满足"两组对边分别平行"这个判定条件吗？',
+              hint: '平行四边形判定定理1：两组对边分别平行的四边形是平行四边形',
+            },
+            expectedAnswer: { type: 'yes_no', value: isParallelogram },
+            options: {
+              yes: '是平行四边形',
+              no: '不是平行四边形',
+            },
+          },
+        ];
+
+      case 'both_equal':
+        return [
+          {
+            stepId: 's1',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '题目中的四边形有两组对边分别相等吗？',
+              hint: '题目中AB=CD，BC=DA',
+            },
+            expectedAnswer: { type: 'yes_no', value: true },
+            options: {
+              yes: '两组对边分别相等',
+              no: '对边不相等',
+            },
+          },
+          {
+            stepId: 's2',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '满足"两组对边分别相等"这个判定条件吗？',
+              hint: '平行四边形判定定理2：两组对边分别相等的四边形是平行四边形',
+            },
+            expectedAnswer: { type: 'yes_no', value: isParallelogram },
+            options: {
+              yes: '是平行四边形',
+              no: '不是平行四边形',
+            },
+          },
+        ];
+
+      case 'one_parallel_equal':
+        return [
+          {
+            stepId: 's1',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '题目中有一组对边平行且相等吗？',
+              hint: '题目中AB∥CD且AB=CD',
+            },
+            expectedAnswer: { type: 'yes_no', value: true },
+            options: {
+              yes: '有一组对边平行且相等',
+              no: '没有满足条件的对边',
+            },
+          },
+          {
+            stepId: 's2',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '满足"一组对边平行且相等"这个判定条件吗？',
+              hint: '平行四边形判定定理3：一组对边平行且相等的四边形是平行四边形',
+            },
+            expectedAnswer: { type: 'yes_no', value: isParallelogram },
+            options: {
+              yes: '是平行四边形',
+              no: '不是平行四边形',
+            },
+          },
+        ];
+
+      case 'diagonals_bisect':
+        return [
+          {
+            stepId: 's1',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '题目中的四边形对角线互相平分吗？',
+              hint: '题目中对角线AC和BD互相平分',
+            },
+            expectedAnswer: { type: 'yes_no', value: true },
+            options: {
+              yes: '对角线互相平分',
+              no: '对角线不互相平分',
+            },
+          },
+          {
+            stepId: 's2',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '满足"对角线互相平分"这个判定条件吗？',
+              hint: '平行四边形判定定理4：对角线互相平分的四边形是平行四边形',
+            },
+            expectedAnswer: { type: 'yes_no', value: isParallelogram },
+            options: {
+              yes: '是平行四边形',
+              no: '不是平行四边形',
+            },
+          },
+        ];
+
+      default:
+        return [];
+    }
   },
 
   render: (params) => {

@@ -6,10 +6,8 @@
  * 3. 对角线把矩形分成四个全等的直角三角形
  */
 
-import {
-  QuestionTemplate,
-  StepType,
-} from '../../protocol';
+import { QuestionTemplate } from '../../protocol';
+import { AnswerMode, StepProtocolV2 } from '../../protocol-v2';
 import {
   DIFFICULTY_CONFIG,
   generateRandomParams,
@@ -19,68 +17,6 @@ import {
  * 计算类型
  */
 type ComputeType = 'diagonal_length' | 'angle_check' | 'triangle_area';
-
-/**
- * 生成矩形参数
- */
-function generateRectangleData(
-  type: ComputeType,
-  params: Record<string, number>
-): {
-  width: number;
-  height: number;
-  diagonal: number;
-  answer: number;
-  type: ComputeType;
-  description: string;
-} {
-  switch (type) {
-    case 'diagonal_length':
-      // 计算对角线长度
-      const diagonal = Math.sqrt(params.width ** 2 + params.height ** 2);
-      return {
-        width: params.width,
-        height: params.height,
-        diagonal,
-        answer: Math.round(diagonal * 100) / 100,  // 保留两位小数
-        type: 'diagonal_length',
-        description: '对角线长度',
-      };
-
-    case 'angle_check':
-      // 验证直角
-      return {
-        width: params.width,
-        height: params.height,
-        diagonal: Math.sqrt(params.width ** 2 + params.height ** 2),
-        answer: 90,  // 矩形角都是90度
-        type: 'angle_check',
-        description: '每个内角的度数',
-      };
-
-    case 'triangle_area':
-      // 计算分成三角形的面积
-      const area = (params.width * params.height) / 2;
-      return {
-        width: params.width,
-        height: params.height,
-        diagonal: Math.sqrt(params.width ** 2 + params.height ** 2),
-        answer: area,
-        type: 'triangle_area',
-        description: '对角线分成的直角三角形面积',
-      };
-
-    default:
-      return {
-        width: params.width,
-        height: params.height,
-        diagonal: Math.sqrt(params.width ** 2 + params.height ** 2),
-        answer: Math.round(Math.sqrt(params.width ** 2 + params.height ** 2) * 100) / 100,
-        type: 'diagonal_length',
-        description: '对角线长度',
-      };
-  }
-}
 
 /**
  * 矩形性质计算模板
@@ -114,11 +50,11 @@ export const RectanglePropertyTemplate: QuestionTemplate = {
       else if (rand < 0.7) computeType = 'angle_check';
       else computeType = 'triangle_area';
       params.computeType = computeType === 'diagonal_length' ? 0 :
-                           computeType === 'angle_check' ? 1 : 2;
+                          computeType === 'angle_check' ? 1 : 2;
     }
 
     // 确保宽和高是勾股数或整数，便于计算
-    if (computeType === 'diagonal_length') {
+    if (computeType === 'diagonal_length' || computeType === 'triangle_area') {
       // 尝试生成整数勾股数
       const pythagoreanPairs = [
         [3, 4], [5, 12], [8, 15], [7, 24], [9, 40],
@@ -151,42 +87,85 @@ export const RectanglePropertyTemplate: QuestionTemplate = {
     return params;
   },
 
-  buildSteps: (params) => {
+  buildSteps: (params): StepProtocolV2[] => {
     const computeType: ComputeType =
       params.computeType === 1 ? 'angle_check' :
       params.computeType === 2 ? 'triangle_area' : 'diagonal_length';
 
-    return [
-      {
-        stepId: 's1',
-        type: StepType.COMPUTE_RECT_PROPERTY,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0.01,
-        ui: {
-          instruction: '应用矩形性质：识别已知条件',
-          inputTarget: '已知信息',
-          inputHint: '矩形宽为' + params.width + '，高为' + params.height,
-        },
-      },
-      {
-        stepId: 's2',
-        type: StepType.COMPUTE_RECT_PROPERTY,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0.01,
-        ui: {
-          instruction: computeType === 'diagonal_length' ? '利用勾股定理计算对角线长度' :
-                       computeType === 'angle_check' ? '确定矩形内角的度数' : '计算直角三角形面积',
-          inputTarget: computeType === 'diagonal_length' ? '对角线长度' :
-                       computeType === 'angle_check' ? '内角度数' : '三角形面积',
-          inputHint: computeType === 'diagonal_length' ? '√(宽²+高²)' :
-                     computeType === 'angle_check' ? '输入90' : '宽×高÷2',
-        },
-      },
-    ];
+    const width = params.width!;
+    const height = params.height!;
+
+    switch (computeType) {
+      case 'diagonal_length': {
+        const diagonal = Math.sqrt(width ** 2 + height ** 2);
+        return [
+          {
+            stepId: 's1',
+            answerMode: AnswerMode.NUMBER,
+            ui: {
+              instruction: '应用矩形性质：识别已知条件',
+              hint: `矩形宽为${width}，高为${height}，应用勾股定理计算对角线`,
+            },
+            expectedAnswer: { type: 'number', value: width * width + height * height },
+            keyboard: { type: 'numeric' },
+          },
+          {
+            stepId: 's2',
+            answerMode: AnswerMode.NUMBER,
+            ui: {
+              instruction: '利用勾股定理计算对角线长度',
+              hint: `对角线² = 宽² + 高² = ${width}² + ${height}² = ${width * width + height * height}`,
+            },
+            expectedAnswer: { type: 'number', value: Math.round(diagonal * 100) / 100, tolerance: 0.01 },
+            keyboard: { type: 'numeric' },
+          },
+        ];
+      }
+
+      case 'angle_check': {
+        return [
+          {
+            stepId: 's1',
+            answerMode: AnswerMode.NUMBER,
+            ui: {
+              instruction: '确定矩形内角的度数',
+              hint: '矩形四个角都是直角',
+            },
+            expectedAnswer: { type: 'number', value: 90 },
+            keyboard: { type: 'numeric' },
+          },
+        ];
+      }
+
+      case 'triangle_area': {
+        const area = (width * height) / 2;
+        return [
+          {
+            stepId: 's1',
+            answerMode: AnswerMode.NUMBER,
+            ui: {
+              instruction: '应用矩形性质：识别已知条件',
+              hint: `矩形宽为${width}，高为${height}，对角线把矩形分成两个直角三角形`,
+            },
+            expectedAnswer: { type: 'number', value: width * height },
+            keyboard: { type: 'numeric' },
+          },
+          {
+            stepId: 's2',
+            answerMode: AnswerMode.NUMBER,
+            ui: {
+              instruction: '计算直角三角形面积',
+              hint: `三角形面积 = 矩形面积 ÷ 2 = (宽 × 高) ÷ 2 = (${width} × ${height}) ÷ 2`,
+            },
+            expectedAnswer: { type: 'number', value: area },
+            keyboard: { type: 'numeric' },
+          },
+        ];
+      }
+
+      default:
+        return [];
+    }
   },
 
   render: (params) => {
@@ -195,32 +174,23 @@ export const RectanglePropertyTemplate: QuestionTemplate = {
       params.computeType === 2 ? 'triangle_area' : 'diagonal_length';
 
     let context: string;
-    switch (computeType) {
-      case 'diagonal_length':
-        context = `矩形ABCD中，AB=${params.width}，BC=${params.height}，求对角线AC的长度`;
-        break;
-      case 'angle_check':
-        context = `矩形ABCD中，每个内角的度数是多少？`;
-        break;
-      case 'triangle_area':
-        context = `矩形ABCD中，AB=${params.width}，BC=${params.height}，对角线AC把矩形分成两个直角三角形，求其中一个三角形的面积`;
-        break;
-      default:
-        context = `矩形ABCD中，AB=${params.width}，BC=${params.height}，求对角线AC的长度`;
-    }
-
     let title: string;
+
     switch (computeType) {
       case 'diagonal_length':
+        context = `矩形ABCD中，AB=${params.width}，BC=${params.height}，求对角线AC的长度`;
         title = '矩形对角线长度计算';
         break;
       case 'angle_check':
+        context = `矩形ABCD中，每个内角的度数是多少？`;
         title = '矩形内角度数';
         break;
       case 'triangle_area':
+        context = `矩形ABCD中，AB=${params.width}，BC=${params.height}，对角线AC把矩形分成两个直角三角形，求其中一个三角形的面积`;
         title = '矩形分割三角形面积';
         break;
       default:
+        context = `矩形ABCD中，AB=${params.width}，BC=${params.height}，求对角线AC的长度`;
         title = '矩形性质计算';
     }
 

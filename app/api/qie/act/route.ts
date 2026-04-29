@@ -21,10 +21,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Load student state from database if exists
+    await uok.loadStudentState(body.studentId);
+
     const action = uok.act(body.intent, body.studentId);
 
     return NextResponse.json(action);
   } catch (error) {
+    console.error('act error:', error);
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
 }

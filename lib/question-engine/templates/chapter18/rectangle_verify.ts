@@ -6,10 +6,8 @@
  * 3. 对角线相等的平行四边形是矩形
  */
 
-import {
-  QuestionTemplate,
-  StepType,
-} from '../../protocol';
+import { QuestionTemplate } from '../../protocol';
+import { AnswerMode, StepProtocolV2 } from '../../protocol-v2';
 import {
   DIFFICULTY_CONFIG,
   generateRandomParams,
@@ -185,50 +183,146 @@ export const RectangleVerifyTemplate: QuestionTemplate = {
     return params;
   },
 
-  buildSteps: (params) => {
+  buildSteps: (params): StepProtocolV2[] => {
     const isRectangle = params.isRectangle === 1;
+    const method: VerifyMethod =
+      params.method === 1 ? 'three_right_angles' :
+      params.method === 2 ? 'equal_diagonals' : 'one_right_angle';
 
-    return [
-      {
-        stepId: 's1',
-        type: StepType.VERIFY_RECTANGLE,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0,
-        ui: {
-          instruction: '识别题目中给出的条件',
-          inputTarget: '条件类型',
-          inputHint: '0=平行四边形，1=四边形',
-        },
-      },
-      {
-        stepId: 's2',
-        type: StepType.VERIFY_RECTANGLE,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0,
-        ui: {
-          instruction: '应用矩形判定定理',
-          inputTarget: '判定方法',
-          inputHint: '0=一直角，1=三角直角，2=对角线相等',
-        },
-      },
-      {
-        stepId: 's3',
-        type: StepType.VERIFY_RECTANGLE,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0,
-        ui: {
-          instruction: '得出结论：是否为矩形',
-          inputTarget: '结论',
-          inputHint: '是矩形输入1，不是输入0',
-        },
-      },
-    ];
+    // 根据判定方法生成不同的步骤
+    switch (method) {
+      case 'one_right_angle':
+        return [
+          {
+            stepId: 's1',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '题目中的四边形是平行四边形吗？',
+              hint: '平行四边形 + 一个直角 = 矩形',
+            },
+            expectedAnswer: { type: 'yes_no', value: true },
+            options: {
+              yes: '是平行四边形',
+              no: '不是平行四边形',
+            },
+          },
+          {
+            stepId: 's2',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '平行四边形有一个角是直角吗？',
+              hint: '题目中∠A=90°',
+            },
+            expectedAnswer: { type: 'yes_no', value: true },
+            options: {
+              yes: '有直角',
+              no: '没有直角',
+            },
+          },
+          {
+            stepId: 's3',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '综合判断：满足"有一个角是直角的平行四边形"这个判定条件吗？',
+              hint: '矩形判定定理1：有一个角是直角的平行四边形是矩形',
+            },
+            expectedAnswer: { type: 'yes_no', value: isRectangle },
+            options: {
+              yes: '是矩形',
+              no: '不是矩形',
+            },
+          },
+        ];
+
+      case 'three_right_angles':
+        return [
+          {
+            stepId: 's1',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '题目中的四边形有几个直角？',
+              hint: '题目中∠A=∠B=∠C=90°',
+            },
+            expectedAnswer: { type: 'yes_no', value: false },
+            options: {
+              yes: '四个直角',
+              no: '三个直角',
+            },
+          },
+          {
+            stepId: 's2',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '有三个角是直角的四边形是矩形吗？',
+              hint: '矩形判定定理2：有三个角是直角的四边形是矩形',
+            },
+            expectedAnswer: { type: 'yes_no', value: true },
+            options: {
+              yes: '是',
+              no: '不是',
+            },
+          },
+          {
+            stepId: 's3',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '综合判断：这个四边形是矩形吗？',
+              hint: '有三个直角的四边形必为矩形',
+            },
+            expectedAnswer: { type: 'yes_no', value: isRectangle },
+            options: {
+              yes: '是矩形',
+              no: '不是矩形',
+            },
+          },
+        ];
+
+      case 'equal_diagonals':
+        return [
+          {
+            stepId: 's1',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '题目中的四边形是平行四边形吗？',
+              hint: '对角线相等的平行四边形 = 矩形',
+            },
+            expectedAnswer: { type: 'yes_no', value: true },
+            options: {
+              yes: '是平行四边形',
+              no: '不是平行四边形',
+            },
+          },
+          {
+            stepId: 's2',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '平行四边形的对角线相等吗？',
+              hint: `题目中AC=${Math.round(params.width ** 2 + params.height ** 2)}, BD=${Math.round(params.width ** 2 + params.height ** 2)}`,
+            },
+            expectedAnswer: { type: 'yes_no', value: true },
+            options: {
+              yes: '对角线相等',
+              no: '对角线不等',
+            },
+          },
+          {
+            stepId: 's3',
+            answerMode: AnswerMode.YES_NO,
+            ui: {
+              instruction: '综合判断：满足"对角线相等的平行四边形"这个判定条件吗？',
+              hint: '矩形判定定理3：对角线相等的平行四边形是矩形',
+            },
+            expectedAnswer: { type: 'yes_no', value: isRectangle },
+            options: {
+              yes: '是矩形',
+              no: '不是矩形',
+            },
+          },
+        ];
+
+      default:
+        return [];
+    }
   },
 
   render: (params) => {

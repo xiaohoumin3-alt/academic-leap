@@ -11,18 +11,45 @@ import { ComplexitySpec } from '../lib/qie/generator/types';
 const CONFIG = {
   structures: ['linear', 'nested', 'multi_equation', 'constraint_chain'] as const,
   depths: [1, 2, 3, 4] as const,
-  distractions: [0, 1, 2, 3] as const,
-  samplesPerSpec: 3,
+  samplesPerSpec: 12, // 48 specs × 12 = 576, 调整以匹配目标数量
+  targetTotal: 192, // 目标生成题目数量
 };
 
-function generateAllSpecs(): ComplexitySpec[] {
+/**
+ * DISTRACTION 分布概率 (对齐 real_exam 真实分布)
+ * - 0: 77% (无干扰)
+ * - 1: 13% (轻微冗余信息)
+ * - 2: 8% (误导性提示)
+ * - 3: 2% (计算陷阱)
+ */
+function sampleDistraction(): 0 | 1 | 2 | 3 {
+  const rand = Math.random();
+  if (rand < 0.77) return 0;
+  if (rand < 0.90) return 1; // 0.77 + 0.13 = 0.90
+  if (rand < 0.98) return 2; // 0.90 + 0.08 = 0.98
+  return 3;
+}
+
+/**
+ * 生成所有 (structure, depth) 组合，distraction 使用加权随机
+ */
+function generateAllSpecs(count: number): ComplexitySpec[] {
   const specs: ComplexitySpec[] = [];
 
+  // 首先生成所有 (structure, depth) 基础组合
+  const baseCombinations: Array<{ structure: typeof CONFIG.structures[number]; depth: typeof CONFIG.depths[number] }> = [];
   for (const structure of CONFIG.structures) {
     for (const depth of CONFIG.depths) {
-      for (const distraction of CONFIG.distractions) {
-        specs.push({ structure, depth, distraction });
-      }
+      baseCombinations.push({ structure, depth });
+    }
+  }
+
+  // 为每个基础组合分配 spec，使用加权随机 distraction
+  const specsPerBase = Math.ceil(count / baseCombinations.length);
+
+  for (const { structure, depth } of baseCombinations) {
+    for (let i = 0; i < specsPerBase && specs.length < count; i++) {
+      specs.push({ structure, depth, distraction: sampleDistraction() });
     }
   }
 
@@ -30,14 +57,24 @@ function generateAllSpecs(): ComplexitySpec[] {
 }
 
 async function main() {
-  console.log('🔧 Question Generator - 批量生成\n');
+  console.log('🔧 Question Generator - 批量生成 (DISTRACTION 对齐真实分布)\n');
 
   const generator = new QuestionGenerator();
-  const specs = generateAllSpecs();
+  const specs = generateAllSpecs(CONFIG.targetTotal);
 
-  console.log(`📋 生成 ${specs.length} 个复杂度组合`);
-  console.log(`📦 每个组合生成 ${CONFIG.samplesPerSpec} 道题`);
-  console.log(`📊 总计: ${specs.length * CONFIG.samplesPerSpec} 道题\n`);
+  // 统计 DISTRACTION 分布
+  const distractionCounts = { 0: 0, 1: 0, 2: 0, 3: 0 };
+  for (const spec of specs) {
+    distractionCounts[spec.distraction]++;
+  }
+
+  console.log(`📋 生成 ${specs.length} 个复杂度规格`);
+  console.log(`📊 DISTRACTION 分布:`);
+  console.log(`   0 (无干扰): ${distractionCounts[0]} (${(distractionCounts[0] / specs.length * 100).toFixed(1)}%)`);
+  console.log(`   1 (冗余信息): ${distractionCounts[1]} (${(distractionCounts[1] / specs.length * 100).toFixed(1)}%)`);
+  console.log(`   2 (误导提示): ${distractionCounts[2]} (${(distractionCounts[2] / specs.length * 100).toFixed(1)}%)`);
+  console.log(`   3 (计算陷阱): ${distractionCounts[3]} (${(distractionCounts[3] / specs.length * 100).toFixed(1)}%)`);
+  console.log();
 
   const batchId = `batch_${Date.now()}`;
 
@@ -45,22 +82,20 @@ async function main() {
   let failCount = 0;
   const results: GeneratedQuestionResult[] = [];
 
-  for (let specIndex = 0; specIndex < specs.length; specIndex++) {
-    const spec = specs[specIndex];
+  for (let i = 0; i < specs.length; i++) {
+    const spec = specs[i];
 
-    for (let i = 0; i < CONFIG.samplesPerSpec; i++) {
-      try {
-        const result = await generator.generateAndSave(spec, batchId);
-        results.push(result);
-        successCount++;
-      } catch (error) {
-        console.error(`❌ 生成失败: ${JSON.stringify(spec)}`, error);
-        failCount++;
-      }
+    try {
+      const result = await generator.generateAndSave(spec, batchId);
+      results.push(result);
+      successCount++;
+    } catch (error) {
+      console.error(`❌ 生成失败: ${JSON.stringify(spec)}`, error);
+      failCount++;
     }
 
-    if ((specIndex + 1) % 10 === 0) {
-      console.log(`   进度: ${specIndex + 1}/${specs.length} 组完成`);
+    if ((i + 1) % 20 === 0) {
+      console.log(`   进度: ${i + 1}/${specs.length} 题完成`);
     }
   }
 

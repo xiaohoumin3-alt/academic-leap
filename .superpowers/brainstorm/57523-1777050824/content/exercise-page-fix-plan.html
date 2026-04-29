@@ -1,0 +1,227 @@
+<h1>练习界面 Bug 修复方案设计</h1>
+
+<h2>核心问题：步骤设计是整个做题系统的核心假设</h2>
+
+<p class="subtitle">步骤的定义、划分、以及展示必须清晰一致</p>
+
+---
+
+<h2>一、步骤的核心定义（设计规范）</h2>
+
+<div style="background: #fef3c7; padding: 16px; border-radius: 12px; border-left: 4px solid #f59e0b; margin-bottom: 24px;">
+  <p style="font-weight: 700; color: #92400e; margin-bottom: 8px;">🎯 核心原则：步骤 = 数学解题的逻辑子目标</p>
+  <p style="color: #78350f;">每个步骤应该是一个独立的、有意义的数学计算或判断，而不是人为拆分的输入框。</p>
+</div>
+
+<h3>步骤设计规范表</h3>
+
+<table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+  <thead>
+    <tr style="background: #f3f4f6;">
+      <th style="padding: 12px; text-align: left; border: 1px solid #e5e7eb;">模板</th>
+      <th style="padding: 12px; text-align: left; border: 1px solid #e5e7eb;">题目示例</th>
+      <th style="padding: 12px; text-align: left; border: 1px solid #e5e7eb;">步骤数</th>
+      <th style="padding: 12px; text-align: left; border: 1px solid #e5e7eb;">步骤设计</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">sqrt_concept</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">√6 是否有意义？</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;"><strong>1步</strong></td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">直接判断二次根式是否有意义</td>
+    </tr>
+    <tr style="background: #f9fafb;">
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">pythagoras</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">a=6, b=8, 求斜边c</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;"><strong>2步</strong></td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">
+        步骤1: 求 c² = a² + b² = 100<br>
+        步骤2: 求 c = √c² = 10
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">quadrilateral_perimeter</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">正方形边长为4，求周长</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;"><strong>2步</strong></td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">
+        步骤1: 确认公式系数（周长/边长）<br>
+        步骤2: 计算周长 = 4 × 4 = 16
+      </td>
+    </tr>
+    <tr style="background: #f9fafb;">
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">trapezoid_property</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">等腰梯形，上底6，下底8，腰5</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;"><strong>2步</strong></td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">
+        步骤1: 确认公式（周长 = 上底 + 下底 + 2×腰）<br>
+        步骤2: 计算周长 = 6 + 8 + 2×5 = 24
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+---
+
+<h2>二、Bug 分析与修复</h2>
+
+<h3>Bug 1 & 2: 重复键盘 + 选择题状态同步</h3>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
+  <div style="padding: 16px; background: #fef2f2; border-radius: 12px;">
+    <p style="font-weight: 700; color: #dc2626; margin-bottom: 8px;">❌ 当前问题</p>
+    <ul style="margin: 0; padding-left: 20px; font-size: 14px; color: #374151;">
+      <li>NumberInput 内置键盘 + 底部键盘同时显示</li>
+      <li>选择题点击后自动提交，时序问题</li>
+    </ul>
+  </div>
+  <div style="padding: 16px; background: #f0fdf4; border-radius: 12px;">
+    <p style="font-weight: 700; color: #166534; margin-bottom: 8px;">✅ 修复目标</p>
+    <ul style="margin: 0; padding-left: 20px; font-size: 14px; color: #374151;">
+      <li>统一使用底部共享键盘</li>
+      <li>选择题选择后显示确认按钮，点击后提交</li>
+    </ul>
+  </div>
+</div>
+
+<h3>Bug 3: 步骤数显示错误（核心问题）</h3>
+
+<div style="padding: 20px; background: #eff6ff; border-radius: 12px; border: 2px solid #3b82f6; margin: 16px 0;">
+  <p style="font-weight: 700; color: #1d4ed8; margin-bottom: 12px;">🔴 根因分析</p>
+
+  <p style="color: #374151; margin-bottom: 12px;">用户看到的"三步"问题，根因可能是：</p>
+
+  <ol style="margin: 0; padding-left: 20px; font-size: 14px; color: #374151;">
+    <li style="margin-bottom: 8px;"><strong>模板选择错误</strong>：知识点可能映射到了错误的模板<br>
+      <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 12px;">"勾股定理" → pythagoras_folding（3步）而不是 pythagoras（2步）</code></li>
+    <li style="margin-bottom: 8px;"><strong>模板实现与设计不一致</strong>：模板代码返回的步骤数与设计文档不符</li>
+    <li style="margin-bottom: 8px;"><strong>硬编码 fallback</strong>：`currentQuestion?.steps?.length || 3`</li>
+  </ol>
+
+  <div style="margin-top: 16px; padding: 12px; background: white; border-radius: 8px;">
+    <p style="font-size: 13px; color: #6b7280; margin-bottom: 8px;">用户实际体验：</p>
+    <p style="font-family: monospace; font-size: 13px; color: #374151; margin: 0;">
+      "直角三角形 a=6, b=8，要求三步：第一步100，第二步10，第三步10"<br>
+      <span style="color: #dc2626;">❓ 为什么第三步答案和第二步一样？这不符合数学逻辑</span>
+    </p>
+  </div>
+</div>
+
+<h4>修复方案：确保模板步骤数与设计一致</h4>
+
+<pre style="background: #1f2937; color: #e5e7eb; padding: 16px; border-radius: 12px; font-size: 13px; overflow-x: auto;">
+// lib/question-engine/templates/pythagoras.ts
+buildSteps: (params): StepProtocolV2[] => {
+  // 确保只有 2 步：第一步 c²，第二步 c
+  return [
+    { stepId: 's1', answerMode: AnswerMode.NUMBER, /* ... */ },
+    { stepId: 's2', answerMode: AnswerMode.NUMBER, /* ... */ },
+  ];
+}
+</pre>
+
+<h3>Bug 4: undefined 变量</h3>
+
+<div style="background: #fef2f2; padding: 16px; border-radius: 12px; margin: 16px 0;">
+  <p style="font-weight: 700; color: #dc2626; margin-bottom: 8px;">问题示例</p>
+  <p style="font-family: monospace; font-size: 14px; color: #374151; margin: 0;">
+    "等腰梯形上底为6，下底为8，腰长为<strong style="color: #dc2626;">undefined</strong>，求周长"
+  </p>
+</div>
+
+<p><strong>根因</strong>：模板中直接使用 `${params.leg}` 而没有默认值检查</p>
+
+<pre style="background: #1f2937; color: #e5e7eb; padding: 16px; border-radius: 12px; font-size: 13px; overflow-x: auto;">
+// lib/question-engine/templates/chapter18/trapezoid_property.ts
+
+// ❌ 错误：直接插值，无校验
+title: `等腰梯形...腰长为${params.leg}，求周长`
+
+// ✅ 正确：使用空值合并运算符
+title: `等腰梯形...腰长为${params.leg ?? '未知'}，求周长`
+
+// 或在 API 层添加参数校验
+</pre>
+
+---
+
+<h2>三、实施计划</h2>
+
+<table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+  <thead>
+    <tr style="background: #f3f4f6;">
+      <th style="padding: 12px; text-align: left; border: 1px solid #e5e7eb;">优先级</th>
+      <th style="padding: 12px; text-align: left; border: 1px solid #e5e7eb;">Bug</th>
+      <th style="padding: 12px; text-align: left; border: 1px solid #e5e7eb;">工作内容</th>
+      <th style="padding: 12px; text-align: left; border: 1px solid #e5e7eb;">文件</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="padding: 12px; border: 1px solid #e5e7eb; background: #fef2f2;"><strong>P0</strong></td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">Bug 3</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">验证所有模板步骤数与设计文档一致</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">所有 template/*.ts</td>
+    </tr>
+    <tr style="background: #f9fafb;">
+      <td style="padding: 12px; border: 1px solid #e5e7eb;"><strong>P0</strong></td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">Bug 1, 2</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">移除 NumberInput 内置键盘，修复选择题状态</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">NumberInput.tsx, ExercisePage.tsx</td>
+    </tr>
+    <tr>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;"><strong>P1</strong></td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">Bug 4</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">添加模板参数校验</td>
+      <td style="padding: 12px; border: 1px solid #e5e7eb;">trapezoid_property.ts, index.ts</td>
+    </tr>
+  </tbody>
+</table>
+
+---
+
+<h2>四、验证方法</h2>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
+  <div style="padding: 16px; background: #f3f4f6; border-radius: 12px;">
+    <p style="font-weight: 700; margin-bottom: 12px;">✅ 正确场景</p>
+    <ul style="margin: 0; padding-left: 20px; font-size: 14px;">
+      <li>√6 有意义 → 显示"第 1 步 / 共 <strong>1</strong> 步"</li>
+      <li>a=6, b=8 → 显示"第 1 步 / 共 <strong>2</strong> 步"</li>
+      <li>正方形边长4 → 显示"第 1 步 / 共 <strong>2</strong> 步"</li>
+    </ul>
+  </div>
+  <div style="padding: 16px; background: #fef2f2; border-radius: 12px;">
+    <p style="font-weight: 700; color: #dc2626; margin-bottom: 12px;">❌ 错误场景（需修复）</p>
+    <ul style="margin: 0; padding-left: 20px; font-size: 14px; color: #dc2626;">
+      <li>显示"共 3 步"（应该是 2 步）</li>
+      <li>出现 "undefined" 字样</li>
+      <li>有两个键盘同时显示</li>
+    </ul>
+  </div>
+</div>
+
+---
+
+<h2>五、关键文件</h2>
+
+<pre style="background: #1f2937; color: #e5e7eb; padding: 16px; border-radius: 12px; font-size: 12px;">
+components/
+├── ExercisePage.tsx                 # 主练习页面
+├── ExercisePage/
+│   ├── v2-inputs/
+│   │   ├── NumberInput.tsx         # 需移除内置键盘
+│   │   ├── YesNoInput.tsx           # 需修复自动提交
+│   │   └── ChoiceInput.tsx          # 需修复自动提交
+
+lib/question-engine/
+├── templates/
+│   ├── pythagoras.ts                # 2步（设计规范）
+│   ├── quadrilateral_perimeter.ts  # 2步（设计规范）
+│   ├── chapter18/
+│   │   ├── trapezoid_property.ts    # 需修复 undefined
+│   │   └── ...
+
+// 设计规范参考
+docs/superpowers/specs/2026-04-25-grade8-math-knowledge-system-design.md
+</pre>

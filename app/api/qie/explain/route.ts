@@ -8,6 +8,11 @@ export async function GET(req: NextRequest) {
   const studentId = searchParams.get('studentId');
   const questionId = searchParams.get('questionId');
 
+  // Load student state from database if exists
+  if (studentId) {
+    await uok.loadStudentState(studentId);
+  }
+
   const target: { studentId?: string; questionId?: string } = {};
   if (studentId) target.studentId = studentId;
   if (questionId) target.questionId = questionId;

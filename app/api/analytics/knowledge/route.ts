@@ -92,6 +92,7 @@ export async function GET(req: NextRequest) {
           }
 
           // 获取该知识点最近练习记录
+          // 注意：attemptStep 没有直接关联 knowledgePoint，需要通过 answerRecords 间接获取
           const recentSteps = await prisma.attemptStep.findMany({
             where: {
               attempt: {

@@ -55,8 +55,8 @@ function generateDataSet(level: number, count: number): Record<string, number> {
       value = Math.floor(Math.random() * (valueConstraint.max - valueConstraint.min + 1)) + valueConstraint.min;
     } else {
       value = Math.random() * (valueConstraint.max - valueConstraint.min) + valueConstraint.min;
-      // 保留一位小数
-      value = Math.round(value * 10) / 10;
+      // 保留两位小数
+      value = Math.round(value * 100) / 100;
     }
 
     params[`v${i + 1}`] = value;
@@ -81,7 +81,7 @@ function generateModeDataSet(level: number, count: number): Record<string, numbe
     mode = Math.floor(Math.random() * (valueConstraint.max - valueConstraint.min + 1)) + valueConstraint.min;
   } else {
     mode = Math.random() * (valueConstraint.max - valueConstraint.min) + valueConstraint.min;
-    mode = Math.round(mode * 10) / 10;
+    mode = Math.round(mode * 100) / 100;
   }
 
   // 计算众数出现次数（至少出现3次，或至少占总数的30%）
@@ -105,7 +105,7 @@ function generateModeDataSet(level: number, count: number): Record<string, numbe
         otherValue = Math.floor(Math.random() * (valueConstraint.max - valueConstraint.min + 1)) + valueConstraint.min;
       } else {
         otherValue = Math.random() * (valueConstraint.max - valueConstraint.min) + valueConstraint.min;
-        otherValue = Math.round(otherValue * 10) / 10;
+        otherValue = Math.round(otherValue * 100) / 100;
       }
       attempts++;
     } while (otherValue === mode && attempts < 100);

@@ -4,10 +4,8 @@
  * 学生化简√(a²)为|a|，考虑a的正负
  */
 
-import {
-  QuestionTemplate,
-  StepType,
-} from '../../protocol';
+import { QuestionTemplate } from '../../protocol';
+import { AnswerMode, StepProtocolV2 } from '../../protocol-v2';
 import {
   DIFFICULTY_CONFIG,
   generateRandomParams,
@@ -184,7 +182,7 @@ export const SqrtPropertyTemplate: QuestionTemplate = {
     return params;
   },
 
-  buildSteps: (params) => {
+  buildSteps: (params): StepProtocolV2[] => {
     const propertyType: PropertyType =
       params.propertyType === 1 ? 'var_square' :
       params.propertyType === 2 ? 'expr_square' :
@@ -206,16 +204,13 @@ export const SqrtPropertyTemplate: QuestionTemplate = {
     return [
       {
         stepId: 's1',
-        type: StepType.SQRT_PROPERTY,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0,
+        answerMode: AnswerMode.NUMBER,
         ui: {
           instruction,
-          inputTarget: '化简后的值',
-          inputHint: '输入化简后的数值（绝对值）',
+          hint: `使用√(a²)=|a|性质，输入化简后的数值（绝对值）`,
         },
+        expectedAnswer: { type: 'number', value: absValue },
+        keyboard: { type: 'numeric' },
       },
     ];
   },

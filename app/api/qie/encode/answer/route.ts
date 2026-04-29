@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { UOK } from '@/lib/qie';
 
-// Use the same singleton
+// Singleton UOK instance with persistence
 const uok = new UOK();
 
 export async function POST(req: NextRequest) {
@@ -15,10 +15,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Load student state from database if exists
+    await uok.loadStudentState(body.studentId);
+
+    // Encode answer (triggers ML learning)
     const probability = uok.encodeAnswer(body.studentId, body.questionId, body.correct);
 
-    return NextResponse.json({ ok: true, probability });
+    // Persist student state after learning
+    await uok.saveStudentState(body.studentId);
+
+    // Get updated transfer weights for debugging
+    const weights = uok.getComplexityTransferWeights();
+
+    return NextResponse.json({
+      ok: true,
+      probability,
+      transferWeights: weights,
+    });
   } catch (error) {
+    console.error('encode/answer error:', error);
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import {
   calculateEquivalentScore,
   getKnowledgeLevel,
@@ -64,32 +65,7 @@ export async function POST(req: NextRequest) {
 
     const questionStepMap = new Map(questionSteps.map(s => [s.id, s]));
 
-    // 构建答题记录
-    const answerRecords = attemptSteps.map(step => {
-      const questionStep = step.questionStepId ? questionStepMap.get(step.questionStepId) : null;
-      let knowledgePoints: string[] = [];
-      try {
-        if (questionStep?.question?.knowledgePoints) {
-          knowledgePoints = JSON.parse(questionStep.question.knowledgePoints);
-        }
-      } catch (e) {}
-      return {
-        knowledgePoint: knowledgePoints[0] || '综合',
-        isCorrect: step.isCorrect,
-        duration: step.duration,
-      };
-    });
-
-    // 获取用户信息用于分层指导
-    const userInfo = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        grade: true,
-        targetScore: true,
-      },
-    });
-
-    // 获取参与测评的知识点（按用户教材过滤）
+    // 获取参与测评的知识点（按用户教材过滤）- 需要在构建答题记录前获取
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { selectedTextbookId: true },
@@ -114,6 +90,51 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // 构建答题记录
+    // 修复：如果一道题覆盖多个知识点，答题结果计入所有相关知识点
+    // 注意：题目中存储的是知识点名称，需要映射到 ID
+    const answerRecords: Array<{ knowledgePointId: string; knowledgePointName: string; isCorrect: boolean; duration?: number }> = [];
+    for (const step of attemptSteps) {
+      const questionStep = step.questionStepId ? questionStepMap.get(step.questionStepId) : null;
+      let knowledgePointNames: string[] = [];
+      try {
+        if (questionStep?.question?.knowledgePoints) {
+          knowledgePointNames = JSON.parse(questionStep.question.knowledgePoints);
+        }
+      } catch (e) {}
+
+      // 如果有知识点，将答题结果计入每个知识点
+      if (knowledgePointNames.length > 0) {
+        for (const kpName of knowledgePointNames) {
+          // 查找对应的知识点 ID
+          const kpInfo = knowledgePoints.find(kp => kp.name === kpName);
+          answerRecords.push({
+            knowledgePointId: kpInfo?.id ?? kpName,
+            knowledgePointName: kpName,
+            isCorrect: step.isCorrect,
+            duration: step.duration,
+          });
+        }
+      } else {
+        // 没有知识点则计入"综合"
+        answerRecords.push({
+          knowledgePointId: 'general',
+          knowledgePointName: '综合',
+          isCorrect: step.isCorrect,
+          duration: step.duration,
+        });
+      }
+    }
+
+    // 获取用户信息用于分层指导
+    const userInfo = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        grade: true,
+        targetScore: true,
+      },
+    });
+
     // Build name -> id map for UserKnowledge creation
     const kpNameToId = new Map(knowledgePoints.map(kp => [kp.name, kp.id]));
 
@@ -121,7 +142,10 @@ export async function POST(req: NextRequest) {
     const scoreResult = calculateEquivalentScore(answerRecords, knowledgePoints);
 
     // 计算推荐难度
-    const avgLevel = Object.values(scoreResult.knowledgeLevels).reduce((a, b) => a + b, 0) / Object.keys(scoreResult.knowledgeLevels).length || 0;
+    const totalLevel = Object.values(scoreResult.knowledgeLevels).reduce((a, b) => a + b.level, 0);
+    const avgLevel = Object.keys(scoreResult.knowledgeLevels).length > 0
+      ? totalLevel / Object.keys(scoreResult.knowledgeLevels).length
+      : 0;
     const { difficultyMultiplier: recommendedDifficulty } = getRecommendedDifficulty(avgLevel);
 
     // 使用事务包裹所有数据库操作
@@ -143,7 +167,7 @@ export async function POST(req: NextRequest) {
           score: scoreResult.score,
           scoreRangeLow: scoreResult.range[0],
           scoreRangeHigh: scoreResult.range[1],
-          knowledgeData: scoreResult.knowledgeLevels,
+          knowledgeData: scoreResult.knowledgeLevels as unknown as Prisma.InputJsonValue,
         },
       });
 
@@ -159,11 +183,15 @@ export async function POST(req: NextRequest) {
       });
 
       // 初始化UserKnowledge记录
-      for (const [kpName, level] of Object.entries(scoreResult.knowledgeLevels)) {
-        const kpId = kpNameToId.get(kpName);
-        if (!kpId) continue; // Skip if knowledge point not found
+      // 只处理用户当前教材中存在的知识点（避免外键约束错误）
+      const validKnowledgePointIds = new Set(knowledgePoints.map(kp => kp.id));
+      for (const [kpId, kpData] of Object.entries(scoreResult.knowledgeLevels)) {
+        // 跳过不在用户当前教材中的知识点
+        if (!validKnowledgePointIds.has(kpId)) {
+          continue;
+        }
 
-        const kpAnswers = answerRecords.filter(a => a.knowledgePoint === kpName);
+        const kpAnswers = answerRecords.filter(a => a.knowledgePointId === kpId);
         const correctCount = kpAnswers.filter(a => a.isCorrect).length;
         const mastery = kpAnswers.length > 0 ? correctCount / kpAnswers.length : 0;
 
@@ -191,15 +219,21 @@ export async function POST(req: NextRequest) {
       return assessment.id;
     });
 
-    // 获取薄弱知识点
-    const weakKnowledgePoints = Object.entries(scoreResult.knowledgeLevels)
-      .filter(([, level]) => level <= 1)
-      .map(([name]) => name);
+    // 获取薄弱知识点（level <= 1）
+    const weakKnowledgePoints = Object.values(scoreResult.knowledgeLevels)
+      .filter(data => data.level <= 1)
+      .map(data => data.name);
 
-    // 获取掌握的知识点
-    const masteredKnowledgePoints = Object.entries(scoreResult.knowledgeLevels)
-      .filter(([, level]) => level >= 3)
-      .map(([name]) => name);
+    // 获取掌握的知识点（level >= 3）
+    const masteredKnowledgePoints = Object.values(scoreResult.knowledgeLevels)
+      .filter(data => data.level >= 3)
+      .map(data => data.name);
+
+    // 获取未测试的知识点（系统有但测评没测到的）
+    const testedKpIds = new Set(Object.keys(scoreResult.knowledgeLevels));
+    const untestedKnowledgePoints = knowledgePoints
+      .filter(kp => !testedKpIds.has(kp.id))
+      .map(kp => kp.name);
 
     // 生成个性化指导
     const userGrade = userInfo?.grade || 7;
@@ -223,12 +257,13 @@ export async function POST(req: NextRequest) {
         rangeLow: scoreResult.range[0],
         rangeHigh: scoreResult.range[1],
         knowledgeLevels: Object.fromEntries(
-          Object.entries(scoreResult.knowledgeLevels).map(([name, level]) => [name, getLevelName(level)])
+          Object.entries(scoreResult.knowledgeLevels).map(([id, data]) => [data.name, getLevelName(data.level)])
         ),
         knowledgeData: scoreResult.knowledgeLevels,
         recommendedDifficulty,
         weakKnowledgePoints,
         masteredKnowledgePoints,
+        untestedKnowledgePoints,  // 新增：未测试的知识点
         // 新增：分层指导
         guidance: {
           level: guidance.level,

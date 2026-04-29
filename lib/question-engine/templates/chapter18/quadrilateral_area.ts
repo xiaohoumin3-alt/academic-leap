@@ -4,10 +4,8 @@
  * 公式：平行四边形/矩形=底×高，菱形=对角线积/2，正方形=边²
  */
 
-import {
-  QuestionTemplate,
-  StepType,
-} from '../../protocol';
+import { QuestionTemplate } from '../../protocol';
+import { AnswerMode, StepProtocolV2 } from '../../protocol-v2';
 import {
   DIFFICULTY_CONFIG,
   generateRandomParams,
@@ -29,16 +27,18 @@ function generateQuadrilateralAreaParams(level: number): Record<string, number> 
   params.level = level;
 
   // 确定四边形类型
+  // 注意：types数组顺序必须与buildSteps中的typeIndex检查顺序一致
+  // typeIndex 1=rectangle, 2=square, 3=parallelogram, 4=rhombus
   let types: QuadrilateralType[];
   if (level <= 2) {
     // 基础：矩形和正方形
     types = ['rectangle', 'square'];
   } else if (level <= 4) {
     // 中等：增加平行四边形
-    types = ['parallelogram', 'rectangle', 'square'];
+    types = ['rectangle', 'square', 'parallelogram'];
   } else {
     // 高级：全部类型
-    types = ['parallelogram', 'rectangle', 'rhombus', 'square'];
+    types = ['rectangle', 'square', 'parallelogram', 'rhombus'];
   }
 
   const typeIndex = Math.floor(Math.random() * types.length);
@@ -89,7 +89,7 @@ export const QuadrilateralAreaTemplate: QuestionTemplate = {
     return generateQuadrilateralAreaParams(level);
   },
 
-  buildSteps: (params) => {
+  buildSteps: (params): StepProtocolV2[] => {
     const typeIndex = params.typeIndex as number;
 
     // 矩形
@@ -101,29 +101,23 @@ export const QuadrilateralAreaTemplate: QuestionTemplate = {
       return [
         {
           stepId: 's1',
-          type: StepType.COMPUTE_RECT_PROPERTY,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '应用矩形面积公式',
-            inputTarget: '长 × 宽',
-            inputHint: `矩形面积 = 长 × 宽 = ${length} × ${width} = ?`,
+            hint: `矩形面积 = 长 × 宽 = ${length} × ${width}`,
           },
+          expectedAnswer: { type: 'number', value: area },
+          keyboard: { type: 'numeric' },
         },
         {
           stepId: 's2',
-          type: StepType.COMPUTE_RECT_PROPERTY,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
-            instruction: '得出矩形面积',
-            inputTarget: '矩形面积',
-            inputHint: `面积 = ${area}`,
+            instruction: '确认矩形面积',
+            hint: `面积 = ${area}`,
           },
+          expectedAnswer: { type: 'number', value: area },
+          keyboard: { type: 'numeric' },
         },
       ];
     }
@@ -136,29 +130,23 @@ export const QuadrilateralAreaTemplate: QuestionTemplate = {
       return [
         {
           stepId: 's1',
-          type: StepType.COMPUTE_SQUARE_PROPERTY,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '应用正方形面积公式',
-            inputTarget: '边长的平方',
-            inputHint: `正方形面积 = 边长² = ${side}² = ?`,
+            hint: `正方形面积 = 边长² = ${side}²`,
           },
+          expectedAnswer: { type: 'number', value: area },
+          keyboard: { type: 'numeric' },
         },
         {
           stepId: 's2',
-          type: StepType.COMPUTE_SQUARE_PROPERTY,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
-            instruction: '得出正方形面积',
-            inputTarget: '正方形面积',
-            inputHint: `面积 = ${area}`,
+            instruction: '确认正方形面积',
+            hint: `面积 = ${area}`,
           },
+          expectedAnswer: { type: 'number', value: area },
+          keyboard: { type: 'numeric' },
         },
       ];
     }
@@ -172,29 +160,23 @@ export const QuadrilateralAreaTemplate: QuestionTemplate = {
       return [
         {
           stepId: 's1',
-          type: StepType.VERIFY_PARALLELOGRAM,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '应用平行四边形面积公式',
-            inputTarget: '底 × 高',
-            inputHint: `平行四边形面积 = 底 × 高 = ${base} × ${height} = ?`,
+            hint: `平行四边形面积 = 底 × 高 = ${base} × ${height}`,
           },
+          expectedAnswer: { type: 'number', value: area },
+          keyboard: { type: 'numeric' },
         },
         {
           stepId: 's2',
-          type: StepType.VERIFY_PARALLELOGRAM,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
-            instruction: '得出平行四边形面积',
-            inputTarget: '平行四边形面积',
-            inputHint: `面积 = ${area}`,
+            instruction: '确认平行四边形面积',
+            hint: `面积 = ${area}`,
           },
+          expectedAnswer: { type: 'number', value: area },
+          keyboard: { type: 'numeric' },
         },
       ];
     }
@@ -208,29 +190,23 @@ export const QuadrilateralAreaTemplate: QuestionTemplate = {
       return [
         {
           stepId: 's1',
-          type: StepType.COMPUTE_RHOMBUS_PROPERTY,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '应用菱形面积公式',
-            inputTarget: '对角线之积的一半',
-            inputHint: `菱形面积 = (对角线1 × 对角线2) ÷ 2 = (${diagonal1} × ${diagonal2}) ÷ 2`,
+            hint: `菱形面积 = (对角线1 × 对角线2) ÷ 2 = (${diagonal1} × ${diagonal2}) ÷ 2`,
           },
+          expectedAnswer: { type: 'number', value: area },
+          keyboard: { type: 'numeric' },
         },
         {
           stepId: 's2',
-          type: StepType.COMPUTE_RHOMBUS_PROPERTY,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
-            instruction: '得出菱形面积',
-            inputTarget: '菱形面积',
-            inputHint: `面积 = ${area}`,
+            instruction: '确认菱形面积',
+            hint: `面积 = ${area}`,
           },
+          expectedAnswer: { type: 'number', value: area },
+          keyboard: { type: 'numeric' },
         },
       ];
     }

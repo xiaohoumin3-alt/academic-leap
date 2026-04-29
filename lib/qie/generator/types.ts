@@ -22,7 +22,17 @@ export type ExprAST =
   | { type: 'mul'; left: ExprAST; right: ExprAST }
   | { type: 'div'; left: ExprAST; right: ExprAST }
   | { type: 'neg'; expr: ExprAST }
-  | { type: 'group'; expr: ExprAST };
+  | { type: 'group'; expr: ExprAST }
+  // 扩展类型用于 ASTEngine
+  | { type: 'linear_simple'; params: { a: number; b: number } }
+  | { type: 'linear_both_sides'; params: { a: number; b: number; c: number; d: number } }
+  | { type: 'linear_nested'; params: { a: number; b: number; c: number } }
+  | { type: 'linear_double_nested'; params: { a: number; b: number; c: number; d: number } }
+  | { type: 'nested'; depth: number; layers: number[]; params: Record<string, number> }
+  | { type: 'multi_equation'; depth: number; equations: Array<{ coeffs: Record<string, number>; rhs: number }> }
+  | { type: 'constraint_chain'; depth: number; operations: Array<{ op: string; value: number }> }
+  | { type: 'irrelevant'; level: number }  // DISTRACTION marker
+  | { type: 'unknown'; [key: string]: unknown };
 
 /**
  * 题目模板
@@ -33,6 +43,8 @@ export interface QuestionTemplate {
   params: ParamSpec;
   constraint?: string;
   hint?: string;
+  transforms?: string[];
+  perturbations?: string[];
 }
 
 export interface ParamSpec {
@@ -47,14 +59,15 @@ export interface GeneratedQuestionData {
   template?: string;
   params: Record<string, number>;
   spec: ComplexitySpec;
+  answer?: string;
 }
 
 /**
  * 渲染输入
  */
 export type RenderInput =
-  | { type: 'ast'; ast: ExprAST; spec: ComplexitySpec }
-  | { type: 'template'; template: string; params: Record<string, number>; spec: ComplexitySpec };
+  | { type: 'ast'; ast: ExprAST; params: Record<string, number>; spec?: ComplexitySpec }
+  | { type: 'template'; template: string; params: Record<string, number>; spec?: ComplexitySpec };
 
 /**
  * 验证函数

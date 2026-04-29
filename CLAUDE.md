@@ -1,65 +1,187 @@
-# CLAUDE.md
+# CLAUDE.md - 学力跃迁项目指南
 
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
-
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
-
-## 1. Think Before Coding
-
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
-
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
-
-## 2. Simplicity First
-
-**Minimum code that solves the problem. Nothing speculative.**
-
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
-
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
-
-## 3. Surgical Changes
-
-**Touch only what you must. Clean up only your own mess.**
-
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
-
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
-
-The test: Every changed line should trace directly to the user's request.
-
-## 4. Goal-Driven Execution
-
-**Define success criteria. Loop until verified.**
-
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+## 项目概述
+Next.js + Supabase + Prisma + Gemini AI 的数学练习平台
 
 ---
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+## ✅ 收敛系统 v1.0 验收标准（可交付版本）
+
+### 三个核心指标（删掉所有理论，只保留可测量）
+
+#### ① 数据链完整度（Data Flow Integrity, DFI）
+
+**衡量**：题目 → 作答 → 诊断 → 推荐 是否全链路可追踪
+
+**定义**：每一次学习事件必须有唯一ID贯穿全流程
+
+**计算**：
+```
+DFI = trace_complete_events / total_events
+```
+
+**目标**：`DFI ≥ 0.99`
+
+---
+
+#### ② 预测有效性（Learning Effectiveness, LE）
+
+**衡量**：系统推荐/诊断是否真的"带来学习提升"
+
+**定义**：学生在推荐后同类题正确率是否提升
+
+**计算**：
+```
+LE = avg(post_accuracy - pre_accuracy)
+
+或更稳一点：
+LE = P(correct | after_recommendation) - P(correct | before)
+```
+
+**目标**：`LE > 0.15`（至少提升15%）
+
+---
+
+#### ③ 稳定收敛性（Convergence Stability, CS）
+
+**衡量**：系统输出是否稳定（不乱跳、不漂移）
+
+**定义**：同一知识点在多次评估中的推荐差异
+
+**计算**：
+```
+CS = 1 - variance(recommendation_distribution)
+
+或：
+CS = similarity(top_k_recommendations across runs)
+```
+
+**目标**：`CS ≥ 0.85`
+
+---
+
+### 收敛公式（系统是否"完成"）
+
+```
+Converged =
+  (DFI ≥ 0.99)
+  AND (LE ≥ 0.15)
+  AND (CS ≥ 0.85)
+```
+
+👉 **人话解释**：数据是通的 + 学生真的变好了 + 系统不乱变 = 才算系统收敛
+
+---
+
+### CI 门禁（工程化核心）
+
+**Pre-merge / Pre-deploy Gate**
+
+```yaml
+CI_GATES:
+  data_integrity:
+    rule: DFI >= 0.99
+    block_on_fail: true
+
+  learning_gain:
+    rule: LE >= 0.15
+    window: last_100_sessions
+    block_on_fail: true
+
+  stability_check:
+    rule: CS >= 0.85
+    runs: 5_seeds
+    block_on_fail: true
+```
+
+| 阶段   | 是否阻断 |
+|--------|----------|
+| commit | ❌       |
+| merge  | ✅       |
+| deploy | ✅       |
+
+🚫 **CI失败直接阻断 merge 和 deploy**
+
+---
+
+## 技术栈
+
+- **Frontend**: Next.js 15, React 19, Tailwind, Framer Motion
+- **Backend**: Next.js API Routes, Prisma ORM
+- **Auth**: NextAuth.js v5 (beta)
+- **AI**: Gemini API
+- **DB**: PostgreSQL (Supabase)
+- **Testing**: Playwright (E2E), Jest (unit)
+
+---
+
+## 开发工作流
+
+### TDD 流程
+1. 写测试（RED）
+2. 实现功能（GREEN）
+3. 重构（IMPROVE）
+4. 验证覆盖率
+
+### Pre-commit 检查
+```bash
+pnpm tsc --noEmit  # 类型检查
+pnpm lint           # 代码规范
+```
+
+### Pre-merge 检查
+```bash
+pnpm build          # 构建检查
+pnpm test           # 单元测试
+pnpm test:e2e       # E2E测试
+```
+
+### CI 门禁验证
+```bash
+# 数据链完整度测试
+pnpm test:data-integrity
+
+# 预测有效性测试
+pnpm test:learning-effectiveness
+
+# 稳定收敛性测试
+pnpm test:stability
+```
+
+---
+
+## 数据模型关键约定
+
+### 学习事件追踪
+- 每次 `Attempt` 必须有唯一 `eventId`
+- `AttemptStep` 必须关联父 `eventId`
+- AI 诊断结果必须关联 `eventId`
+
+### 推荐系统
+- 推荐必须记录 `preAccuracy` 和 `postAccuracy`
+- 同一知识点的多次推荐需要计算方差
+- Top-K 推荐需要持久化用于相似度计算
+
+---
+
+## 行为指南（通用）
+
+### 1. Think Before Coding
+- 状态假设明确说明。不确定就问。
+- 多种解释存在时，列出来——不要默默选。
+- 存在更简单的方式，说出来。该推就推。
+
+### 2. Simplicity First
+- 不做需求外的功能
+- 不为单次用代码抽象
+- 不做未被请求的"灵活性"
+- 不为不可能场景处理错误
+
+### 3. Surgical Changes
+- 只改必须改的
+- 不"改进"相邻代码
+- 匹配现有风格
+
+### 4. Goal-Driven Execution
+- 定义成功标准
+- 循环直到验证

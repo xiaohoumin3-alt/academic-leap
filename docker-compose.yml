@@ -1,43 +1,95 @@
+# v1.0 Production Architecture - Docker Compose
 version: '3.8'
 
 services:
+  # ============================================================
+  # Core Infrastructure
+  # ============================================================
+
   postgres:
-    image: postgres:16-alpine
-    container_name: academic_leap_db
-    restart: unless-stopped
+    image: postgres:15-alpine
+    container_name: academic-leap-db
     environment:
-      POSTGRES_USER: academic_leap
-      POSTGRES_PASSWORD: academic_leap_password
-      POSTGRES_DB: academic_leap
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      POSTGRES_USER: ${POSTGRES_USER:-academicleap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: academicleap
     ports:
       - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U academic_leap"]
+      test: ["CMD-SHELL", "pg_isready -U academicleap"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - backend
 
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: academic_leap_app
-    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    container_name: academic-leap-cache
     ports:
-      - "3000:3000"
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  # ============================================================
+  # Prediction Service (Layer 1 - Core)
+  # ============================================================
+
+  prediction-service:
+    build:
+      context: ./apps/prediction-service
+      dockerfile: Dockerfile
+    container_name: academic-leap-prediction
+    ports:
+      - "3001:3001"
     environment:
-      DATABASE_URL: postgresql://academic_leap:academic_leap_password@postgres:5432/academic_leap?schema=public
-      NEXTAUTH_URL: http://localhost:3000
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change-this-in-production}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      APP_URL: http://localhost:3000
       NODE_ENV: production
+      PORT: 3001
+      REDIS_URL: redis://redis:6379
     depends_on:
-      postgres:
-        condition: service_healthy
-    command: sh -c "npx prisma migrate deploy && node server.js"
+      - redis
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - backend
+    deploy:
+      replicas: 2
+
+  # ============================================================
+  # Research Sandbox (Isolated - Not for Production)
+  # ============================================================
+
+  research-sandbox:
+    image: python:3.11-slim
+    container_name: academic-leap-research
+    working_dir: /workspace
+    volumes:
+      - ./validation:/workspace/validation
+      - ./research:/workspace/research
+    networks:
+      - research
+    profiles:
+      - research
 
 volumes:
   postgres_data:
+  redis_data:
+
+networks:
+  backend:
+    driver: bridge
+  research:
+    driver: bridge
+    internal: true

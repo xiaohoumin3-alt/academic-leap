@@ -4,10 +4,8 @@
  * 公式：平行四边形/矩形=2(a+b)，菱形/正方形=4a
  */
 
-import {
-  QuestionTemplate,
-  StepType,
-} from '../../protocol';
+import { QuestionTemplate } from '../../protocol';
+import { AnswerMode, StepProtocolV2 } from '../../protocol-v2';
 import {
   DIFFICULTY_CONFIG,
   generateRandomParams,
@@ -28,16 +26,18 @@ function generateQuadrilateralPerimeterParams(level: number): Record<string, num
   const params = generateRandomParams(config);
 
   // 确定四边形类型（根据难度增加类型多样性）
+  // 注意：types数组顺序必须与buildSteps中的typeIndex检查顺序一致
+  // typeIndex 1=rectangle, 2=square, 3=parallelogram, 4=rhombus
   let types: QuadrilateralType[];
   if (level <= 2) {
     // 基础：矩形和正方形（最简单）
     types = ['rectangle', 'square'];
   } else if (level <= 4) {
     // 中等：增加平行四边形
-    types = ['parallelogram', 'rectangle', 'square'];
+    types = ['rectangle', 'square', 'parallelogram'];
   } else {
     // 高级：全部类型
-    types = ['parallelogram', 'rectangle', 'rhombus', 'square'];
+    types = ['rectangle', 'square', 'parallelogram', 'rhombus'];
   }
 
   const typeIndex = Math.floor(Math.random() * types.length);
@@ -88,9 +88,8 @@ export const QuadrilateralPerimeterTemplate: QuestionTemplate = {
     return generateQuadrilateralPerimeterParams(level);
   },
 
-  buildSteps: (params) => {
+  buildSteps: (params): StepProtocolV2[] => {
     const typeIndex = params.typeIndex as number;
-    const level = params.level || 1;
 
     // 矩形
     if (typeIndex === 1) {
@@ -101,29 +100,23 @@ export const QuadrilateralPerimeterTemplate: QuestionTemplate = {
       return [
         {
           stepId: 's1',
-          type: StepType.COMPUTE_RECT_PROPERTY,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '应用矩形周长公式',
-            inputTarget: '长 + 宽 的值',
-            inputHint: `矩形周长 = 2 × (长 + 宽)，先算 ${length} + ${width} = ?`,
+            hint: `矩形周长 = 2 × (长 + 宽)，先算 ${length} + ${width} = ?`,
           },
+          expectedAnswer: { type: 'number', value: length + width },
+          keyboard: { type: 'numeric' },
         },
         {
           stepId: 's2',
-          type: StepType.COMPUTE_RECT_PROPERTY,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '计算矩形周长',
-            inputTarget: '矩形周长',
-            inputHint: `周长 = 2 × ${length + width} = ${perimeter}`,
+            hint: `周长 = 2 × ${length + width}`,
           },
+          expectedAnswer: { type: 'number', value: perimeter },
+          keyboard: { type: 'numeric' },
         },
       ];
     }
@@ -136,29 +129,23 @@ export const QuadrilateralPerimeterTemplate: QuestionTemplate = {
       return [
         {
           stepId: 's1',
-          type: StepType.COMPUTE_SQUARE_PROPERTY,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '应用正方形周长公式',
-            inputTarget: '周长系数',
-            inputHint: '正方形周长 = 4 × 边长，系数是？',
+            hint: '正方形周长 = 4 × 边长，系数是？',
           },
+          expectedAnswer: { type: 'number', value: 4 },
+          keyboard: { type: 'numeric' },
         },
         {
           stepId: 's2',
-          type: StepType.COMPUTE_SQUARE_PROPERTY,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '计算正方形周长',
-            inputTarget: '正方形周长',
-            inputHint: `周长 = 4 × ${side} = ${perimeter}`,
+            hint: `周长 = 4 × ${side}`,
           },
+          expectedAnswer: { type: 'number', value: perimeter },
+          keyboard: { type: 'numeric' },
         },
       ];
     }
@@ -172,29 +159,23 @@ export const QuadrilateralPerimeterTemplate: QuestionTemplate = {
       return [
         {
           stepId: 's1',
-          type: StepType.VERIFY_PARALLELOGRAM,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '应用平行四边形周长公式',
-            inputTarget: '邻边之和',
-            inputHint: `平行四边形周长 = 2 × (邻边1 + 邻边2)，先算 ${side1} + ${side2} = ?`,
+            hint: `平行四边形周长 = 2 × (邻边1 + 邻边2)，先算 ${side1} + ${side2} = ?`,
           },
+          expectedAnswer: { type: 'number', value: side1 + side2 },
+          keyboard: { type: 'numeric' },
         },
         {
           stepId: 's2',
-          type: StepType.VERIFY_PARALLELOGRAM,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '计算平行四边形周长',
-            inputTarget: '平行四边形周长',
-            inputHint: `周长 = 2 × ${side1 + side2} = ${perimeter}`,
+            hint: `周长 = 2 × ${side1 + side2}`,
           },
+          expectedAnswer: { type: 'number', value: perimeter },
+          keyboard: { type: 'numeric' },
         },
       ];
     }
@@ -207,29 +188,23 @@ export const QuadrilateralPerimeterTemplate: QuestionTemplate = {
       return [
         {
           stepId: 's1',
-          type: StepType.COMPUTE_RHOMBUS_PROPERTY,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '应用菱形周长公式',
-            inputTarget: '周长系数',
-            inputHint: '菱形四条边相等，周长 = 4 × 边长，系数是？',
+            hint: '菱形四条边相等，周长 = 4 × 边长，系数是？',
           },
+          expectedAnswer: { type: 'number', value: 4 },
+          keyboard: { type: 'numeric' },
         },
         {
           stepId: 's2',
-          type: StepType.COMPUTE_RHOMBUS_PROPERTY,
-          inputType: 'numeric',
-          keyboard: 'numeric',
-          answerType: 'number',
-          tolerance: 0,
+          answerMode: AnswerMode.NUMBER,
           ui: {
             instruction: '计算菱形周长',
-            inputTarget: '菱形周长',
-            inputHint: `周长 = 4 × ${side} = ${perimeter}`,
+            hint: `周长 = 4 × ${side}`,
           },
+          expectedAnswer: { type: 'number', value: perimeter },
+          keyboard: { type: 'numeric' },
         },
       ];
     }

@@ -29,7 +29,8 @@
         "./lib/*"
       ]
     },
-    "isolatedModules": true
+    "isolatedModules": true,
+    "downlevelIteration": true
   },
   "include": [
     "next-env.d.ts",

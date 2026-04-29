@@ -112,7 +112,7 @@ export interface QuestionProtocol {
   templateId: string;
   difficultyLevel: number;
   params: Record<string, number>;
-  steps: StepProtocol[];
+  steps: StepProtocol[] | import('./protocol-v2').StepProtocolV2[];
   content: {
     title: string;
     description: string;
@@ -120,7 +120,7 @@ export interface QuestionProtocol {
   };
   meta: {
     version: string;
-    source: 'template_engine';
+    source: 'template_engine' | 'template_engine_v2';
   };
 }
 

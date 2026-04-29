@@ -1,0 +1,112 @@
+name: 收敛系统 CI 门禁
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+# 阻断 merge/deploy
+jobs:
+  convergence-gate:
+    name: 收敛测试门禁
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'pnpm-lock.yaml'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup database
+        run: |
+          # 使用内存数据库进行测试
+          export DATABASE_URL="file:./test.db"
+          npx prisma generate
+          npx prisma db push
+          # Seed test data
+          pnpm seed || true
+
+      - name: Run DFI test
+        run: pnpm test:dfi 100
+        continue-on-error: false
+        env:
+          DATABASE_URL: "file:./test.db"
+
+      - name: Run LE test
+        run: pnpm test:le 100 10
+        continue-on-error: false
+        env:
+          DATABASE_URL: "file:./test.db"
+
+      - name: Run CS test
+        run: pnpm test:cs 5
+        continue-on-error: false
+        env:
+          DATABASE_URL: "file:./test.db"
+
+      - name: Run convergence gate
+        id: convergence
+        run: pnpm test:convergence
+        env:
+          DATABASE_URL: "file:./test.db"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: convergence-results
+          path: |
+            convergence-report.json
+            test-output.txt
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let comment = '## 📊 收敛系统测试结果\n\n';
+            comment += '| 指标 | 状态 | 详情 |\n';
+            comment += '|------|------|------|\n';
+
+            // 解析测试输出
+            try {
+              const output = fs.readFileSync('test-output.txt', 'utf8');
+              comment += '详见下方日志\n\n```\n' + output + '\n```';
+            } catch (e) {
+              comment += '测试运行中...\n';
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # 额外的安全检查
+  security-scan:
+    name: 安全扫描
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run security audit
+        run: pnpm audit --audit-level moderate
+        continue-on-error: true

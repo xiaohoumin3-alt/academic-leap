@@ -36,7 +36,7 @@ export default function KnowledgeTreeView({
   onWeightChange,
 }: KnowledgeTreeViewProps) {
   const [expandedChapters, setExpandedChapters] = useState<Set<string>>(
-    new Set(chapters.slice(0, 3).map(c => c.id)) // 默认展开前3个
+    new Set() // 默认全部收起，用户自行展开
   );
 
   const toggleChapter = (chapterId: string) => {

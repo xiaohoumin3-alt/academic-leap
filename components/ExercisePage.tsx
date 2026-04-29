@@ -18,6 +18,7 @@ import { detectProtocolVersion } from '@/lib/question-engine/migrate';
 import type { StepProtocolV2 } from '@/lib/question-engine/protocol-v2';
 import { YesNoInput, ChoiceInput, NumberInput } from './ExercisePage/v2-inputs';
 import PredictionBadge from './PredictionBadge';
+import ComplexityBadge, { ComplexityBar } from './ComplexityBadge';
 
 export interface ExerciseResult {
   score: number;
@@ -65,6 +66,7 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [requireAction, setRequireAction] = useState<{ type: 'textbook' | 'knowledgePoints' | null; message: string }>({ type: null, message: '' });
   const [difficultyLevel, setDifficultyLevel] = useState(initialDifficulty);
   const [difficultyChange, setDifficultyChange] = useState<{ type: 'up' | 'down' | null; message: string }>({ type: null, message: '' });
   // 诊断模式：已完成的题目数量
@@ -243,23 +245,27 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
         requireTextbookSelection = weakData.requireTextbookSelection || false;
       }
 
-      // 如果用户未选择教材，显示提示
-      if (requireTextbookSelection || (allKnowledge.length === 0 && enabledSet.size === 0)) {
-        setFeedback('请先选择教材和知识点，再开始练习');
+      // 如果用户未选择教材或未启用知识点，显示提示
+      if (requireTextbookSelection) {
+        setRequireAction({ type: 'textbook', message: '请先选择教材' });
+        setIsLoading(false);
+        isLoadingQuestion.current = false;
+        return;
+      }
+      if (enabledSet.size === 0) {
+        setRequireAction({ type: 'knowledgePoints', message: '请至少启用一个知识点' });
         setIsLoading(false);
         isLoadingQuestion.current = false;
         return;
       }
 
       // 过滤出已启用的知识点
-      let enabledKnowledge = allKnowledge;
-      if (enabledSet.size > 0) {
-        enabledKnowledge = allKnowledge.filter((k: any) => {
-          const kpName = typeof k === 'string' ? k : k.knowledgePoint;
-          return enabledSet.has(kpName);
-        });
-        console.log(`已启用知识点过滤: ${allKnowledge.length} -> ${enabledKnowledge.length}`);
-      }
+      // 过滤出已启用的知识点（此时 enabledSet.size > 0 已保证）
+      const enabledKnowledge = allKnowledge.filter((k: any) => {
+        const kpName = typeof k === 'string' ? k : k.knowledgePoint;
+        return enabledSet.has(kpName);
+      });
+      console.log(`已启用知识点过滤: ${allKnowledge.length} -> ${enabledKnowledge.length}`);
 
       // 优先选择薄弱知识点（mastery < 50），如果没有薄弱知识点则从已启用的所有中选择
       const weakPoints = enabledKnowledge.filter((k: any) => k.mastery < 50);
@@ -985,6 +991,35 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
     );
   }
 
+  // 需要操作状态（选择教材或知识点）
+  if (requireAction.type) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-6 p-6 bg-surface">
+        <div className="w-20 h-20 rounded-full bg-tertiary-container flex items-center justify-center">
+          {requireAction.type === 'textbook' ? (
+            <MaterialIcon icon="menu_book" className="text-on-tertiary-container" style={{ fontSize: '40px' }} />
+          ) : (
+            <MaterialIcon icon="check_circle_outline" className="text-on-tertiary-container" style={{ fontSize: '40px' }} />
+          )}
+        </div>
+        <h2 className="text-2xl font-display font-bold text-on-surface text-center">
+          {requireAction.message}
+        </h2>
+        <p className="text-base text-on-surface-variant text-center max-w-md">
+          {requireAction.type === 'textbook'
+            ? '请先到"分析"页面选择您使用的教材'
+            : '请在"分析"页面勾选至少一个知识点来开始练习'}
+        </p>
+        <button
+          onClick={onBack}
+          className="px-6 py-3 bg-primary text-on-primary rounded-full font-bold text-base hover:bg-primary/90 transition-colors"
+        >
+          去选择
+        </button>
+      </div>
+    );
+  }
+
   // 完成状态
   if (isFinished) {
     const correctCount = Object.values(stepsResults).filter(r => r === 'correct').length;
@@ -1224,14 +1259,39 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
                 {currentQuestion.content.context}
               </p>
             )}
-            {/* 预测概率显示 */}
-            <div className="flex justify-center mt-4">
+            {/* 预测概率显示 + 复杂度特征 */}
+            <div className="flex justify-center mt-4 flex-wrap gap-3">
               <PredictionBadge
                 questionDifficulty={currentQuestion?.difficulty ?? 0.5}
                 knowledgeNodes={currentQuestion?.knowledgePoints ?? ['general']}
                 className=""
               />
+              <ComplexityBadge
+                features={{
+                  cognitiveLoad: currentQuestion?.cognitiveLoad,
+                  reasoningDepth: currentQuestion?.reasoningDepth,
+                  complexity: currentQuestion?.complexity,
+                }}
+                compact
+              />
             </div>
+
+            {/* 复杂度详细条 */}
+            {(currentQuestion?.cognitiveLoad !== undefined ||
+              currentQuestion?.reasoningDepth !== undefined ||
+              currentQuestion?.complexity !== undefined) && (
+              <div className="mt-4 max-w-xs mx-auto space-y-2">
+                {currentQuestion?.cognitiveLoad !== undefined && (
+                  <ComplexityBar value={currentQuestion.cognitiveLoad} label="认知负荷" color="bg-blue-500" />
+                )}
+                {currentQuestion?.reasoningDepth !== undefined && (
+                  <ComplexityBar value={currentQuestion.reasoningDepth} label="推理深度" color="bg-purple-500" />
+                )}
+                {currentQuestion?.complexity !== undefined && (
+                  <ComplexityBar value={currentQuestion.complexity} label="综合复杂度" color="bg-orange-500" />
+                )}
+              </div>
+            )}
           </div>
 
           {/* 步骤进度 */}

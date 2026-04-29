@@ -164,9 +164,9 @@ export const PythagorasFoldingTemplate: QuestionTemplate = {
         answerType: 'number',
         tolerance: 0.01,
         ui: {
-          instruction: '识别折叠关系，建立几何模型',
-          inputTarget: '折叠产生的直角三角形边长',
-          inputHint: '输入折叠后形成的直角三角形的两条直角边',
+          instruction: '根据折叠性质建立方程',
+          inputTarget: '利用勾股定理建立等式',
+          inputHint: '设未知量为x，建立勾股定理方程',
         },
       },
       {
@@ -175,24 +175,11 @@ export const PythagorasFoldingTemplate: QuestionTemplate = {
         inputType: 'numeric',
         keyboard: 'numeric',
         answerType: 'number',
-        tolerance: 0.01,
-        ui: {
-          instruction: '根据折叠性质建立方程',
-          inputTarget: '利用勾股定理建立等式',
-          inputHint: '设未知量为x，建立勾股定理方程',
-        },
-      },
-      {
-        stepId: 's3',
-        type: StepType.PYTHAGOREAN_C,
-        inputType: 'numeric',
-        keyboard: 'numeric',
-        answerType: 'number',
-        tolerance: 0.01,
+        tolerance: 0.001,
         ui: {
           instruction: '求解方程，得到答案',
           inputTarget: '所求线段长度',
-          inputHint: '求解方程，保留两位小数',
+          inputHint: '求解方程，保留三位小数',
         },
       },
     ];
@@ -213,15 +200,15 @@ export const PythagorasFoldingTemplate: QuestionTemplate = {
     switch (foldingType) {
       case 'right_triangle_fold':
         title = '直角三角形折叠问题';
-        context = `直角三角形ABC中，∠C=90°，AC=${a}，BC=${b}。将点C沿折痕翻折，使C落在斜边AB上，求折叠后C到A点的距离（保留一位小数）`;
+        context = `直角三角形ABC中，∠C=90°，AC=${a}，BC=${b}。将点C沿AB边上的高翻折，使C落在斜边AB上点D处，求AD的距离（保留三位小数）`;
         break;
       case 'rectangle_fold':
         title = '矩形折叠问题';
-        context = `矩形ABCD中，AB=${a}，BC=${b}。将点B沿折痕翻折到边AD上，恰好落在点E处，求折痕BE的长度（保留一位小数）`;
+        context = `矩形ABCD中，AB=${a}，BC=${b}。将点B沿折痕翻折到边AD上，恰好落在点E处，求折痕BE的长度（保留三位小数）`;
         break;
       case 'triangle_fold':
         title = '等腰三角形折叠问题';
-        context = `等腰三角形ABC中，AB=AC=${c.toFixed(1)}，BC=${b}。将顶点A沿折痕翻折到边BC上，恰好落在点D处，求折痕AD的长度（保留一位小数）`;
+        context = `等腰三角形ABC中，AB=AC=${c.toFixed(1)}，BC=${b}。将顶点A沿折痕翻折到边BC上，恰好落在点D处，求折痕AD的长度（保留三位小数）`;
         break;
     }
 

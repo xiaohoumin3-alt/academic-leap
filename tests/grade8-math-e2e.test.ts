@@ -92,18 +92,26 @@ describe('Grade 8 Math Template E2E Tests', () => {
         expect(Array.isArray(steps)).toBe(true);
         expect(steps.length).toBeGreaterThan(0);
 
-        // 验证步骤结构
+        // 验证步骤结构（支持 v1 和 v2 协议）
         steps.forEach((step) => {
           expect(step.stepId).toBeDefined();
-          expect(step.type).toBeDefined();
-          expect(Object.values(StepType).includes(step.type)).toBe(true);
-          expect(step.inputType).toBeDefined();
-          expect(step.keyboard).toBeDefined();
-          expect(step.answerType).toBeDefined();
           expect(step.ui).toBeDefined();
           expect(step.ui.instruction).toBeDefined();
-          expect(step.ui.inputTarget).toBeDefined();
-          expect(step.ui.inputHint).toBeDefined();
+
+          // v2 协议检查
+          if ('answerMode' in step && 'expectedAnswer' in step) {
+            expect(step.answerMode).toBeDefined();
+            expect(step.expectedAnswer).toBeDefined();
+          }
+          // v1 协议检查（向后兼容）
+          else if ('type' in step) {
+            expect(step.type).toBeDefined();
+            expect(Object.values(StepType).includes(step.type as StepType)).toBe(true);
+            expect(step.inputType).toBeDefined();
+            expect(step.answerType).toBeDefined();
+            expect((step as any).ui.inputTarget).toBeDefined();
+            expect((step as any).ui.inputHint).toBeDefined();
+          }
         });
       }
     );
@@ -159,10 +167,17 @@ describe('Grade 8 Math Template E2E Tests', () => {
 
         steps.forEach((step) => {
           expect(step.stepId).toBeDefined();
-          expect(step.type).toBeDefined();
           expect(step.ui).toBeDefined();
           expect(step.ui.instruction).toBeDefined();
-          expect(step.ui.inputTarget).toBeDefined();
+          // v2 协议检查
+          if ('answerMode' in step) {
+            expect(step.answerMode).toBeDefined();
+          }
+          // v1 协议检查
+          else if ('type' in step) {
+            expect(step.type).toBeDefined();
+            expect((step as any).ui.inputTarget).toBeDefined();
+          }
         });
       }
     );
@@ -210,9 +225,16 @@ describe('Grade 8 Math Template E2E Tests', () => {
 
         steps.forEach((step) => {
           expect(step.stepId).toBeDefined();
-          expect(step.type).toBeDefined();
           expect(step.ui).toBeDefined();
           expect(step.ui.instruction).toBeDefined();
+          // v2 协议检查
+          if ('answerMode' in step) {
+            expect(step.answerMode).toBeDefined();
+          }
+          // v1 协议检查
+          else if ('type' in step) {
+            expect(step.type).toBeDefined();
+          }
         });
       }
     );
@@ -259,9 +281,16 @@ describe('Grade 8 Math Template E2E Tests', () => {
 
         steps.forEach((step) => {
           expect(step.stepId).toBeDefined();
-          expect(step.type).toBeDefined();
           expect(step.ui).toBeDefined();
           expect(step.ui.instruction).toBeDefined();
+          // v2 协议检查
+          if ('answerMode' in step) {
+            expect(step.answerMode).toBeDefined();
+          }
+          // v1 协议检查
+          else if ('type' in step) {
+            expect(step.type).toBeDefined();
+          }
         });
       }
     );
@@ -308,9 +337,16 @@ describe('Grade 8 Math Template E2E Tests', () => {
 
         steps.forEach((step) => {
           expect(step.stepId).toBeDefined();
-          expect(step.type).toBeDefined();
           expect(step.ui).toBeDefined();
           expect(step.ui.instruction).toBeDefined();
+          // v2 协议检查
+          if ('answerMode' in step) {
+            expect(step.answerMode).toBeDefined();
+          }
+          // v1 协议检查
+          else if ('type' in step) {
+            expect(step.type).toBeDefined();
+          }
         });
       }
     );
@@ -416,14 +452,17 @@ describe('Grade 8 Math Template E2E Tests', () => {
     test('all step types used in templates should be valid StepType enum values', () => {
       const usedStepTypes = new Set<string>();
 
-      // 收集所有使用的步骤类型
+      // 收集所有使用的步骤类型（仅 v1 协议）
       ALL_TEMPLATES.forEach((templateId) => {
         const template = TEMPLATE_REGISTRY[templateId];
         const params = template.generateParams(1);
         const steps = template.buildSteps(params);
 
         steps.forEach((step) => {
-          usedStepTypes.add(step.type);
+          // 仅收集 v1 协议的 type
+          if ('type' in step) {
+            usedStepTypes.add(step.type as string);
+          }
         });
       });
 

@@ -4,10 +4,8 @@
  * 应用正方形对角线性质、周长、面积等
  */
 
-import {
-  QuestionTemplate,
-  StepType,
-} from '../../protocol';
+import { QuestionTemplate } from '../../protocol';
+import { AnswerMode, StepProtocolV2 } from '../../protocol-v2';
 import {
   DIFFICULTY_CONFIG,
   generateRandomParams,
@@ -36,6 +34,7 @@ function generateSquarePropertyParams(level: number): Record<string, number> {
   const params: Record<string, number> = {
     side,
     problemType: typeIndex + 1, // 1-4
+    level,
   };
 
   // 根据问题类型计算答案
@@ -59,7 +58,6 @@ function generateSquarePropertyParams(level: number): Record<string, number> {
       // 对角线与边长的关系：对角线/边 = √2
       params.ratio = Math.SQRT2;
       params.diagonal = side * Math.SQRT2;
-      params.side = side;
       break;
   }
 
@@ -77,144 +75,110 @@ export const SquarePropertyTemplate: QuestionTemplate = {
     return generateSquarePropertyParams(level);
   },
 
-  buildSteps: (params) => {
+  buildSteps: (params): StepProtocolV2[] => {
     const problemType = params.problemType as unknown as SquareProblemType;
     const side = params.side!;
-    const level = params.level || 1;
 
     switch (problemType) {
       case 'diagonal_length': {
-        // 第一步：应用正方形对角线性质
-        // 正方形的对角线长度 = 边长 × √2
         const diagonal = params.diagonal!;
-
         return [
           {
             stepId: 's1',
-            type: StepType.COMPUTE_SQUARE_PROPERTY,
-            inputType: 'numeric',
-            keyboard: 'numeric',
-            answerType: 'number',
-            tolerance: 0.01,
+            answerMode: AnswerMode.NUMBER,
             ui: {
               instruction: '应用正方形对角线性质',
-              inputTarget: '对角线与边长的比值',
-              inputHint: `正方形对角线 = 边长 × √2，对角线/边长 = √2 ≈ ${Math.SQRT2.toFixed(4)}`,
+              hint: `正方形对角线 = 边长 × √2，对角线/边长 = √2 ≈ ${Math.SQRT2.toFixed(4)}`,
             },
+            expectedAnswer: { type: 'number', value: Math.round(Math.SQRT2 * 10000) / 10000, tolerance: 0.01 },
+            keyboard: { type: 'numeric' },
           },
           {
             stepId: 's2',
-            type: StepType.COMPUTE_SQUARE_PROPERTY,
-            inputType: 'numeric',
-            keyboard: 'numeric',
-            answerType: 'number',
-            tolerance: 0.01,
+            answerMode: AnswerMode.NUMBER,
             ui: {
               instruction: '计算对角线的精确长度',
-              inputTarget: '对角线长度（保留整数）',
-              inputHint: `对角线 = ${side} × √2 ≈ ${diagonal.toFixed(2)}，取整数部分`,
+              hint: `对角线 = ${side} × √2 ≈ ${diagonal.toFixed(2)}，取整数部分`,
             },
+            expectedAnswer: { type: 'number', value: Math.floor(diagonal) },
+            keyboard: { type: 'numeric' },
           },
         ];
       }
 
       case 'area': {
-        // 第一步：应用正方形面积性质
         const area = params.area!;
-
         return [
           {
             stepId: 's1',
-            type: StepType.COMPUTE_SQUARE_PROPERTY,
-            inputType: 'numeric',
-            keyboard: 'numeric',
-            answerType: 'number',
-            tolerance: 0,
+            answerMode: AnswerMode.NUMBER,
             ui: {
               instruction: '应用正方形面积公式',
-              inputTarget: '边长的平方值',
-              inputHint: `正方形面积 = 边长² = ${side}² = ?`,
+              hint: `正方形面积 = 边长² = ${side}² = ?`,
             },
+            expectedAnswer: { type: 'number', value: side * side },
+            keyboard: { type: 'numeric' },
           },
           {
             stepId: 's2',
-            type: StepType.COMPUTE_SQUARE_PROPERTY,
-            inputType: 'numeric',
-            keyboard: 'numeric',
-            answerType: 'number',
-            tolerance: 0,
+            answerMode: AnswerMode.NUMBER,
             ui: {
               instruction: '得出面积结果',
-              inputTarget: '正方形面积',
-              inputHint: `面积 = ${side} × ${side} = ${area}`,
+              hint: `面积 = ${side} × ${side} = ${area}`,
             },
+            expectedAnswer: { type: 'number', value: area },
+            keyboard: { type: 'numeric' },
           },
         ];
       }
 
       case 'perimeter': {
-        // 第一步：应用正方形周长性质
         const perimeter = params.perimeter!;
-
         return [
           {
             stepId: 's1',
-            type: StepType.COMPUTE_SQUARE_PROPERTY,
-            inputType: 'numeric',
-            keyboard: 'numeric',
-            answerType: 'number',
-            tolerance: 0,
+            answerMode: AnswerMode.NUMBER,
             ui: {
               instruction: '应用正方形周长公式',
-              inputTarget: '周长系数',
-              inputHint: `正方形周长 = 4 × 边长，周长/边长 = ?`,
+              hint: `正方形周长 = 4 × 边长，周长/边长 = ?`,
             },
+            expectedAnswer: { type: 'number', value: 4 },
+            keyboard: { type: 'numeric' },
           },
           {
             stepId: 's2',
-            type: StepType.COMPUTE_SQUARE_PROPERTY,
-            inputType: 'numeric',
-            keyboard: 'numeric',
-            answerType: 'number',
-            tolerance: 0,
+            answerMode: AnswerMode.NUMBER,
             ui: {
               instruction: '计算周长',
-              inputTarget: '正方形周长',
-              inputHint: `周长 = 4 × ${side} = ${perimeter}`,
+              hint: `周长 = 4 × ${side} = ${perimeter}`,
             },
+            expectedAnswer: { type: 'number', value: perimeter },
+            keyboard: { type: 'numeric' },
           },
         ];
       }
 
       case 'diagonal_property': {
-        // 第一步：分析对角线性质
-        // 正方形对角线互相垂直且平分
         return [
           {
             stepId: 's1',
-            type: StepType.COMPUTE_SQUARE_PROPERTY,
-            inputType: 'numeric',
-            keyboard: 'numeric',
-            answerType: 'number',
-            tolerance: 0.01,
+            answerMode: AnswerMode.NUMBER,
             ui: {
               instruction: '分析正方形对角线性质',
-              inputTarget: '对角线与边长的比值',
-              inputHint: `正方形对角线与边长的比值 = √2 ≈ ${Math.SQRT2.toFixed(4)}`,
+              hint: `正方形对角线与边长的比值 = √2 ≈ ${Math.SQRT2.toFixed(4)}`,
             },
+            expectedAnswer: { type: 'number', value: Math.round(Math.SQRT2 * 10000) / 10000, tolerance: 0.01 },
+            keyboard: { type: 'numeric' },
           },
           {
             stepId: 's2',
-            type: StepType.COMPUTE_SQUARE_PROPERTY,
-            inputType: 'numeric',
-            keyboard: 'numeric',
-            answerType: 'number',
-            tolerance: 0.01,
+            answerMode: AnswerMode.NUMBER,
             ui: {
               instruction: '验证对角线长度',
-              inputTarget: '对角线长度（约）',
-              inputHint: `已知边长为${side}，对角线 = ${side} × √2 ≈ ${params.diagonal!.toFixed(2)}`,
+              hint: `已知边长为${side}，对角线 = ${side} × √2 ≈ ${params.diagonal!.toFixed(2)}`,
             },
+            expectedAnswer: { type: 'number', value: Math.round(params.diagonal!), tolerance: 0.01 },
+            keyboard: { type: 'numeric' },
           },
         ];
       }
