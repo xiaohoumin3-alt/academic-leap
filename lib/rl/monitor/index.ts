@@ -29,3 +29,17 @@ export {
 export type {
   RewardDrift
 } from './reward-drift';
+
+export {
+  DistributionMonitor
+} from './distribution';
+
+export type {
+  DistributionCheckInput,
+  DistributionAlert,
+  DistributionAlertType,
+  DistributionAlertSeverity,
+  DistributionAlertRecommendation,
+  DistributionMonitorConfig,
+  DistributionMonitorState
+} from './distribution';
