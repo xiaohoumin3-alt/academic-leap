@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { RLModelStore } from '@/lib/rl/persistence/model-store';
 import { estimateAbilityEAP, type IRTResponse } from '@/lib/rl/irt/estimator';
 import { InMemoryLEHistoryService } from '@/lib/rl/history/le-history-service';
+import { HealthMonitor } from '@/lib/rl/health/monitor';
+import { decideDegradation } from '@/lib/rl/health/controller';
+import { ruleEngineRecommendation } from '@/lib/rl/fallback/rule-engine';
+
+const healthMonitor = new HealthMonitor();
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -44,8 +48,30 @@ export async function POST(request: NextRequest) {
     const leService = new InMemoryLEHistoryService();
     const preAccuracy = leService.getAccuracy(session.user.id, knowledgePointId);
 
-    // Select arm
-    const selectedDeltaC = parseFloat(bandit.selectArm(theta));
+    // 检查系统健康状态
+    const healthStatus = healthMonitor.check();
+    const degradationAction = decideDegradation(healthStatus);
+
+    let selectedDeltaC: number;
+
+    if (degradationAction.type === 'switch_to_rule' || degradationAction.type === 'stop') {
+      selectedDeltaC = ruleEngineRecommendation(theta);
+      console.warn(`[Health] ${degradationAction.reason}, using rule engine`);
+    } else if (degradationAction.type === 'increase_exploration') {
+      const banditRecommendation = parseFloat(bandit.selectArm(theta));
+      const exploration = (Math.random() - 0.5) * 1;
+      selectedDeltaC = Math.max(1, Math.min(5, banditRecommendation + exploration));
+      console.warn(`[Health] ${degradationAction.reason}, increasing exploration`);
+    } else {
+      selectedDeltaC = parseFloat(bandit.selectArm(theta));
+    }
+
+    healthMonitor.recordRecommendation({
+      deltaC: selectedDeltaC,
+      timestamp: Date.now(),
+    });
+
+    // Select arm (original logic now handled above with health checks)
 
     // Find question with matching deltaC
     const question = await prisma.question.findFirst({
