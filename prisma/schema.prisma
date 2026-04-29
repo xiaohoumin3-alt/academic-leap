@@ -72,7 +72,32 @@ model Question {
 
   steps           QuestionStep[]
 
-  @@index([extractionStatus])
+@@index([extractionStatus])
+}
+
+// UOK State Persistence - stores student and question learning state
+model UOKState {
+  id            String   @id @default(cuid())
+  studentId     String
+  knowledge     String   @default("{}")  // JSON: Map<string, number>
+  attemptCount  Int      @default(0)
+  correctCount  Int      @default(0)
+  embedding     String?  // Base64 encoded Float32Array
+  lastUpdated   DateTime @default(now())
+
+  @@unique([studentId])
+  @@index([studentId])
+}
+
+// Separate table for question-level state
+model UOKQuestionState {
+  id            String   @id @default(cuid())
+  questionId    String   @unique
+  topic         String?
+  attemptCount  Int      @default(0)
+  correctCount  Int      @default(0)
+  embedding     String?  // Base64 encoded Float32Array
+  lastUpdated   DateTime @default(now())
 }
 
 model QuestionStep {
@@ -428,4 +453,36 @@ model PredictionLog {
 
   @@index([userId, createdAt])
   @@index([createdAt])
+}
+
+// ============================================================
+// QuestionGenerator - 实验态题目
+// ============================================================
+
+// GeneratedQuestion - 实验态题目
+model GeneratedQuestion {
+  id              String   @id @default(cuid())
+  batchId         String
+
+  // 题目内容
+  type            String   @default("calculation")
+  content         String   @default("{}")
+  answer          String
+  hint            String?
+
+  // 复杂度规范（生成目标）
+  complexitySpec  String
+
+  // 生成元数据
+  engine          String
+  generatedAt     DateTime @default(now())
+
+  // Promotion 状态
+  promotionStatus String   @default("PENDING")
+  promotionScore  Float?
+  promotedAt      DateTime?
+  auditReason     String?
+
+  @@index([batchId])
+  @@index([promotionStatus])
 }
