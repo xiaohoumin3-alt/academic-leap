@@ -10,3 +10,13 @@ export type {
   QuestionAttempt,
   DifficultyDrift
 } from './difficulty-drift';
+
+export {
+  calculateStats,
+  ksTest,
+  detectAbilityDrift
+} from './ability-drift';
+
+export type {
+  AbilityDrift
+} from './ability-drift';
