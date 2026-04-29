@@ -26,14 +26,13 @@ export const TEMPLATES: Map<string, QuestionTemplate> = new Map([
 
   // linear + depth 2
   ['linear_2_0', {
-    template: '解方程: {a}x {b:+d} = {c}x {e:+f}',
+    template: '解方程: {a}x {b:+d} = {c}x {d:+d}',
     answer: 'x = {x}',
     params: {
       a: '1..10',
       b: '-10..10',
       c: '1..10',
-      e: '-10..10',
-      f: '-20..20',
+      d: '-10..10',
     },
     constraint: 'a != c',
   }],
@@ -99,27 +98,84 @@ export function sampleWithConstraint(
   return null;
 }
 
+/**
+ * Evaluate constraint expressions.
+ * Supports: param != param, param != number, param == number, param > number, param < number
+ */
 export function evaluateConstraint(
   constraint: string,
   params: Record<string, number>
 ): boolean {
   if (!constraint) return true;
-  if (constraint === 'a != 0') {
-    return params.a !== 0;
+
+  // Parse simple binary expressions: left op right
+  // Supported ops: !=, ==, >, <, >=, <=
+  const match = constraint.match(/^(\w+)\s*(!=|==|>|<|>=|<=)\s*(\w+|-?\d+)$/);
+  if (!match) {
+    throw new Error(`Invalid constraint: ${constraint}`);
   }
-  if (constraint === 'a != c') {
-    return params.a !== params.c;
+
+  const [, left, op, right] = match;
+  const leftValue = params[left];
+  if (leftValue === undefined) {
+    throw new Error(`Unknown param in constraint: ${left}`);
   }
-  return true;
+
+  const rightValue = /^\d+$/.test(right) || /^-?\d+$/.test(right)
+    ? parseInt(right, 10)
+    : params[right];
+
+  if (rightValue === undefined) {
+    throw new Error(`Unknown param in constraint: ${right}`);
+  }
+
+  switch (op) {
+    case '!=':
+      return leftValue !== rightValue;
+    case '==':
+      return leftValue === rightValue;
+    case '>':
+      return leftValue > rightValue;
+    case '<':
+      return leftValue < rightValue;
+    case '>=':
+      return leftValue >= rightValue;
+    case '<=':
+      return leftValue <= rightValue;
+    default:
+      throw new Error(`Unsupported operator: ${op}`);
+  }
 }
 
+/**
+ * Format specifier: {key:format} where format is like '+d' (signed decimal) or '+f' (signed float)
+ * Examples: {b:+d} → "+5" or "-3", {c} → "5"
+ */
 export function fillTemplate(
   template: string,
   params: Record<string, number>
 ): string {
-  let result = template;
-  for (const [key, value] of Object.entries(params)) {
-    result = result.replace(`{${key}}`, String(value));
-  }
-  return result;
+  // Match {key} or {key:format}
+  const regex = /\{(\w+)(?::([^}]+))?\}/g;
+
+  return template.replace(regex, (_, key, format) => {
+    const value = params[key];
+    if (value === undefined) {
+      throw new Error(`Missing param: ${key}`);
+    }
+
+    if (!format) {
+      return String(value);
+    }
+
+    // Handle format specifiers: '+d' for signed integer, '+f' for signed float
+    if (format === '+d') {
+      return value >= 0 ? `+${value}` : String(value);
+    }
+    if (format === '+f') {
+      return value >= 0 ? `+${value}` : String(value);
+    }
+
+    return String(value);
+  });
 }

@@ -22,7 +22,7 @@ export class TemplateEngine {
       throw new Error(`Failed to sample params for spec: ${JSON.stringify(spec)}`);
     }
 
-    const answer = this.computeAnswer(template, params);
+    const answer = this.computeAnswer(spec, params);
 
     return {
       template: template.template,
@@ -32,22 +32,22 @@ export class TemplateEngine {
   }
 
   private computeAnswer(
-    template: QuestionTemplate,
+    spec: ComplexitySpec,
     params: Record<string, number>
   ): Record<string, number> {
-    // a(x + b) = c → x = c/a - b
-    if (template.template.includes('(x {')) {
+    // nested_2_0: a(x + b) = c → x = c/a - b
+    if (spec.structure === 'nested' && spec.depth === 2) {
       const { a, b, c } = params as { a: number; b: number; c: number };
       return { x: c / a - b };
     }
 
-    // ax + b = cx + d → x = (d - b) / (a - c)
-    if (template.template.includes('= cx')) {
-      const { a, b, c: c2, e: d } = params as { a: number; b: number; c: number; e: number; d: number };
-      return { x: (d - b) / (a - c2) };
+    // linear_2_0: ax + b = cx + d → x = (d - b) / (a - c)
+    if (spec.structure === 'linear' && spec.depth === 2) {
+      const { a, b, c, d } = params as { a: number; b: number; c: number; d: number };
+      return { x: (d - b) / (a - c) };
     }
 
-    // ax + b = c → x = (c - b) / a
+    // linear_1_*: ax + b = c → x = (c - b) / a
     const { a, b, c } = params as { a: number; b: number; c: number };
     return { x: (c - b) / a };
   }
