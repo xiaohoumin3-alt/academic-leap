@@ -79,6 +79,16 @@ export interface ThresholdConfig {
 }
 
 /**
+ * 答题历史记录（用于计算LE和噪声率）
+ */
+export interface ResponseRecord {
+  theta: number;
+  deltaC: number;
+  correct: boolean;
+  timestamp: number;
+}
+
+/**
  * 推荐历史记录（用于计算CS）
  */
 export interface RecommendationRecord {

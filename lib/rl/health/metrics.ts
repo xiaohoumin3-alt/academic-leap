@@ -4,6 +4,12 @@ import type { ResponseRecord, RecommendationRecord } from './types';
 
 /**
  * 计算学习有效性 (LE - Learning Effectiveness)
+ *
+ * LE = 最终theta - 初始theta
+ *
+ * @param responses - 答题历史记录
+ * @param windowSize - 计算窗口大小（默认100）
+ * @returns LE值
  */
 export function calculateLE(responses: ResponseRecord[], windowSize: number = 100): number {
   if (responses.length < 2) return 0;
@@ -17,6 +23,12 @@ export function calculateLE(responses: ResponseRecord[], windowSize: number = 10
 
 /**
  * 计算收敛稳定性 (CS - Convergence Stability)
+ *
+ * CS = 1 - variance(deltaC) / maxVariance
+ *
+ * @param recommendations - 推荐历史记录
+ * @param windowSize - 计算窗口大小（默认50）
+ * @returns CS值（0-1之间）
  */
 export function calculateCS(recommendations: RecommendationRecord[], windowSize: number = 50): number {
   if (recommendations.length === 0) return 0;
@@ -37,7 +49,12 @@ export function calculateCS(recommendations: RecommendationRecord[], windowSize:
 
 /**
  * 计算标签噪声率
+ *
  * 噪声定义：标签与模型期望不一致的情况（可能是标注错误）
+ *
+ * @param responses - 答题历史记录
+ * @param windowSize - 计算窗口大小（默认20）
+ * @returns 噪声率（0-1之间）
  */
 export function calculateLabelNoiseRate(responses: ResponseRecord[], windowSize: number = 20): number {
   if (responses.length === 0) return 0;
@@ -63,6 +80,12 @@ export function calculateLabelNoiseRate(responses: ResponseRecord[], windowSize:
 
 /**
  * 计算数据链完整度 (DFI - Data Flow Integrity)
+ *
+ * DFI = completeEvents / totalEvents
+ *
+ * @param totalEvents - 总事件数
+ * @param completeEvents - 完整事件数
+ * @returns DFI值（0-1之间）
  */
 export function calculateDFI(totalEvents: number, completeEvents: number): number {
   if (totalEvents === 0) return 1;
