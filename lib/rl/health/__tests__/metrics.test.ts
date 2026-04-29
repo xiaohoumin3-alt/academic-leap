@@ -1,6 +1,6 @@
 // lib/rl/health/__tests__/metrics.test.ts
 
-import { calculateLE, calculateCS, calculateLabelNoiseRate } from '../metrics';
+import { calculateLE, calculateCS, calculateLabelNoiseRate, calculateDFI } from '../metrics';
 import type { ResponseRecord } from '../types';
 
 describe('HealthMetrics', () => {
@@ -101,6 +101,23 @@ describe('HealthMetrics', () => {
 
       const noiseRate = calculateLabelNoiseRate(responses);
       expect(noiseRate).toBe(0);
+    });
+  });
+
+  describe('calculateDFI', () => {
+    it('should calculate DFI correctly', () => {
+      const dfi = calculateDFI(100, 95);
+      expect(dfi).toBe(0.95);
+    });
+
+    it('should return 1 for zero total events', () => {
+      const dfi = calculateDFI(0, 0);
+      expect(dfi).toBe(1);
+    });
+
+    it('should handle partial completion', () => {
+      const dfi = calculateDFI(10, 5);
+      expect(dfi).toBe(0.5);
     });
   });
 });
