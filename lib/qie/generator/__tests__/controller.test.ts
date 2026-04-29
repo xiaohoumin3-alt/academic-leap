@@ -60,4 +60,24 @@ describe('GeneratorController', () => {
     });
     expect(engine.constructor.name).toBe('ASTEngine');
   });
+
+  it('should select ASTEngine for linear with distraction > 0', () => {
+    const controller = new GeneratorController();
+    const engine = controller.decide({
+      structure: 'linear',
+      depth: 1,
+      distraction: 1,
+    });
+    expect(engine.constructor.name).toBe('ASTEngine');
+  });
+
+  it('should select ASTEngine for linear_1_0 with distraction = 2', () => {
+    const controller = new GeneratorController();
+    const engine = controller.decide({
+      structure: 'linear',
+      depth: 1,
+      distraction: 2,
+    });
+    expect(engine.constructor.name).toBe('ASTEngine');
+  });
 });

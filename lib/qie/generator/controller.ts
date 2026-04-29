@@ -15,11 +15,13 @@ export class GeneratorController {
   /**
    * 根据 ComplexitySpec 决定使用哪个 Engine
    *
-   * 规则: STRUCTURE=linear AND DEPTH≤2 → TemplateEngine
+   * 规则: STRUCTURE=linear AND DEPTH≤2 AND distraction=0 → TemplateEngine
    *       ELSE → ASTEngine
+   *
+   * 注意: distraction 由 ASTEngine 处理，所以 distraction>0 必须走 ASTEngine
    */
   decide(spec: ComplexitySpec): GeneratorEngine {
-    if (spec.structure === 'linear' && spec.depth <= 2) {
+    if (spec.structure === 'linear' && spec.depth <= 2 && spec.distraction === 0) {
       return new TemplateEngine();
     }
     return new ASTEngine();
