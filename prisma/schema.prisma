@@ -488,3 +488,117 @@ model GeneratedQuestion {
   @@index([batchId])
   @@index([promotionStatus])
 }
+
+// ============================================================
+// RL Adaptive Engine - Thompson Sampling + IRT
+// ============================================================
+
+model RLModelVersion {
+  id          String   @id @default(cuid())
+  version     String   @unique
+  algorithm   String
+
+  bucketSize  Float    @default(0.5)
+  priorAlpha  Float    @default(1)
+  priorBeta   Float    @default(1)
+
+  trainedAt   DateTime?
+
+  avgReward       Float?
+  totalSelections Int      @default(0)
+
+  status      String   @default("TRAINING")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  arms        RLBanditArm[]
+  logs        RLTrainingLog[]
+
+  @@index([status])
+}
+
+model RLBanditArm {
+  id          String   @id @default(cuid())
+  modelId     String
+  deltaC      Float
+
+  alpha       Int      @default(1)
+  beta        Int      @default(1)
+
+  pullCount   Int      @default(0)
+  successCount Int     @default(0)
+  avgReward   Float?
+
+  updatedAt   DateTime @updatedAt
+
+  model       RLModelVersion @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@unique([modelId, deltaC])
+}
+
+model RLTrainingLog {
+  id          String   @id @default(cuid())
+  modelId     String
+
+  eventId     String   @unique
+  attemptId   String
+
+  userId      String
+  questionId  String
+
+  knowledgePointId   String
+  recommendationId   String
+  preAccuracy        Float
+
+  stateTheta      Float
+  selectedDeltaC  Float
+  reward          Float
+
+  postAccuracy    Float?
+  leDelta         Float?
+
+  createdAt       DateTime @default(now())
+
+  model       RLModelVersion @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([attemptId])
+  @@index([modelId, userId])
+  @@index([knowledgePointId])
+  @@index([recommendationId])
+}
+
+model IRTStudentState {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+
+  theta           Float    @default(0)
+  confidence      Float    @default(1)
+
+  responseCount   Int      @default(0)
+
+  lastEstimatedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([lastEstimatedAt])
+  @@index([responseCount])
+  @@index([theta])
+}
+
+model LEKnowledgePointState {
+  id              String   @id @default(cuid())
+  userId          String
+  knowledgePointId String
+
+  correct         Int      @default(0)
+  total           Int      @default(0)
+  accuracy        Float    @default(0.5)
+
+  lastUpdatedAt   DateTime @default(now())
+
+  @@unique([userId, knowledgePointId])
+  @@index([userId])
+  @@index([knowledgePointId])
+}
