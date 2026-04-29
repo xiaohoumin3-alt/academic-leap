@@ -30,3 +30,7 @@ export { validateCS } from './validation/cs';
 export type { DFIValidationResult } from './validation/dfi';
 export type { LEValidationResult } from './validation/le';
 export type { CSValidationResult } from './validation/cs';
+
+// Monitor
+export { irtProbability, estimateDifficulty, detectDifficultyDrift } from './monitor';
+export type { QuestionAttempt, DifficultyDrift } from './monitor';
