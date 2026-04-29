@@ -30,8 +30,7 @@ async function main() {
     where: { id: modelId },
     data: {
       status: 'DEPLOYED',
-      trainedAt: new Date(),
-      deployedAt: new Date()
+      trainedAt: new Date()
     }
   });
 

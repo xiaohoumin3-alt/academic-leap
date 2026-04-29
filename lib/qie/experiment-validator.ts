@@ -411,6 +411,7 @@ class ExperimentRunner {
         complexityGrowth: 0,
         accuracy: 0,
         totalQuestions: 0,
+        masteryGrowth: 0,
       };
     }
 

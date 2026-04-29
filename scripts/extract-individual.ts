@@ -84,11 +84,11 @@ async function main() {
       AVG("complexity") as avgCom
     FROM "Question"
     WHERE "extractionStatus" = 'SUCCESS'
-  `;
+  ` as Array<{ avgCog: string | null; avgRea: string | null; avgCom: string | null }>;
   console.log('\n最终统计:');
-  console.log(`  cognitiveLoad: ${Number(stats[0].avgCog).toFixed(3)}`);
-  console.log(`  reasoningDepth: ${Number(stats[0].avgRea).toFixed(3)}`);
-  console.log(`  complexity: ${Number(stats[0].avgCom).toFixed(3)}`);
+  console.log(`  cognitiveLoad: ${Number(stats[0]?.avgCog ?? 0).toFixed(3)}`);
+  console.log(`  reasoningDepth: ${Number(stats[0]?.avgRea ?? 0).toFixed(3)}`);
+  console.log(`  complexity: ${Number(stats[0]?.avgCom ?? 0).toFixed(3)}`);
 
   await prisma.$disconnect();
 }

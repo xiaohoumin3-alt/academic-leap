@@ -90,7 +90,6 @@ export async function ExtractionActions() {
           <button
             type="submit"
             className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-            onClick={() => confirm('确定将所有已提取的题目重置为待提取状态？')}
           >
             全部重置
           </button>

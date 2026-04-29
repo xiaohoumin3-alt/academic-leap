@@ -60,12 +60,12 @@ async function debug() {
 
   // Extract text block
   const textBlock = response.content.find((b: any) => b.type === 'text');
-  if (!textBlock) {
+  if (!textBlock || !('text' in textBlock)) {
     console.log('ERROR: No text block found!');
     return;
   }
 
-  const text = textBlock.text;
+  const text = textBlock.text as string;
   console.log('\n=== Extracted Text ===');
   console.log(text);
 

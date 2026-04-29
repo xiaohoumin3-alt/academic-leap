@@ -627,9 +627,9 @@ async function main() {
   console.log(`📁 输出: ${outputPath}`);
 
   // 统计
-  const structureCounts = {};
-  const depthCounts = {};
-  const distCounts = {};
+  const structureCounts: Record<string, number> = {};
+  const depthCounts: Record<number, number> = {};
+  const distCounts: Record<number, number> = {};
 
   for (const q of uokData) {
     structureCounts[q.complexitySpec.structure] = (structureCounts[q.complexitySpec.structure] || 0) + 1;

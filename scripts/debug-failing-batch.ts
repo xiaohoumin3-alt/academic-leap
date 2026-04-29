@@ -49,12 +49,12 @@ async function debug() {
 
   console.log('=== Response ===');
   const textBlock = response.content.find((b: any) => b.type === 'text');
-  if (!textBlock) {
+  if (!textBlock || !('text' in textBlock)) {
     console.log('ERROR: No text block');
     return;
   }
 
-  const text = textBlock.text;
+  const text = textBlock.text as string;
   console.log('Raw text:');
   console.log(text);
   console.log('\n=== Parsing ===');

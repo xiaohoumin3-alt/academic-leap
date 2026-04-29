@@ -187,7 +187,7 @@ export class RLModelStore {
 
     if (logs.length === 0) return;
 
-    const avgReward = logs.reduce((sum, log) => sum + log.reward, 0) / logs.length;
+    const avgReward = logs.reduce((sum: number, log: any) => sum + log.reward, 0) / logs.length;
 
     await this.prisma.rLModelVersion.update({
       where: { id: modelId },

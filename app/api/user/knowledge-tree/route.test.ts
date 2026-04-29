@@ -3,7 +3,7 @@
  * Tests for deletedAt handling - ensures NULL is used, not empty strings
  */
 
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect } from '@jest/globals';
 
 describe('Knowledge Tree deletedAt handling', () => {
   test('Prisma query with deletedAt: null matches NULL values', () => {

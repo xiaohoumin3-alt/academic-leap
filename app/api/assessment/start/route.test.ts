@@ -3,7 +3,7 @@
  * Tests for textbook selection requirement
  */
 
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect } from '@jest/globals';
 
 describe('Assessment Start - Textbook Selection', () => {
   test('should require textbook selection for initial assessment', () => {

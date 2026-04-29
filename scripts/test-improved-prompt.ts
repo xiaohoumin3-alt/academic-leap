@@ -142,7 +142,7 @@ function isWithinThreshold(actual: number, expected: number, threshold = 0.15): 
   return calculateError(actual, expected) <= threshold;
 }
 
-async function testOneCase(testCase: TestCase): Promise<void> {
+async function testOneCase(testCase: TestCase): Promise<{ passed: { cognitiveLoad: boolean; reasoningDepth: boolean; complexity: boolean }; errors: { cognitiveLoad: number; reasoningDepth: number; complexity: number } }> {
   const prompt = IMPROVED_FEW_SHOT + JSON.stringify(testCase.question) + `
 
 严格按JSON格式输出，不要Markdown或解释：

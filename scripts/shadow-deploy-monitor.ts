@@ -51,9 +51,15 @@ async function main() {
       AVG("reasoningDepth") as avgReasoning,
       AVG(complexity) as avgComplexity
     FROM "Question"
-  `;
+  ` as Array<{
+    total: bigint;
+    extracted: bigint | null;
+    avgCognitive: string | null;
+    avgReasoning: string | null;
+    avgComplexity: string | null;
+  }>;
 
-  const s = stats[0] as any;
+  const s = stats[0]!;
   console.log(`   总题目数: ${s.total}`);
   console.log(`   已提取特征: ${s.extracted}`);
   console.log(`   平均认知负荷: ${Number(s.avgCognitive).toFixed(3)}`);

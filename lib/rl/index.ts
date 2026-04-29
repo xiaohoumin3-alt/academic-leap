@@ -2,7 +2,7 @@
 
 // Bandit
 export { ThompsonSamplingBandit, validateThompsonStability } from './bandit/thompson-sampling';
-export type { ThompsonSamplingConfig, CSValidationConfig, CSValidationResult } from './bandit/thompson-sampling';
+export type { ThompsonSamplingConfig, CSValidationConfig } from './bandit/thompson-sampling';
 export { LinearCongruentialGenerator } from './bandit/seeded-rng';
 export type { SeededRNG } from './bandit/seeded-rng';
 export type { BanditArm, BanditState, BanditSelection, Cloneable } from './bandit/types';
@@ -27,6 +27,6 @@ export type { ModelMetadata, CreateModelOptions } from './persistence/model-stor
 export { validateDFI } from './validation/dfi';
 export { validateLE } from './validation/le';
 export { validateCS } from './validation/cs';
-export type { DFIValidationResult, LEValidationResult, CSValidationResult } from './validation/dfi';
-export type { LEValidationResult as _LEValidationResult } from './validation/le';
-export type { CSValidationResult as _CSValidationResult } from './validation/cs';
+export type { DFIValidationResult } from './validation/dfi';
+export type { LEValidationResult } from './validation/le';
+export type { CSValidationResult } from './validation/cs';

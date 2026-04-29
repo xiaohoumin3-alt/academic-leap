@@ -1,4 +1,4 @@
-import { ComplexitySpec } from './types';
+import { ComplexitySpec, RenderInput } from './types';
 import { GeneratorController } from './controller';
 import { MockLLMRenderer } from './__tests__/mocks';
 
@@ -36,13 +36,21 @@ export class QuestionGenerator {
     const engine = this.controller.decide(spec);
     const data = engine.generate(spec);
 
-    const content = await this.renderer.render({
-      type: data.template ? 'template' : 'ast',
-      template: data.template,
-      ast: data.ast,
-      params: data.params,
-      spec,
-    });
+    const renderInput: RenderInput = data.template
+      ? {
+          type: 'template',
+          template: data.template,
+          params: data.params,
+          spec,
+        }
+      : {
+          type: 'ast',
+          ast: data.ast!,
+          params: data.params,
+          spec,
+        };
+
+    const content = await this.renderer.render(renderInput);
 
     const answer = this.extractAnswer(data);
 

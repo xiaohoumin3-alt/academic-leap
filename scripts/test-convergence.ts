@@ -7,17 +7,20 @@
  * - CS (Convergence Stability) ≥ 0.85
  *
  * 任何指标失败即阻断 merge/deploy
+ *
+ * NOTE: Use lib/rl/validation/*.ts for actual validation implementations
  */
 
-import { calculateDFI, printDFIReport } from './test-dfi';
-import { calculateLE, printLEReport } from './test-le';
-import { calculateCS, printCSReport } from './test-cs';
+import { validateDFI } from '../lib/rl/validation/dfi';
+import { validateLE } from '../lib/rl/validation/le';
+import { validateCS } from '../lib/rl/validation/cs';
+import { prisma } from '../lib/prisma.js';
 
 interface ConvergenceResult {
   converged: boolean;
-  dfi: { value: number; passed: boolean; target: number };
-  le: { value: number; passed: boolean; target: number };
-  cs: { value: number; passed: boolean; target: number };
+  dfi: { value: number; pass: boolean; target: number };
+  le: { value: number; pass: boolean; target: number };
+  cs: { value: number; pass: boolean; target: number };
   timestamp: string;
 }
 
@@ -31,9 +34,6 @@ export async function runConvergenceTests(options: {
   verbose?: boolean;
 }): Promise<ConvergenceResult> {
   const {
-    dfiSampleSize = 100,
-    leWindowSize = 100,
-    csMinRecommendations = 5,
     verbose = true,
   } = options;
 
@@ -45,36 +45,45 @@ export async function runConvergenceTests(options: {
 
   // 1. DFI 测试
   if (verbose) console.log('\n[1/3] DFI (Data Flow Integrity) 测试...');
-  const dfiResult = await calculateDFI(dfiSampleSize);
-  if (verbose) printDFIReport(dfiResult);
+  const dfiResult = await validateDFI(prisma);
+  if (verbose) {
+    console.log(`  DFI: ${(dfiResult.dfi * 100).toFixed(1)}% (目标: 99%)`);
+    console.log(`  状态: ${dfiResult.pass ? '✅ 通过' : '❌ 失败'}`);
+  }
 
   // 2. LE 测试
   if (verbose) console.log('\n[2/3] LE (Learning Effectiveness) 测试...');
-  const leResult = await calculateLE(leWindowSize);
-  if (verbose) printLEReport(leResult);
+  const leResult = await validateLE(prisma);
+  if (verbose) {
+    console.log(`  LE: ${(leResult.le * 100).toFixed(1)}% (目标: >15%)`);
+    console.log(`  状态: ${leResult.pass ? '✅ 通过' : '❌ 失败'}`);
+  }
 
   // 3. CS 测试
   if (verbose) console.log('\n[3/3] CS (Convergence Stability) 测试...');
-  const csResult = await calculateCS(csMinRecommendations);
-  if (verbose) printCSReport(csResult);
+  const csResult = await validateCS(prisma);
+  if (verbose) {
+    console.log(`  CS: ${(csResult.cs * 100).toFixed(1)}% (目标: ≥85%)`);
+    console.log(`  状态: ${csResult.pass ? '✅ 通过' : '❌ 失败'}`);
+  }
 
   // 汇总结果
   const result: ConvergenceResult = {
     converged:
-      dfiResult.passed && leResult.passed && csResult.passed,
+      dfiResult.pass && leResult.pass && csResult.pass,
     dfi: {
       value: dfiResult.dfi,
-      passed: dfiResult.passed,
+      pass: dfiResult.pass,
       target: 0.99,
     },
     le: {
       value: leResult.le,
-      passed: leResult.passed,
+      pass: leResult.pass,
       target: 0.15,
     },
     cs: {
       value: csResult.cs,
-      passed: csResult.passed,
+      pass: csResult.pass,
       target: 0.85,
     },
     timestamp: new Date().toISOString(),
@@ -90,17 +99,17 @@ export async function runConvergenceTests(options: {
     console.log(
       `  DFI       ${(result.dfi.value * 100).toFixed(1)}%      ` +
         `${(result.dfi.target * 100).toFixed(0)}%      ` +
-        `${result.dfi.passed ? '✅' : '❌'}`
+        `${result.dfi.pass ? '✅' : '❌'}`
     );
     console.log(
       `  LE        ${(result.le.value * 100).toFixed(1)}%      ` +
         `>${(result.le.target * 100).toFixed(0)}%      ` +
-        `${result.le.passed ? '✅' : '❌'}`
+        `${result.le.pass ? '✅' : '❌'}`
     );
     console.log(
       `  CS        ${(result.cs.value * 100).toFixed(1)}%      ` +
         `≥${(result.cs.target * 100).toFixed(0)}%      ` +
-        `${result.cs.passed ? '✅' : '❌'}`
+        `${result.cs.pass ? '✅' : '❌'}`
     );
     console.log(`  ─────────────────────────────────`);
 
@@ -111,9 +120,9 @@ export async function runConvergenceTests(options: {
       console.log(`\n  🚫 系统未收敛 - 阻断 merge/deploy`);
 
       const failures: string[] = [];
-      if (!result.dfi.passed) failures.push('DFI');
-      if (!result.le.passed) failures.push('LE');
-      if (!result.cs.passed) failures.push('CS');
+      if (!result.dfi.pass) failures.push('DFI');
+      if (!result.le.pass) failures.push('LE');
+      if (!result.cs.pass) failures.push('CS');
 
       console.log(`  失败指标: ${failures.join(', ')}`);
     }
@@ -143,19 +152,19 @@ export async function runConvergenceTestsJSON(options: {
         name: 'Data Flow Integrity',
         value: result.dfi.value,
         target: result.dfi.target,
-        passed: result.dfi.passed,
+        pass: result.dfi.pass,
       },
       le: {
         name: 'Learning Effectiveness',
         value: result.le.value,
         target: result.le.target,
-        passed: result.le.passed,
+        pass: result.le.pass,
       },
       cs: {
         name: 'Convergence Stability',
         value: result.cs.value,
         target: result.cs.target,
-        passed: result.cs.passed,
+        pass: result.cs.pass,
       },
     },
   };

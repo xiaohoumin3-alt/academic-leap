@@ -21,19 +21,19 @@ describe('ComplexitySpec', () => {
 
   it('should reject invalid structure', () => {
     const spec = {
-      structure: 'invalid',
-      depth: 1,
-      distraction: 0,
-    };
+      structure: 'invalid' as const,
+      depth: 1 as const,
+      distraction: 0 as const,
+    } as unknown as Partial<ComplexitySpec>;
     expect(validateComplexitySpec(spec)).toBe(false);
   });
 
   it('should reject invalid depth', () => {
     const spec = {
       structure: 'linear' as const,
-      depth: 5,
+      depth: 5 as const,
       distraction: 0 as const,
-    };
+    } as unknown as Partial<ComplexitySpec>;
     expect(validateComplexitySpec(spec)).toBe(false);
   });
 
@@ -41,8 +41,8 @@ describe('ComplexitySpec', () => {
     const spec = {
       structure: 'linear' as const,
       depth: 1 as const,
-      distraction: 4,
-    };
+      distraction: 4 as const,
+    } as unknown as Partial<ComplexitySpec>;
     expect(validateComplexitySpec(spec)).toBe(false);
   });
 

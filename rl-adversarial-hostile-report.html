@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>对抗式收敛验证报告 - adversarial_student</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      line-height: 1.6;
+    }
+    .container { max-width: 1400px; margin: 0 auto; padding: 40px 20px; }
+    h1 { font-size: 48px; font-weight: 700; margin-bottom: 10px; letter-spacing: -0.02em; }
+    .subtitle { font-size: 21px; color: #6e6e73; margin-bottom: 40px; }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-left: 10px;
+    }
+    .badge.adversarial { background: #fee2e2; color: #991b1b; }
+    .badge.environment { background: #dbeafe; color: #1e40af; }
+    .card {
+      background: white;
+      border-radius: 20px;
+      padding: 30px;
+      margin-bottom: 30px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; }
+    .metric {
+      text-align: center;
+      padding: 20px;
+      border-radius: 12px;
+      background: #f5f5f7;
+    }
+    .metric.pass { background: #d1fae5; }
+    .metric.fail { background: #fee2e2; }
+    .metric-label { font-size: 13px; color: #6e6e73; margin-bottom: 8px; }
+    .metric-value { font-size: 32px; font-weight: 700; }
+    .metric-target { font-size: 11px; color: #6e6e73; margin-top: 4px; }
+    .chart-container { height: 300px; position: relative; }
+    .converged { padding: 20px; border-radius: 12px; text-align: center; font-size: 24px; font-weight: 600; }
+    .converged.yes { background: #d1fae5; color: #065f46; }
+    .converged.no { background: #fee2e2; color: #991b1b; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+    @media (max-width: 768px) {
+      .two-col { grid-template-columns: 1fr; }
+    }
+    .failure-mode-bar {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .failure-label { width: 100px; font-size: 14px; }
+    .failure-bar { flex: 1; height: 24px; background: #f5f5f7; border-radius: 4px; overflow: hidden; }
+    .failure-fill { height: 100%; transition: width 0.3s; }
+    .failure-value { width: 60px; text-align: right; font-size: 14px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>
+      对抗式收敛验证报告
+      <span class="badge adversarial">adversarial_student</span>
+      <span class="badge environment">hostile</span>
+    </h1>
+    <p class="subtitle">会话数: 500 | 验证系统在非理想环境下的鲁棒性</p>
+
+    <div class="card">
+      <div class="converged no">
+        🚫 系统在对抗环境下未收敛
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="metrics">
+        <div class="metric pass">
+          <div class="metric-label">DFI (数据链完整度)</div>
+          <div class="metric-value">100.0%</div>
+          <div class="metric-target">目标: ≥99%</div>
+        </div>
+        <div class="metric fail">
+          <div class="metric-label">LE (学习有效性)</div>
+          <div class="metric-value">6.5%</div>
+          <div class="metric-target">目标: ≥10%</div>
+        </div>
+        <div class="metric pass">
+          <div class="metric-label">CS (收敛稳定性)</div>
+          <div class="metric-value">99.5%</div>
+          <div class="metric-target">目标: ≥70%</div>
+        </div>
+        <div class="metric pass">
+          <div class="metric-label">Robustness (鲁棒性)</div>
+          <div class="metric-value">71.4%</div>
+          <div class="metric-target">目标: ≥60%</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">学生能力提升</div>
+          <div class="metric-value">+0.39</div>
+          <div class="metric-target">0.50 → 0.89</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">最终疲劳值</div>
+          <div class="metric-value">10%</div>
+          <div class="metric-target">影响答题准确率</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <h3>学习有效性 (LE) 随时间变化</h3>
+        <div class="chart-container">
+          <canvas id="leChart"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>学生准确率随时间变化</h3>
+        <div class="chart-container">
+          <canvas id="accChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <h3>学生能力 (Theta) 随时间变化</h3>
+        <div class="chart-container">
+          <canvas id="thetaChart"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>疲劳累积曲线</h3>
+        <div class="chart-container">
+          <canvas id="fatigueChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <h3>题目难度推荐分布</h3>
+        <div class="chart-container">
+          <canvas id="distChart"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>失败模式分布</h3>
+        <div class="chart-container">
+          <canvas id="failureChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>失败模式详情</h3>
+      <div style="margin-top: 20px;">
+        
+        <div class="failure-mode-bar">
+          <div class="failure-label">正常答题</div>
+          <div class="failure-bar">
+            <div class="failure-fill" style="width: 0.0%; background: #10b981;"></div>
+          </div>
+          <div class="failure-value">0.0%</div>
+        </div>
+      
+        <div class="failure-mode-bar">
+          <div class="failure-label">疲劳答题</div>
+          <div class="failure-bar">
+            <div class="failure-fill" style="width: 0.0%; background: #f59e0b;"></div>
+          </div>
+          <div class="failure-value">0.0%</div>
+        </div>
+      
+        <div class="failure-mode-bar">
+          <div class="failure-label">噪声干扰</div>
+          <div class="failure-bar">
+            <div class="failure-fill" style="width: 9.0%; background: #8b5cf6;"></div>
+          </div>
+          <div class="failure-value">9.0%</div>
+        </div>
+      
+        <div class="failure-mode-bar">
+          <div class="failure-label">随机点击</div>
+          <div class="failure-bar">
+            <div class="failure-fill" style="width: 0.0%; background: #ef4444;"></div>
+          </div>
+          <div class="failure-value">0.0%</div>
+        </div>
+      
+        <div class="failure-mode-bar">
+          <div class="failure-label">对抗行为</div>
+          <div class="failure-bar">
+            <div class="failure-fill" style="width: 22.8%; background: #991b1b;"></div>
+          </div>
+          <div class="failure-value">22.8%</div>
+        </div>
+      
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // LE Chart
+    new Chart(document.getElementById('leChart'), {
+      type: 'line',
+      data: {
+        labels: [0,10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340,350,360,370,380,390,400,410,420,430,440],
+        datasets: [{
+          label: 'LE (%)',
+          data: [0.19999999999999996,-0.1333333333333333,0.042857142857142705,0.15000000000000013,0.06111111111111112,0.12000000000000009,0.042424242424242475,-0.05952380952380931,-0.05769230769230771,-0.053968253968254,-0.053333333333333455,-0.021590909090908994,-0.0009803921568627416,0.007692307692307666,0.03759398496240607,0.03333333333333344,-0.02083333333333348,-0.0005347593582889498,-0.021739130434782705,-0.03640350877192988,-0.052000000000000046,-0.00512820512820511,-0.015151515151515138,0.00031055900621113075,0.024425287356321768,0.03866666666666663,0.028784119106699757,0.027083333333333348,0.018398268398268414,0.005476673427992074,0.004761904761904745,0.004121863799283254,-0.007263513513513508,-0.0022328548644336976,0.004072398190045234,-0.0014285714285713347,-0.001761517615176178,0.0039897039897041076,-0.006364749082007347,0.012237762237762073,0.025555555555555554,0.020360551431601204,0.011651469098277634,0.011627906976744207,-0.018831168831168643],
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          fill: true,
+          tension: 0.4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { beginAtZero: true, max: 100 }
+        },
+        plugins: {
+          annotation: {
+            annotations: {
+              line1: {
+                type: 'line',
+                yMin: 10,
+                yMax: 10,
+                borderColor: '#10b981',
+                borderWidth: 2,
+                borderDash: [5, 5]
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Accuracy Chart
+    new Chart(document.getElementById('accChart'), {
+      type: 'line',
+      data: {
+        labels: [0,10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340,350,360,370,380,390,400,410,420,430,440],
+        datasets: [{
+          label: '准确率 (%)',
+          data: [60.67405647692878,63.22827877753719,62.36503713912301,63.36838578388338,64.58951533409787,65.84954769456085,66.38667192613316,66.13006101568938,65.40892433167224,64.91472084606974,64.28826603133409,63.896427333538874,63.876415265707095,63.90830705731227,64.12965296062251,64.52075018992016,64.56549515192268,64.47118233754723,64.46426069203103,64.0585204416906,63.532836865321244,63.28347853130164,63.15723813415466,63.035351487282846,63.19805546219974,63.59437293169775,63.87945767114949,64.15442948695045,64.3036545624124,64.49030555183404,64.51163828315156,64.55895368341733,64.52902239833215,64.52677051779727,64.53521922456622,64.58648744996356,64.60229001337889,64.61300597559291,64.63050914007293,64.659462508551,64.82009810694005,65.0037616753299,65.18846744648232,65.27756224874386,65.22729617715943],
+          borderColor: '#8b5cf6',
+          backgroundColor: 'rgba(139, 92, 246, 0.1)',
+          fill: true,
+          tension: 0.4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { beginAtZero: true, max: 100 }
+        }
+      }
+    });
+
+    // Theta Chart
+    new Chart(document.getElementById('thetaChart'), {
+      type: 'line',
+      data: {
+        labels: [0,10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340,350,360,370,380,390,400,410,420,430,440],
+        datasets: [{
+          label: 'Theta (能力值)',
+          data: [0.5181764503999997,0.5257905487999996,0.5336573411999995,0.5426517087999997,0.5519147025999996,0.5613646687999996,0.5703971301999995,0.5784120167999994,0.5856238259999995,0.5929846569999995,0.5998838045999992,0.6071030759999992,0.6150368547999993,0.6230837513999993,0.6316135295999993,0.640664248999999,0.6488951155999989,0.6564629355999989,0.6644895533999986,0.6710397919999985,0.6770339623999985,0.6837007451999981,0.6909677521999983,0.6981979041999979,0.7064622205999982,0.715823451199998,0.7248221785999976,0.7338066601999976,0.7422769155999974,0.7509778695999973,0.7588348515999971,0.7668378995999967,0.7744805539999967,0.7821767629999969,0.7899554829999967,0.7980198137999966,0.8057912455999966,0.8134428693999968,0.8212201661999967,0.8288982957999965,0.8375644139999967,0.8465036737999965,0.8554581293999963,0.8636848229999963,0.8711252375999965],
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245, 158, 11, 0.1)',
+          fill: true,
+          tension: 0.4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { min: -3, max: 3 }
+        }
+      }
+    });
+
+    // Fatigue Chart
+    new Chart(document.getElementById('fatigueChart'), {
+      type: 'line',
+      data: {
+        labels: [0,10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340,350,360,370,380,390,400,410,420,430,440],
+        datasets: [{
+          label: '疲劳值 (%)',
+          data: [0.5099999999999999,0.71,0.9100000000000003,1.1100000000000005,1.310000000000001,1.5100000000000005,1.71,1.9099999999999995,2.1099999999999985,2.3099999999999974,2.5099999999999953,2.7099999999999946,2.909999999999993,3.109999999999992,3.3099999999999907,3.50999999999999,3.7099999999999884,3.9099999999999877,4.109999999999986,4.3099999999999845,4.509999999999985,4.709999999999981,4.909999999999983,5.109999999999979,5.30999999999998,5.509999999999977,5.709999999999977,5.909999999999977,6.109999999999976,6.309999999999979,6.509999999999982,6.709999999999988,6.9099999999999895,7.1099999999999985,7.310000000000004,7.510000000000009,7.710000000000017,7.9100000000000215,8.110000000000026,8.31000000000003,8.510000000000037,8.710000000000047,8.910000000000046,9.110000000000058,9.310000000000057],
+          borderColor: '#ef4444',
+          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+          fill: true,
+          tension: 0.4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { beginAtZero: true, max: 100 }
+        }
+      }
+    });
+
+    // Distribution Chart
+    new Chart(document.getElementById('distChart'), {
+      type: 'bar',
+      data: {
+        labels: [0,1,2],
+        datasets: [{
+          label: '推荐次数',
+          data: [48,398,54],
+          backgroundColor: 'rgba(16, 185, 129, 0.7)',
+          borderColor: '#10b981',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    });
+
+    // Failure Mode Chart
+    new Chart(document.getElementById('failureChart'), {
+      type: 'doughnut',
+      data: {
+        labels: ["normal","fatigue","noise","random","adversarial"],
+        datasets: [{
+          data: [320,0,45,21,114],
+          backgroundColor: [
+            '#10b981', // normal - green
+            '#f59e0b', // fatigue - orange
+            '#8b5cf6', // noise - purple
+            '#ef4444', // random - red
+            '#991b1b', // adversarial - dark red
+          ],
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right'
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>

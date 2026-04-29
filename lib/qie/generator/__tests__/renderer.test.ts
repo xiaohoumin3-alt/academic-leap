@@ -30,6 +30,7 @@ describe('MockLLMRenderer', () => {
           right: { type: 'const', value: 3 },
         },
       },
+      params: { x: 1 },
       spec: {
         structure: 'nested',
         depth: 2,

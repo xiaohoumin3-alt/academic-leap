@@ -3,7 +3,7 @@
  * Tests for textbook filtering
  */
 
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect } from '@jest/globals';
 
 describe('Analytics Knowledge - Textbook Filtering', () => {
   test('should return empty list when user has no textbook selected', () => {
