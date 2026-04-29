@@ -56,10 +56,15 @@ export function applyTimeDecay(
 
   // Check if delay exceeds maximum threshold
   if (delayMs > config.maxDelay) {
+    const actualDecayWeight = calculateDecayWeight(
+      delayMs,
+      config.decayHalfLife,
+      config.minWeight
+    );
     return {
       adjustedReward: 0,
       originalReward: baseReward,
-      decayWeight: 0,
+      decayWeight: actualDecayWeight,
       delayMs,
       isIgnored: true
     };
