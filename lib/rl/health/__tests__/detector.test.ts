@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { detectFailure } from '../detector';
 import type { HealthMetrics } from '../types';
 
@@ -10,6 +10,7 @@ describe('detectFailure', () => {
       labelNoiseRate: 0.01,
       feedbackDelaySteps: 2,
       dfi: 0.998,
+      rewardLossRate: 0.0,
       isPseudoConverged: false,
     };
 
@@ -28,6 +29,7 @@ describe('detectFailure', () => {
       labelNoiseRate: 0.02,
       feedbackDelaySteps: 3,
       dfi: 0.995,
+      rewardLossRate: 0.0,
       isPseudoConverged: false,
     };
 
@@ -45,6 +47,7 @@ describe('detectFailure', () => {
       labelNoiseRate: 0.05,
       feedbackDelaySteps: 5,
       dfi: 0.95,
+      rewardLossRate: 0.0,
       isPseudoConverged: false,
     };
 
@@ -62,6 +65,7 @@ describe('detectFailure', () => {
       labelNoiseRate: 0.15, // 15% noise - warning
       feedbackDelaySteps: 3,
       dfi: 0.99,
+      rewardLossRate: 0.0,
       isPseudoConverged: false,
     };
 
@@ -75,6 +79,7 @@ describe('detectFailure', () => {
       labelNoiseRate: 0.35, // 35% noise - danger
       feedbackDelaySteps: 3,
       dfi: 0.99,
+      rewardLossRate: 0.0,
       isPseudoConverged: false,
     };
 
@@ -90,6 +95,7 @@ describe('detectFailure', () => {
       labelNoiseRate: 0.1,
       feedbackDelaySteps: 10,
       dfi: 0.8,
+      rewardLossRate: 0.0,
       isPseudoConverged: false,
     };
 
@@ -106,6 +112,7 @@ describe('detectFailure', () => {
       labelNoiseRate: 0.05,
       feedbackDelaySteps: 4,
       dfi: 0.98,
+      rewardLossRate: 0.0,
       isPseudoConverged: true,
       pseudoConvergenceReason: '探索率持续低于1%',
     };
@@ -123,6 +130,7 @@ describe('detectFailure', () => {
       labelNoiseRate: 0.4, // danger
       feedbackDelaySteps: 15, // danger
       dfi: 0.85, // alert
+      rewardLossRate: 0.0,
       isPseudoConverged: true,
       pseudoConvergenceReason: '多指标异常',
     };
