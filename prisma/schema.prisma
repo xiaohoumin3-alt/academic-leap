@@ -280,6 +280,7 @@ model KnowledgePoint {
   chapter       Chapter                 @relation(fields: [chapterId], references: [id])
   histories     KnowledgePointHistory[]
   userKnowledge UserKnowledge[]
+  coverage      KnowledgeCoverage?
 }
 
 model KnowledgePointHistory {
@@ -295,51 +296,51 @@ model KnowledgePointHistory {
 }
 
 model Template {
-  id          String            @id @default(cuid())
+  id          String    @id @default(cuid())
   name        String
   type        String
   templateKey String?
   structure   Json
   params      Json
   steps       Json
-  version     Int               @default(1)
-  status      String            @default("draft")
+  version     Int       @default(1)
+  status      String    @default("draft")
   knowledgeId String?
-  source      String            @default("manual")
-  skeletonIds String            @default("[]")
+  source      String    @default("manual")
+  skeletonIds String    @default("[]")
   createdBy   String
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   publishedAt DateTime?
 
   // === Generation tracking ===
-  generatedBy     String    @default("manual")  // 'manual' | 'ai'
-  generatorModel  String?                       // 'gemini-2.5-flash' | 'gpt-4'
-  generationPrompt String?                      // Prompt used for generation
-  generationId    String?                       // Reference to TemplateGeneration
+  generatedBy      String  @default("manual") // 'manual' | 'ai'
+  generatorModel   String? // 'gemini-2.5-flash' | 'gpt-4'
+  generationPrompt String? // Prompt used for generation
+  generationId     String? // Reference to TemplateGeneration
 
   // === Validation tracking ===
-  validatedBy      String?                      // 'ai' | 'human'
-  validationResult Json?                        // Full validation result
-  qualityScore     Int?                         // 0-100 overall score
-  autoApproved     Boolean   @default(false)    // Auto-approved flag
+  validatedBy      String? // 'ai' | 'human'
+  validationResult Json? // Full validation result
+  qualityScore     Int? // 0-100 overall score
+  autoApproved     Boolean @default(false) // Auto-approved flag
 
   // === Quality tracking ===
-  usedCount       Int       @default(0)         // Times used in questions
-  errorCount      Int       @default(0)         // Detected errors
-  errorRate       Float?                        // Calculated error rate
+  usedCount  Int    @default(0) // Times used in questions
+  errorCount Int    @default(0) // Detected errors
+  errorRate  Float? // Calculated error rate
 
   // === Review tracking ===
-  reviewStatus    String    @default("pending") // 'pending' | 'approved' | 'rejected'
-  reviewedBy      String?
-  reviewedAt      DateTime?
-  reviewNotes     String?
+  reviewStatus String    @default("pending") // 'pending' | 'approved' | 'rejected'
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  reviewNotes  String?
 
   qualities   QuestionQuality[]
-  knowledge   KnowledgeConcept? @relation("TemplateConcept", fields: [knowledgeId], references: [id])
-  creator     Admin             @relation(fields: [createdBy], references: [id])
+  knowledge   KnowledgeConcept?    @relation("TemplateConcept", fields: [knowledgeId], references: [id])
+  creator     Admin                @relation(fields: [createdBy], references: [id])
   versions    TemplateVersion[]
-  generation  TemplateGeneration? @relation("GenerationTemplate", fields: [generationId], references: [id])
+  generation  TemplateGeneration?  @relation("GenerationTemplate", fields: [generationId], references: [id])
   validations TemplateValidation[]
   reviews     TemplateReview[]
 }
@@ -374,30 +375,32 @@ model QuestionQuality {
 
 // TemplateGeneration - tracks each generation batch
 model TemplateGeneration {
-  id              String   @id @default(cuid())
+  id               String   @id @default(cuid())
   knowledgePointId String
-  generatorModel  String
-  prompt          String
-  rawOutput       String
-  generatedCount  Int
-  successCount    Int
-  createdAt       DateTime @default(now())
+  generatorModel   String
+  prompt           String
+  rawOutput        String
+  generatedCount   Int
+  successCount     Int
+  createdAt        DateTime @default(now())
 
-  templates       Template[] @relation("GenerationTemplate")
+  templates Template[] @relation("GenerationTemplate")
+
+  @@index([knowledgePointId])
 }
 
 // TemplateValidation - tracks each validation run
 model TemplateValidation {
-  id              String   @id @default(cuid())
-  templateId      String
-  validatorModel  String
-  validationType  String   // 'math' | 'pedagogy'
-  result          Json
-  score           Int
-  passed          Boolean
-  createdAt       DateTime @default(now())
+  id             String   @id @default(cuid())
+  templateId     String
+  validatorModel String
+  validationType String // 'math' | 'pedagogy'
+  result         Json
+  score          Int
+  passed         Boolean
+  createdAt      DateTime @default(now())
 
-  template        Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
 }
 
 // TemplateReview - tracks human review decisions
@@ -405,23 +408,26 @@ model TemplateReview {
   id            String   @id @default(cuid())
   templateId    String
   reviewerId    String
-  decision      String   // 'approve' | 'reject' | 'modify'
+  decision      String // 'approve' | 'reject' | 'modify'
   notes         String?
   modifications Json?
-  duration      Int      // Review time in seconds
+  duration      Int // Review time in seconds
   createdAt     DateTime @default(now())
 
-  template      Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
 }
 
 // KnowledgeCoverage - tracks coverage per knowledge point
 model KnowledgeCoverage {
-  knowledgePointId    String   @id
-  targetTemplateCount Int      @default(3)
-  currentTemplateCount Int     @default(0)
-  gap                Int
-  priority           String   // 'high' | 'medium' | 'low'
-  lastUpdated        DateTime @default(now())
+  knowledgePointId     String   @id
+  targetTemplateCount  Int      @default(3)
+  currentTemplateCount Int      @default(0)
+  gap                  Int      @default(0)
+  priority             String // 'high' | 'medium' | 'low'
+  lastUpdated          DateTime @updatedAt
+  createdAt            DateTime @default(now())
+
+  knowledgePoint KnowledgePoint @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
 }
 
 model AuditLog {
@@ -577,73 +583,73 @@ model GeneratedQuestion {
 // ============================================================
 
 model RLModelVersion {
-  id          String   @id @default(cuid())
-  version     String   @unique
-  algorithm   String
+  id        String @id @default(cuid())
+  version   String @unique
+  algorithm String
 
-  bucketSize  Float    @default(0.5)
-  priorAlpha  Float    @default(1)
-  priorBeta   Float    @default(1)
+  bucketSize Float @default(0.5)
+  priorAlpha Float @default(1)
+  priorBeta  Float @default(1)
 
-  trainedAt   DateTime?
+  trainedAt DateTime?
 
   avgReward       Float?
-  totalSelections Int      @default(0)
+  totalSelections Int    @default(0)
 
-  status      String   @default("TRAINING")
+  status String @default("TRAINING")
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  arms        RLBanditArm[]
-  logs        RLTrainingLog[]
+  arms RLBanditArm[]
+  logs RLTrainingLog[]
 
   @@index([status])
 }
 
 model RLBanditArm {
-  id          String   @id @default(cuid())
-  modelId     String
-  deltaC      Float
+  id      String @id @default(cuid())
+  modelId String
+  deltaC  Float
 
-  alpha       Int      @default(1)
-  beta        Int      @default(1)
+  alpha Int @default(1)
+  beta  Int @default(1)
 
-  pullCount   Int      @default(0)
-  successCount Int     @default(0)
-  avgReward   Float?
+  pullCount    Int    @default(0)
+  successCount Int    @default(0)
+  avgReward    Float?
 
-  updatedAt   DateTime @updatedAt
+  updatedAt DateTime @updatedAt
 
-  model       RLModelVersion @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  model RLModelVersion @relation(fields: [modelId], references: [id], onDelete: Cascade)
 
   @@unique([modelId, deltaC])
 }
 
 model RLTrainingLog {
-  id          String   @id @default(cuid())
-  modelId     String
+  id      String @id @default(cuid())
+  modelId String
 
-  eventId     String   @unique
-  attemptId   String
+  eventId   String @unique
+  attemptId String
 
-  userId      String
-  questionId  String
+  userId     String
+  questionId String
 
-  knowledgePointId   String
-  recommendationId   String
-  preAccuracy        Float
+  knowledgePointId String
+  recommendationId String
+  preAccuracy      Float
 
-  stateTheta      Float
-  selectedDeltaC  Float
-  reward          Float
+  stateTheta     Float
+  selectedDeltaC Float
+  reward         Float
 
-  postAccuracy    Float?
-  leDelta         Float?
+  postAccuracy Float?
+  leDelta      Float?
 
-  createdAt       DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  model       RLModelVersion @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  model RLModelVersion @relation(fields: [modelId], references: [id], onDelete: Cascade)
 
   @@index([eventId])
   @@index([attemptId])
@@ -653,17 +659,17 @@ model RLTrainingLog {
 }
 
 model IRTStudentState {
-  id              String   @id @default(cuid())
-  userId          String   @unique
+  id     String @id @default(cuid())
+  userId String @unique
 
-  theta           Float    @default(0)
-  confidence      Float    @default(1)
+  theta      Float @default(0)
+  confidence Float @default(1)
 
-  responseCount   Int      @default(0)
+  responseCount Int @default(0)
 
   lastEstimatedAt DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([lastEstimatedAt])
   @@index([responseCount])
@@ -671,15 +677,15 @@ model IRTStudentState {
 }
 
 model LEKnowledgePointState {
-  id              String   @id @default(cuid())
-  userId          String
+  id               String @id @default(cuid())
+  userId           String
   knowledgePointId String
 
-  correct         Int      @default(0)
-  total           Int      @default(0)
-  accuracy        Float    @default(0.5)
+  correct  Int   @default(0)
+  total    Int   @default(0)
+  accuracy Float @default(0.5)
 
-  lastUpdatedAt   DateTime @default(now())
+  lastUpdatedAt DateTime @default(now())
 
   @@unique([userId, knowledgePointId])
   @@index([userId])
