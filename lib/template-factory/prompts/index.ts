@@ -5,3 +5,8 @@
  */
 
 export { buildGenerationPrompt, parseGenerationResponse } from './generation';
+export {
+  buildMathValidationPrompt,
+  buildPedagogyValidationPrompt,
+  parseValidationResponse,
+} from './validation';
