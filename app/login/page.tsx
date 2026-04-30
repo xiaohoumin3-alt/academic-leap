@@ -1,15 +1,17 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { motion } from 'motion/react';
 import MaterialIcon from '../../components/MaterialIcon';
 
 type AuthMode = 'login' | 'register';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const showResetSuccess = searchParams.get('reset') === 'success';
   const [mode, setMode] = useState<AuthMode>('login');
   const [formData, setFormData] = useState({
     email: '',
@@ -89,6 +91,11 @@ export default function LoginPage() {
 
         {/* Form Card */}
         <div className="bg-surface-container-lowest rounded-[2rem] p-8 ambient-shadow">
+          {showResetSuccess && (
+            <div className="bg-success-container/20 text-success text-sm py-2 px-4 rounded-xl text-center mb-4">
+              密码重置成功，请使用新密码登录
+            </div>
+          )}
           <div className="flex gap-2 mb-6 bg-surface-container-low p-1 rounded-full">
             <button
               onClick={() => setMode('login')}
@@ -195,6 +202,18 @@ export default function LoginPage() {
               </div>
             </div>
 
+            {mode === 'login' && (
+              <div className="text-right mt-2">
+                <button
+                  type="button"
+                  onClick={() => router.push('/forgot-password')}
+                  className="text-sm text-primary hover:underline"
+                >
+                  忘记密码？
+                </button>
+              </div>
+            )}
+
             {error && (
               <div className="bg-error-container/20 text-error text-sm py-2 px-4 rounded-xl text-center">
                 {error}
@@ -232,5 +251,13 @@ export default function LoginPage() {
         </p>
       </motion.div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }
