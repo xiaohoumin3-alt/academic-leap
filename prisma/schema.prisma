@@ -311,10 +311,37 @@ model Template {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
   publishedAt DateTime?
+
+  // === Generation tracking ===
+  generatedBy     String    @default("manual")  // 'manual' | 'ai'
+  generatorModel  String?                       // 'gemini-2.5-flash' | 'gpt-4'
+  generationPrompt String?                      // Prompt used for generation
+  generationId    String?                       // Reference to TemplateGeneration
+
+  // === Validation tracking ===
+  validatedBy      String?                      // 'ai' | 'human'
+  validationResult Json?                        // Full validation result
+  qualityScore     Int?                         // 0-100 overall score
+  autoApproved     Boolean   @default(false)    // Auto-approved flag
+
+  // === Quality tracking ===
+  usedCount       Int       @default(0)         // Times used in questions
+  errorCount      Int       @default(0)         // Detected errors
+  errorRate       Float?                        // Calculated error rate
+
+  // === Review tracking ===
+  reviewStatus    String    @default("pending") // 'pending' | 'approved' | 'rejected'
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  reviewNotes     String?
+
   qualities   QuestionQuality[]
   knowledge   KnowledgeConcept? @relation("TemplateConcept", fields: [knowledgeId], references: [id])
   creator     Admin             @relation(fields: [createdBy], references: [id])
   versions    TemplateVersion[]
+  generation  TemplateGeneration? @relation("GenerationTemplate", fields: [generationId], references: [id])
+  validations TemplateValidation[]
+  reviews     TemplateReview[]
 }
 
 model TemplateVersion {
@@ -339,6 +366,62 @@ model QuestionQuality {
   detectedAt DateTime  @default(now())
   resolvedAt DateTime?
   template   Template  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// Template Factory - Generation, Validation, Review Tracking
+// ============================================================
+
+// TemplateGeneration - tracks each generation batch
+model TemplateGeneration {
+  id              String   @id @default(cuid())
+  knowledgePointId String
+  generatorModel  String
+  prompt          String
+  rawOutput       String
+  generatedCount  Int
+  successCount    Int
+  createdAt       DateTime @default(now())
+
+  templates       Template[] @relation("GenerationTemplate")
+}
+
+// TemplateValidation - tracks each validation run
+model TemplateValidation {
+  id              String   @id @default(cuid())
+  templateId      String
+  validatorModel  String
+  validationType  String   // 'math' | 'pedagogy'
+  result          Json
+  score           Int
+  passed          Boolean
+  createdAt       DateTime @default(now())
+
+  template        Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+}
+
+// TemplateReview - tracks human review decisions
+model TemplateReview {
+  id            String   @id @default(cuid())
+  templateId    String
+  reviewerId    String
+  decision      String   // 'approve' | 'reject' | 'modify'
+  notes         String?
+  modifications Json?
+  duration      Int      // Review time in seconds
+  createdAt     DateTime @default(now())
+
+  template      Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+}
+
+// KnowledgeCoverage - tracks coverage per knowledge point
+model KnowledgeCoverage {
+  knowledgePointId    String   @id
+  targetTemplateCount Int      @default(3)
+  currentTemplateCount Int     @default(0)
+  gap                Int
+  priority           String   // 'high' | 'medium' | 'low'
+  lastUpdated        DateTime @default(now())
 }
 
 model AuditLog {
