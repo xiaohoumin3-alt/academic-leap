@@ -37,6 +37,8 @@
     "test:rl-destruction": "npx tsx scripts/rl-destruction-simulator.ts",
     "test:rl-destruction:quick": "npx tsx scripts/rl-destruction-simulator.ts quick",
     "test:rl-destruction:single": "npx tsx scripts/rl-destruction-simulator.ts single",
+    "test:rl-destruction:compare": "npx tsx scripts/rl-destruction-simulator.ts compare",
+    "test:rl-destruction:compare:severe": "npx tsx scripts/rl-destruction-simulator.ts compare label_chaos_severe inverse_learner 1000",
     "test:rl-destruction:json": "npx tsx scripts/rl-destruction-simulator.ts full --json"
   },
   "dependencies": {

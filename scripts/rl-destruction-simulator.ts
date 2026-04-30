@@ -18,9 +18,25 @@
  */
 
 import { ThompsonSamplingBandit } from '../lib/rl/bandit/thompson-sampling';
+import { CWThompsonSamplingBandit } from '../lib/rl/bandit/cw-thompson-sampling';
 import { estimateAbilityEAP, type IRTResponse } from '../lib/rl/irt/estimator';
 import { InMemoryLEHistoryService } from '../lib/rl/history/le-history-service';
 import { calculateLEReward } from '../lib/rl/reward/le-reward';
+
+// Phase 1: Health monitoring
+import { HealthMonitor } from '../lib/rl/health/monitor';
+import { decideDegradation } from '../lib/rl/health/controller';
+import type { HealthStatus } from '../lib/rl/health/types';
+import { ruleEngineRecommendation } from '../lib/rl/fallback/rule-engine';
+
+// Phase 2: Feature flags
+import { getFeatureConfig as getPhase2Config, isFeatureEnabled as isPhase2Enabled } from '../lib/rl/config/phase2-features';
+
+// Phase 3: Quality and adaptation
+import { LabelQualityModel } from '../lib/rl/quality/label-quality';
+import { FeatureNormalizer } from '../lib/rl/normalize/feature-normalizer';
+import { AdaptationController } from '../lib/rl/control/adaptation-controller';
+import { getFeatureConfig, isFeatureEnabled } from '../lib/rl/config/phase3-features';
 
 // ==================== 破坏环境配置 ====================
 
@@ -126,15 +142,78 @@ interface DestructionMetrics {
 
 class DestructionSimulator {
   private bandit: ThompsonSamplingBandit;
+  private cwBandit?: CWThompsonSamplingBandit;  // Phase 2: Confidence-weighted bandit
+  private healthMonitor: HealthMonitor;           // Phase 1: Health monitoring
+  private labelQualityModel?: LabelQualityModel; // Phase 3: Label quality estimation
+  private featureNormalizer?: FeatureNormalizer; // Phase 3: Feature normalization
+  private adaptationController?: AdaptationController; // Phase 3: Exploration adaptation
   private history: InMemoryLEHistoryService;
   private userId: string;
   private knowledgePointId: string;
+  private usePhase3Protection: boolean;
+  private usePhase2Protection: boolean;
 
-  constructor(bucketSize: number = 0.5) {
+  constructor(bucketSize: number = 0.5, enableProtection: boolean = true) {
     this.bandit = new ThompsonSamplingBandit({ bucketSize });
     this.history = new InMemoryLEHistoryService();
     this.userId = 'destruction-test';
     this.knowledgePointId = 'test-kp-destruction';
+    this.usePhase2Protection = enableProtection;
+    this.usePhase3Protection = enableProtection;
+    this.healthMonitor = new HealthMonitor();
+
+    if (enableProtection) {
+      this.initPhase3Components();
+    }
+  }
+
+  /**
+   * Initialize Phase 3 components based on feature flags
+   */
+  private initPhase3Components(): void {
+    // Phase 3: Label Quality Model
+    if (isFeatureEnabled('lqm')) {
+      this.labelQualityModel = new LabelQualityModel(getFeatureConfig('lqm'));
+    }
+    // Phase 3: Feature Normalizer
+    if (isFeatureEnabled('normalizer')) {
+      this.featureNormalizer = new FeatureNormalizer(getFeatureConfig('normalizer'));
+    }
+    // Phase 3: Adaptation Controller
+    if (isFeatureEnabled('adaptation')) {
+      this.adaptationController = new AdaptationController(getFeatureConfig('adaptation'));
+    }
+  }
+
+  /**
+   * Initialize Phase 2 CW-TS bandit
+   */
+  private initPhase2Bandit(): CWThompsonSamplingBandit | undefined {
+    if (!this.usePhase2Protection || !isPhase2Enabled('cwts')) {
+      return undefined;
+    }
+    const cwtsConfig = getPhase2Config<import('../lib/rl/config/phase2-features').CWTSConfig>('cwts');
+    return new CWThompsonSamplingBandit(cwtsConfig, {
+      bucketSize: this.bandit.getState().bucketSize,
+      minDeltaC: 0,
+      maxDeltaC: 10,
+      priorAlpha: 1,
+      priorBeta: 1,
+    });
+  }
+
+  /**
+   * Sync CW-TS bandit state with base bandit
+   */
+  private syncCWBanditState(): void {
+    if (!this.cwBandit) return;
+
+    for (const [key, arm] of this.bandit.getState().buckets) {
+      // Sync observations from base bandit to CW-TS
+      for (let i = 0; i < arm.pullCount; i++) {
+        this.cwBandit.update(key, i < arm.successCount);
+      }
+    }
   }
 
   /**
@@ -193,8 +272,56 @@ class DestructionSimulator {
         console.log(`⚠️  Session ${session}: 分布偏移发生`);
       }
 
-      // 1. 获取推荐
-      const recommendedDeltaC = parseFloat(this.bandit.selectArm(theta));
+      // 1. 获取推荐 (Phase 1/2/3 integrated)
+      let recommendedDeltaC: number;
+
+      // Check system health status (Phase 1)
+      const healthStatus = this.healthMonitor.check();
+      const degradationAction = decideDegradation(healthStatus);
+
+      if (degradationAction.type === 'switch_to_rule' || degradationAction.type === 'stop') {
+        // Phase 1: Use rule engine fallback
+        recommendedDeltaC = ruleEngineRecommendation(theta);
+      } else if (degradationAction.type === 'increase_exploration') {
+        // Phase 1: Increase exploration
+        const banditRecommendation = parseFloat(this.bandit.selectArm(theta));
+        const exploration = (Math.random() - 0.5) * 1;
+        recommendedDeltaC = Math.max(1, Math.min(5, banditRecommendation + exploration));
+      } else {
+        // Normal operation: Use CW-TS if enabled (Phase 2)
+        if (this.usePhase2Protection) {
+          if (!this.cwBandit) {
+            this.cwBandit = this.initPhase2Bandit();
+          }
+          if (this.cwBandit) {
+            // Sync CW-TS state with base bandit
+            this.syncCWBanditState();
+
+            // Phase 3: Normalize theta
+            let normalizedTheta = theta;
+            if (this.featureNormalizer) {
+              this.featureNormalizer.update(theta, 'ability');
+              normalizedTheta = this.featureNormalizer.normalize(theta, 'ability');
+            }
+
+            // Phase 3: Adaptive exploration rate
+            let effectiveTheta = normalizedTheta;
+            if (this.adaptationController) {
+              const adaptation = this.adaptationController.getRecommendation();
+              if (Math.random() < adaptation.currentExplorationRate) {
+                // Force exploration
+                effectiveTheta = normalizedTheta + (Math.random() - 0.5) * 2;
+              }
+            }
+
+            recommendedDeltaC = parseFloat(this.cwBandit.selectArm(effectiveTheta));
+          } else {
+            recommendedDeltaC = parseFloat(this.bandit.selectArm(theta));
+          }
+        } else {
+          recommendedDeltaC = parseFloat(this.bandit.selectArm(theta));
+        }
+      }
 
       // 2. 应用环境破坏
       let actualDeltaC = recommendedDeltaC;
@@ -361,22 +488,44 @@ class DestructionSimulator {
             : delaySteps;
 
           if (actualDelay === 0) {
-            // 立即更新
-            this.bandit.update(recommendedDeltaC.toFixed(1), answerCorrect);
+            // 立即更新 (with LQM correction if enabled)
+            this.updateBanditWithLQM(recommendedDeltaC.toFixed(1), answerCorrect, theta, session);
           } else {
             // 加入延迟队列
             delayedRewards.push({ step: session, deltaC: recommendedDeltaC.toFixed(1), correct: answerCorrect });
           }
 
-          // 处理到期的延迟奖励
+          // 处理到期的延迟奖励 (with LQM correction)
           while (delayedRewards.length > 0 && delayedRewards[0].step <= session - actualDelay) {
             const delayed = delayedRewards.shift()!;
-            this.bandit.update(delayed.deltaC, delayed.correct);
+            this.updateBanditWithLQM(delayed.deltaC, delayed.correct, theta, delayed.step);
           }
         }
       } else {
-        // 正常更新bandit
-        this.bandit.update(recommendedDeltaC.toFixed(1), answerCorrect);
+        // 正常更新bandit (with LQM correction if enabled)
+        this.updateBanditWithLQM(recommendedDeltaC.toFixed(1), answerCorrect, theta, session);
+      }
+
+      // Record health metrics for Phase 1 monitoring
+      this.healthMonitor.recordResponse({
+        theta,
+        deltaC: recommendedDeltaC,
+        correct: answerCorrect,
+        timestamp: Date.now(),
+      });
+      this.healthMonitor.recordRecommendation({
+        deltaC: recommendedDeltaC,
+        timestamp: Date.now(),
+      });
+
+      // Update Phase 3 adaptation controller with current health metrics
+      if (this.adaptationController) {
+        const metrics = this.healthMonitor.getMetrics();
+        this.adaptationController.update({
+          le: metrics.le,
+          cs: metrics.cs,
+          confidence: metrics.dfi,
+        });
       }
 
       // 7. 更新IRT
@@ -569,6 +718,38 @@ class DestructionSimulator {
     }
 
     return 'none';
+  }
+
+  /**
+   * Update bandit with LQM-based label correction (Phase 3)
+   *
+   * This method corrects noisy labels before updating the bandit,
+   * improving robustness against label noise environments.
+   */
+  private updateBanditWithLQM(deltaC: string, originalCorrect: boolean, theta: number, session: number): void {
+    let banditUpdateValue = originalCorrect;
+
+    // Phase 3: Use LQM to correct labels
+    if (this.labelQualityModel) {
+      const questionId = `q-${session}`;
+      const corrected = this.labelQualityModel.correctLabel(questionId, originalCorrect);
+      if (corrected.wasCorrected) {
+        banditUpdateValue = corrected.value;
+      }
+      // Update LQM model with this response
+      this.labelQualityModel.update(questionId, {
+        correct: originalCorrect,
+        theta: theta,
+      });
+    }
+
+    // Update base bandit
+    this.bandit.update(deltaC, banditUpdateValue);
+
+    // Also update CW-TS bandit if enabled
+    if (this.cwBandit) {
+      this.cwBandit.update(deltaC, banditUpdateValue);
+    }
   }
 }
 
@@ -906,7 +1087,7 @@ class FailureMapGenerator {
 
 async function main() {
   const args = process.argv.slice(2);
-  const mode = args[0] || 'full'; // full, quick, single
+  const mode = args[0] || 'full'; // full, quick, single, compare
   const json = args.includes('--json');
 
   const simulator = new DestructionSimulator(0.5);
@@ -939,6 +1120,64 @@ async function main() {
       console.log(JSON.stringify(metrics, null, 2));
     } else {
       console.log(failureMap.generate());
+    }
+  } else if (mode === 'compare') {
+    // 对比测试：启用保护 vs 禁用保护
+    console.log('\n=== 对比测试：启用保护 vs 禁用保护 ===\n');
+
+    const envName = args[1] || 'label_chaos_mild';
+    const studentName = args[2] || 'inverse_learner';
+    const maxSessions = parseInt(args[3]) || 1000;
+
+    const envConfig = DESTRUCTION_ENVIRONMENTS[envName];
+    const studentConfig = STRATEGIC_STUDENTS[studentName];
+
+    if (!envConfig || !studentConfig) {
+      console.error('Invalid environment or student config');
+      process.exit(1);
+    }
+
+    console.log(`环境: ${envConfig.description}`);
+    console.log(`学生: ${studentConfig.description}`);
+    console.log(`会话数: ${maxSessions}\n`);
+
+    // Test 1: Without protection
+    console.log('--- 测试 1: 无保护 (基础 Thompson Sampling) ---');
+    const simulatorNoProtection = new DestructionSimulator(0.5, false);
+    const metricsNoProtection = await simulatorNoProtection.destruct(envConfig, studentConfig, maxSessions);
+
+    // Test 2: With protection (Phase 1/2/3)
+    console.log('\n--- 测试 2: 有保护 (Phase 1/2/3 集成) ---');
+    const simulatorWithProtection = new DestructionSimulator(0.5, true);
+    const metricsWithProtection = await simulatorWithProtection.destruct(envConfig, studentConfig, maxSessions);
+
+    // Output comparison
+    console.log('\n╔══════════════════════════════════════════════════════════════════════════════════╗');
+    console.log('║                            对比结果 (Comparison Results)                          ║');
+    console.log('╠══════════════════════════════════════════════════════════════════════════════════╣');
+    console.log('║  指标                    │ 无保护           │ 有保护           │ 改善            ║');
+    console.log('╠══════════════════════════════════════════════════════════════════════════════════╣');
+
+    const leDiff = metricsWithProtection.learning_effect - metricsNoProtection.learning_effect;
+    const csDiff = metricsWithProtection.stability - metricsNoProtection.stability;
+    const leSign = leDiff >= 0 ? '+' : '';
+    const csSign = csDiff >= 0 ? '+' : '';
+
+    console.log(`║  LE (学习有效性)          │ ${metricsNoProtection.learning_effect.toFixed(4).padEnd(16)} │ ${metricsWithProtection.learning_effect.toFixed(4).padEnd(16)} │ ${(leSign + leDiff.toFixed(4)).padEnd(16)}║`);
+    console.log(`║  CS (收敛稳定性)          │ ${metricsNoProtection.stability.toFixed(4).padEnd(16)} │ ${metricsWithProtection.stability.toFixed(4).padEnd(16)} │ ${(csSign + csDiff.toFixed(4)).padEnd(16)}║`);
+    console.log(`║  崩溃点                   │ ${(metricsNoProtection.collapse_point ?? '未崩溃').toString().padEnd(16)} │ ${(metricsWithProtection.collapse_point ?? '未崩溃').toString().padEnd(16)} │                  ║`);
+    console.log(`║  伪收敛                   │ ${(metricsNoProtection.analysis.pseudo_convergence ? '是' : '否').padEnd(16)} │ ${(metricsWithProtection.analysis.pseudo_convergence ? '是' : '否').padEnd(16)} │                  ║`);
+    console.log('╚══════════════════════════════════════════════════════════════════════════════════╝\n');
+
+    if (json) {
+      console.log(JSON.stringify({
+        withoutProtection: metricsNoProtection,
+        withProtection: metricsWithProtection,
+        comparison: {
+          leImprovement: leDiff,
+          csImprovement: csDiff,
+        }
+      }, null, 2));
     }
   } else if (mode === 'quick') {
     // 快速测试：每种环境类型测试一个

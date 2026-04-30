@@ -9,8 +9,30 @@ import { decideDegradation } from '@/lib/rl/health/controller';
 import { ruleEngineRecommendation } from '@/lib/rl/fallback/rule-engine';
 import { isFeatureEnabled, getFeatureConfig, CWTSConfig } from '@/lib/rl/config/phase2-features';
 import { CWThompsonSamplingBandit } from '@/lib/rl/bandit/cw-thompson-sampling';
+import { isFeatureEnabled as isPhase3Enabled, getFeatureConfig as getPhase3Config } from '@/lib/rl/config/phase3-features';
+import { FeatureNormalizer } from '@/lib/rl/normalize/feature-normalizer';
+import { AdaptationController } from '@/lib/rl/control/adaptation-controller';
 
 const healthMonitor = new HealthMonitor();
+
+// Phase 3 components - initialized per request when feature is enabled
+let normalizer: FeatureNormalizer | null = null;
+let adaptationController: AdaptationController | null = null;
+
+if (isPhase3Enabled('normalizer')) {
+  const normalizerConfig = getPhase3Config<{ windowSize: number }>('normalizer');
+  normalizer = new FeatureNormalizer(normalizerConfig);
+}
+
+if (isPhase3Enabled('adaptation')) {
+  const adaptationConfig = getPhase3Config<{
+    baseExplorationRate: number;
+    minExplorationRate: number;
+    adaptationSpeed: number;
+    confidenceThreshold: number;
+  }>('adaptation');
+  adaptationController = new AdaptationController(adaptationConfig);
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,6 +76,16 @@ export async function POST(request: NextRequest) {
     const healthStatus = healthMonitor.check();
     const degradationAction = decideDegradation(healthStatus);
 
+    // Apply feature normalization to theta if enabled
+    const normalizedTheta = normalizer
+      ? normalizer.normalize(theta, 'ability')
+      : theta;
+
+    // Get exploration rate from adaptation controller if enabled
+    const explorationRate = adaptationController
+      ? adaptationController.getExplorationRate()
+      : 0;
+
     let selectedDeltaC: number;
 
     if (degradationAction.type === 'switch_to_rule' || degradationAction.type === 'stop') {
@@ -61,7 +93,7 @@ export async function POST(request: NextRequest) {
       // TODO: Add proper logging library for health monitoring
       // console.warn(`[Health] ${degradationAction.reason}, using rule engine`);
     } else if (degradationAction.type === 'increase_exploration') {
-      const banditRecommendation = parseFloat(bandit.selectArm(theta));
+      const banditRecommendation = parseFloat(bandit.selectArm(normalizedTheta));
       const exploration = (Math.random() - 0.5) * 1;
       selectedDeltaC = Math.max(1, Math.min(5, banditRecommendation + exploration));
       // TODO: Add proper logging library for health monitoring
@@ -83,9 +115,17 @@ export async function POST(request: NextRequest) {
             cwBandit.update(key, i < arm.successCount);
           }
         }
-        selectedDeltaC = parseFloat(cwBandit.selectArm(theta));
+        selectedDeltaC = parseFloat(cwBandit.selectArm(normalizedTheta));
       } else {
-        selectedDeltaC = parseFloat(bandit.selectArm(theta));
+        // Apply adaptation controller exploration rate adjustment if enabled
+        const baseRecommendation = bandit.selectArm(normalizedTheta);
+        if (adaptationController && Math.random() < explorationRate) {
+          // Apply random exploration based on adaptation rate
+          const exploration = (Math.random() - 0.5) * 2;
+          selectedDeltaC = parseFloat(baseRecommendation) + exploration;
+        } else {
+          selectedDeltaC = parseFloat(baseRecommendation);
+        }
       }
     }
 
@@ -98,6 +138,17 @@ export async function POST(request: NextRequest) {
       deltaC: selectedDeltaC,
       timestamp: Date.now(),
     });
+
+    // Update adaptation controller with health metrics if enabled
+    if (adaptationController) {
+      // Derive confidence from convergence stability (0-1 range)
+      const confidence = healthStatus.metrics.cs;
+      adaptationController.update({
+        le: healthStatus.metrics.le,
+        cs: healthStatus.metrics.cs,
+        confidence,
+      });
+    }
 
     // Select arm (original logic now handled above with health checks)
 
