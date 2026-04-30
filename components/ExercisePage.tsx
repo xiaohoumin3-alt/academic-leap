@@ -19,6 +19,8 @@ import type { StepProtocolV2 } from '@/lib/question-engine/protocol-v2';
 import { YesNoInput, ChoiceInput, NumberInput } from './ExercisePage/v2-inputs';
 import PredictionBadge from './PredictionBadge';
 import ComplexityBadge, { ComplexityBar } from './ComplexityBadge';
+import { CorrectFeedback, WrongFeedback } from './gaming/FeedbackAnimator';
+import type { CriticalHitResult } from '@/types/gaming';
 
 export interface ExerciseResult {
   score: number;
@@ -73,6 +75,14 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
   const [completedCount, setCompletedCount] = useState(0);
   // 当前题目序号（从1开始，用于UI显示）
   const [currentQuestionNumber, setCurrentQuestionNumber] = useState(1);
+
+  // 反馈动画状态
+  const [showFeedback, setShowFeedback] = useState<{
+    type: 'correct' | 'wrong';
+    points?: number;
+    criticalHit?: CriticalHitResult;
+    streak?: number;
+  } | null>(null);
 
   // 独立性评估系统 - 帮助强度追踪
   const [hintRevealed, setHintRevealed] = useState(false);
@@ -632,6 +642,15 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
       setStepsResults(prev => ({ ...prev, [activeStep]: isCorrect ? 'correct' : 'error' }));
       setFeedback(feedback);
 
+      // 显示反馈动画
+      const points = isCorrect ? difficultyLevel * 10 : 0;
+      setShowFeedback({
+        type: isCorrect ? 'correct' : 'wrong',
+        points,
+        criticalHit: undefined,
+        streak: undefined,
+      });
+
       // 保存当前题目的答题结果到 ref（用于 completePractice）
       questionResultsRef.current = {
         correctResults: { [activeStep]: isCorrect ? 'correct' : 'error' },
@@ -709,6 +728,14 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
           setStepsResults(prev => ({ ...prev, [activeStep]: 'correct' }));
           setFeedback('正确！');
 
+          // 显示正确反馈动画
+          setShowFeedback({
+            type: 'correct',
+            points: difficultyLevel * 10,
+            criticalHit: undefined,
+            streak: undefined,
+          });
+
           // 先提交步骤记录
           if (attemptId) {
             await practiceApi.submit({
@@ -744,6 +771,14 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
           // 错误：显示红色反馈
           setStepsResults(prev => ({ ...prev, [activeStep]: 'error' }));
           addToMistakeList(currentQuestion!, correctAns);
+
+          // 显示错误反馈动画
+          setShowFeedback({
+            type: 'wrong',
+            points: undefined,
+            criticalHit: undefined,
+            streak: undefined,
+          });
 
           if (isDiagnostic) {
             // diagnostic 模式：不降低难度，继续下一题
@@ -1533,6 +1568,19 @@ const ExercisePage: React.FC<ExercisePageProps> = ({ mode, initialDifficulty, on
           transition={{ duration: 0.5 }}
         />
       </div>
+
+      {/* 反馈动画 */}
+      {showFeedback && showFeedback.type === 'correct' && (
+        <CorrectFeedback
+          points={showFeedback.points}
+          criticalHit={showFeedback.criticalHit}
+          streak={showFeedback.streak}
+          onComplete={() => setShowFeedback(null)}
+        />
+      )}
+      {showFeedback && showFeedback.type === 'wrong' && (
+        <WrongFeedback onComplete={() => setShowFeedback(null)} />
+      )}
     </div>
   );
 };
