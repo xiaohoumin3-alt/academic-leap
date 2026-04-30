@@ -269,6 +269,41 @@ RL_ADAPTATION_ENABLED=true
 
 ---
 
+## Phase 4: RL-UOK Integration (2026-05-01)
+
+### 架构
+
+RL 作为 UOK 的探索增强层：
+
+```
+UOK 推荐 → RLExplorationController → 返回 Top-N 候选 → 加权随机选择
+```
+
+### 组件
+
+| 组件 | 文件 | 描述 |
+|------|------|------|
+| RLExplorationController | `lib/rl/exploration/rl-exploration-controller.ts` | 健康监控 + 候选数量 |
+| Selector | `lib/rl/exploration/selector.ts` | 加权随机选择 |
+
+### 探索等级
+
+| 等级 | 权重分布 | 触发条件 |
+|------|---------|----------|
+| minimal | [0.7, 0.2, 0.1, 0, 0] | 健康 |
+| moderate | [0.4, 0.25, 0.2, 0.1, 0.05] | Warning / 同知识点≥3 |
+| aggressive | [0.2, 0.2, 0.2, 0.2, 0.2] | Danger / 伪收敛 |
+
+### 特性开关
+
+```bash
+RL_UOK_INTEGRATION_ENABLED=true
+RL_BASE_CANDIDATE_COUNT=2
+RL_MAX_CANDIDATE_COUNT=5
+```
+
+---
+
 ## 产品原则映射
 
 当遇到技术冲突时，参考 [PRODUCT.md#权衡原则](./PRODUCT.md#8-权衡原则-trade-off-principles)：
