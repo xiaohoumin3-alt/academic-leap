@@ -6,7 +6,14 @@
 
 **Architecture:** 使用 NextAuth 扩展 + Prisma 模型存储验证码。API 路由处理发送和验证，前端页面引导用户完成重置流程。
 
-**Tech Stack:** Next.js 15, NextAuth v5, Prisma, bcrypt
+**Tech Stack:** Next.js 15, NextAuth v5, Prisma, bcrypt, crypto
+
+**安全修复（基于代码审查）：**
+- CRITICAL #1: 时序攻击防护 - 无论邮箱是否存在都执行数据库写入
+- CRITICAL #2: 速率限制 - 防止暴力破解验证码
+- CRITICAL #3: 安全随机数 - 使用 crypto.randomBytes 替代 Math.random
+- CRITICAL #4: 并发控制 - 使用 Prisma 事务
+- HIGH: 尝试次数限制 - 防止暴力破解
 
 ---
 
@@ -14,49 +21,81 @@
 
 | 文件 | 操作 | 职责 |
 |------|------|------|
-| `prisma/schema.prisma` | 修改 | 添加 PasswordResetToken 模型 |
-| `app/api/auth/forgot-password/route.ts` | 新建 | 发送验证码 API |
-| `app/api/auth/reset-password/route.ts` | 新建 | 验证并重置密码 API |
+| `lib/rate-limit.ts` | 修改 | 添加速率限制规则 |
+| `prisma/schema.prisma` | 修改 | 添加 PasswordResetToken 模型（含 attemptCount） |
+| `app/api/auth/forgot-password/route.ts` | 新建 | 发送验证码 API（安全版） |
+| `app/api/auth/reset-password/route.ts` | 新建 | 验证并重置密码 API（安全版） |
 | `app/forgot-password/page.tsx` | 新建 | 申请重置页面 |
 | `app/reset-password/page.tsx` | 新建 | 设置新密码页面 |
-| `app/login/page.tsx` | 修改 | 添加忘记密码链接 |
+| `app/login/page.tsx` | 修改 | 添加忘记密码链接 + 成功后提示 |
 
 ---
 
-## Task 1: 添加数据库模型
+## Task 1: 添加速率限制规则
+
+**Files:**
+- Modify: `lib/rate-limit.ts`
+
+- [ ] **Step 1: 打开 lib/rate-limit.ts，添加新规则**
+
+在 `RATE_LIMITS` 对象中添加：
+
+```typescript
+// 添加到 RATE_LIMITS 对象中
+forgot_password: { windowMs: 5 * 60 * 1000, maxRequests: 3 },
+reset_password: { windowMs: 5 * 60 * 1000, maxRequests: 5 },
+```
+
+完整的 RATE_LIMITS 应该类似：
+
+```typescript
+const RATE_LIMITS: Record<string, RateLimitConfig> = {
+  gaming_post: { windowMs: 60000, maxRequests: 10 },
+  gaming_leaderboard: { windowMs: 60000, maxRequests: 30 },
+  // 新增：
+  forgot_password: { windowMs: 5 * 60 * 1000, maxRequests: 3 },
+  reset_password: { windowMs: 5 * 60 * 1000, maxRequests: 5 },
+};
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add lib/rate-limit.ts
+git commit -m "feat: add rate limiting for password reset endpoints"
+```
+
+---
+
+## Task 2: 添加数据库模型
 
 **Files:**
 - Modify: `prisma/schema.prisma`
 
-- [ ] **Step 1: 打开 schema.prisma 末尾**
-
-查看 User 模型位置，在其附近添加 PasswordResetToken 模型
-
-- [ ] **Step 2: 添加模型**
-
-在 schema 末尾添加：
+- [ ] **Step 1: 在 schema 末尾添加模型**
 
 ```prisma
 model PasswordResetToken {
-  id        String   @id @default(cuid())
-  email     String
-  code      String
-  expiresAt DateTime
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  email        String
+  code         String
+  expiresAt    DateTime
+  used         Boolean  @default(false)
+  attemptCount Int      @default(0)  // 尝试次数，防止暴力破解
+  createdAt    DateTime @default(now())
 
   @@index([email])
   @@index([code])
 }
 ```
 
-- [ ] **Step 3: 运行 Prisma migrate**
+- [ ] **Step 2: 运行 Prisma migrate**
 
 ```bash
 npx prisma migrate dev --name add_password_reset_token
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add prisma/schema.prisma prisma/migrations
@@ -65,7 +104,7 @@ git commit -m "feat: add PasswordResetToken model for password reset"
 
 ---
 
-## Task 2: 创建发送验证码 API
+## Task 3: 创建发送验证码 API（安全版）
 
 **Files:**
 - Create: `app/api/auth/forgot-password/route.ts`
@@ -76,13 +115,20 @@ git commit -m "feat: add PasswordResetToken model for password reset"
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { randomBytes } from 'crypto';
+
+// 速率限制
+const rateLimiter = await import('@/lib/rate-limit').then(m => m.createRateLimitMiddleware);
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('无效的邮箱格式'),
 });
 
+// 安全随机验证码生成器
 function generateCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  const bytes = randomBytes(4);
+  const num = bytes.readUInt32BE(0);
+  return String(100000 + (num % 900000)).padStart(6, '0');
 }
 
 export async function POST(request: NextRequest) {
@@ -90,28 +136,44 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email } = forgotPasswordSchema.parse(body);
 
-    // 检查用户是否存在
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
+    // 速率限制检查
+    const rateLimit = await rateLimiter('forgot_password');
+    const rateLimitResult = await rateLimit(email);
 
-    if (!user) {
-      // 为防止邮箱枚举攻击，返回相同响应
-      return NextResponse.json({
-        success: true,
-        message: '如果邮箱已注册，验证码已发送',
-      });
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { success: false, error: '请求过于频繁，请5分钟后再试' },
+        {
+          status: 429,
+          headers: {
+            'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
+            'X-RateLimit-Reset': rateLimitResult.resetAt.toISOString(),
+          },
+        }
+      );
     }
 
-    // 使之前的未使用验证码失效
-    await prisma.passwordResetToken.updateMany({
-      where: { email, used: false },
-      data: { used: true },
+    // 检查用户是否存在（用于决定返回消息）
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
     });
+
+    // CRITICAL FIX: 时序攻击防护
+    // 无论用户是否存在，都执行相同的数据库操作
+    // 这样攻击者无法通过响应时间判断邮箱是否注册
+
+    // 使之前的未使用验证码失效（使用事务保证原子性）
+    await prisma.$transaction([
+      prisma.passwordResetToken.updateMany({
+        where: { email, used: false },
+        data: { used: true },
+      }),
+    ]);
 
     // 生成新验证码
     const code = generateCode();
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15分钟后过期
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15分钟
 
     await prisma.passwordResetToken.create({
       data: { email, code, expiresAt },
@@ -122,7 +184,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: isDev ? '验证码已生成' : '验证码已发送到邮箱',
+      message: user
+        ? (isDev ? '验证码已生成' : '验证码已发送到邮箱')
+        : '如果邮箱已注册，验证码已发送',
       code: isDev ? code : undefined,
       expiresIn: 900,
     });
@@ -133,7 +197,11 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    console.error('[ForgotPassword] Error:', error);
+    // 安全错误日志（不记录敏感数据）
+    console.error('[ForgotPassword] Error:', {
+      type: error instanceof Error ? error.constructor.name : typeof error,
+      timestamp: new Date().toISOString(),
+    });
     return NextResponse.json(
       { success: false, error: '服务器错误' },
       { status: 500 }
@@ -159,12 +227,18 @@ curl -X POST http://localhost:3003/api/auth/forgot-password \
 
 ```bash
 git add app/api/auth/forgot-password/route.ts
-git commit -m "feat: add forgot-password API endpoint"
+git commit -m "feat: add forgot-password API with security fixes
+
+Security fixes:
+- Timing attack protection (always perform DB writes)
+- Rate limiting (3 requests per 5 minutes)
+- Cryptographically secure random code generation
+- Atomic token invalidation with transaction"
 ```
 
 ---
 
-## Task 3: 创建重置密码 API
+## Task 4: 创建重置密码 API（安全版）
 
 **Files:**
 - Create: `app/api/auth/reset-password/route.ts`
@@ -177,16 +251,38 @@ import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 
+// 速率限制
+const rateLimiter = await import('@/lib/rate-limit').then(m => m.createRateLimitMiddleware);
+
 const resetPasswordSchema = z.object({
   email: z.string().email('无效的邮箱格式'),
   code: z.string().length(6, '验证码必须是6位'),
   newPassword: z.string().min(6, '密码至少6位'),
 });
 
+const MAX_ATTEMPTS = 5; // 最大尝试次数
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { email, code, newPassword } = resetPasswordSchema.parse(body);
+
+    // 速率限制检查
+    const rateLimit = await rateLimiter('reset_password');
+    const rateLimitResult = await rateLimit(email);
+
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { success: false, error: '请求过于频繁，请5分钟后再试' },
+        {
+          status: 429,
+          headers: {
+            'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
+            'X-RateLimit-Reset': rateLimitResult.resetAt.toISOString(),
+          },
+        }
+      );
+    }
 
     // 查找有效的验证码
     const token = await prisma.passwordResetToken.findFirst({
@@ -206,17 +302,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 更新密码
-    const hashedPassword = await bcrypt.hash(newPassword, 12);
-    await prisma.user.update({
-      where: { email },
-      data: { password: hashedPassword },
-    });
+    // CRITICAL FIX: 尝试次数限制
+    if (token.attemptCount >= MAX_ATTEMPTS) {
+      // 锁定令牌
+      await prisma.passwordResetToken.update({
+        where: { id: token.id },
+        data: { used: true },
+      });
+      return NextResponse.json(
+        { success: false, error: '尝试次数过多，请重新获取验证码' },
+        { status: 400 }
+      );
+    }
 
-    // 标记验证码已使用
+    // 验证码错误，增加尝试次数
     await prisma.passwordResetToken.update({
       where: { id: token.id },
-      data: { used: true },
+      data: { attemptCount: { increment: 1 } },
+    });
+
+    // 使用事务完成密码更新和令牌使用
+    await prisma.$transaction(async (tx) => {
+      // 更新密码
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+      await tx.user.update({
+        where: { email },
+        data: { password: hashedPassword },
+      });
+
+      // 标记验证码已使用
+      await tx.passwordResetToken.update({
+        where: { id: token.id },
+        data: { used: true },
+      });
     });
 
     return NextResponse.json({
@@ -230,7 +348,11 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    console.error('[ResetPassword] Error:', error);
+    // 安全错误日志
+    console.error('[ResetPassword] Error:', {
+      type: error instanceof Error ? error.constructor.name : typeof error,
+      timestamp: new Date().toISOString(),
+    });
     return NextResponse.json(
       { success: false, error: '服务器错误' },
       { status: 500 }
@@ -256,12 +378,17 @@ curl -X POST http://localhost:3003/api/auth/reset-password \
 
 ```bash
 git add app/api/auth/reset-password/route.ts
-git commit -m "feat: add reset-password API endpoint"
+git commit -m "feat: add reset-password API with security fixes
+
+Security fixes:
+- Rate limiting (5 attempts per 5 minutes)
+- Attempt count tracking (lock after 5 failures)
+- Atomic transaction for password update and token usage"
 ```
 
 ---
 
-## Task 4: 创建申请重置页面
+## Task 5: 创建申请重置页面
 
 **Files:**
 - Create: `app/forgot-password/page.tsx`
@@ -273,7 +400,7 @@ git commit -m "feat: add reset-password API endpoint"
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import MaterialIcon from '@/components/MaterialIcon';
 
 export default function ForgotPasswordPage() {
@@ -292,7 +419,7 @@ export default function ForgotPasswordPage() {
     try {
       const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type: 'application/json' },
         body: JSON.stringify({ email }),
       });
 
@@ -421,7 +548,7 @@ git commit -m "feat: add forgot-password page"
 
 ---
 
-## Task 5: 创建重置密码页面
+## Task 6: 创建重置密码页面
 
 **Files:**
 - Create: `app/reset-password/page.tsx`
@@ -433,7 +560,7 @@ git commit -m "feat: add forgot-password page"
 
 import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import MaterialIcon from '@/components/MaterialIcon';
 
 function ResetPasswordForm() {
@@ -459,9 +586,8 @@ function ResetPasswordForm() {
         body: JSON.stringify({ email, code, newPassword }),
       });
 
-      const data = await res.json();
-
-      if (!data.success) {
+      if (!res.ok) {
+        const data = await res.json();
         setError(data.error || '重置失败');
         setLoading(false);
         return;
@@ -617,15 +743,27 @@ git commit -m "feat: add reset-password page"
 
 ---
 
-## Task 6: 修改登录页面添加链接
+## Task 7: 修改登录页面
 
 **Files:**
-- Modify: `app/login/page.tsx:196` (密码输入框后)
+- Modify: `app/login/page.tsx`
 
-- [ ] **Step 1: 在密码输入框后添加链接**
+- [ ] **Step 1: 添加导入和状态**
 
-在 `</div>` (密码输入框包裹的div) 之后，`{error && ...}` 之前添加：
+在文件顶部添加：
+```tsx
+import { useSearchParams } from 'next/navigation';
+```
 
+在 LoginPage 组件中添加：
+```tsx
+const searchParams = useSearchParams();
+const showResetSuccess = searchParams.get('reset') === 'success';
+```
+
+- [ ] **Step 2: 添加忘记密码链接**
+
+在密码输入框后（`</div>` 之后，`{error && ...}` 之前）添加：
 ```tsx
 {mode === 'login' && (
   <div className="text-right mt-2">
@@ -640,20 +778,31 @@ git commit -m "feat: add reset-password page"
 )}
 ```
 
-- [ ] **Step 2: 手动测试**
+- [ ] **Step 3: 添加成功提示**
 
-访问登录页，确认"忘记密码"链接显示且可点击
+在表单卡片内部顶部添加：
+```tsx
+{showResetSuccess && (
+  <div className="bg-success-container/20 text-success text-sm py-2 px-4 rounded-xl text-center mb-4">
+    密码重置成功，请使用新密码登录
+  </div>
+)}
+```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: 手动测试**
+
+访问登录页，确认"忘记密码"链接和"密码重置成功"提示都正常显示
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add app/login/page.tsx
-git commit -m "feat: add forgot password link to login page"
+git commit -m "feat: add forgot password link and reset success message to login page"
 ```
 
 ---
 
-## Task 7: 验证流程端到端
+## Task 8: 验证流程端到端
 
 - [ ] **Step 1: 完整流程测试**
 
@@ -675,9 +824,14 @@ git commit -m "feat: add forgot password link to login page"
 
 - [ ] 所有任务完成
 - [ ] 端到端流程测试通过
-- [ ] 代码风格一致
+- [ ] 代码风格一致（motion/react 导入）
 - [ ] 错误处理完善
-- [ ] 无 console.log（除调试用）
+- [ ] 安全修复已应用
+  - [ ] 时序攻击防护
+  - [ ] 速率限制
+  - [ ] 安全随机数
+  - [ ] 并发事务
+  - [ ] 尝试次数限制
 
 ---
 

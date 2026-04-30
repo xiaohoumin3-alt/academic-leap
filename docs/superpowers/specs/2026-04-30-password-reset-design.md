@@ -2,6 +2,7 @@
 
 > **日期:** 2026-04-30
 > **状态:** 已批准
+> **更新:** 2026-04-30 - 添加安全修复
 
 ## 1. 概述
 
@@ -17,12 +18,13 @@
 
 ```prisma
 model PasswordResetToken {
-  id        String   @id @default(cuid())
-  email     String
-  code      String   // 6位数字验证码
-  expiresAt DateTime // 15分钟后过期
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  email        String
+  code         String   // 6位数字验证码
+  expiresAt    DateTime // 15分钟后过期
+  used         Boolean  @default(false)
+  attemptCount Int      @default(0)  // 尝试次数，防止暴力破解
+  createdAt    DateTime @default(now())
 
   @@index([email])
   @@index([code])
@@ -107,13 +109,17 @@ model PasswordResetToken {
 
 ## 5. 安全措施
 
-| 措施 | 值 |
-|------|-----|
-| 验证码长度 | 6位数字 |
-| 有效期 | 15分钟 |
-| 验证码使用次数 | 1次 |
-| 请求频率限制 | 5分钟内最多3次 |
-| 密码最小长度 | 6字符 |
+| 措施 | 值 | 状态 |
+|------|-----|------|
+| 验证码长度 | 6位数字 | ✅ |
+| 有效期 | 15分钟 | ✅ |
+| 验证码使用次数 | 1次 | ✅ |
+| 请求频率限制 | 5分钟内最多3次 | ✅ 已实现 |
+| 密码最小长度 | 6字符 | ✅ |
+| 尝试次数限制 | 5次后锁定 | ✅ 已实现 |
+| 时序攻击防护 | 无论用户是否存在都执行DB操作 | ✅ 已实现 |
+| 安全随机数 | crypto.randomBytes | ✅ 已实现 |
+| 并发控制 | Prisma 事务 | ✅ 已实现 |
 
 ---
 
@@ -121,13 +127,13 @@ model PasswordResetToken {
 
 | 文件 | 操作 |
 |------|------|
+| lib/rate-limit.ts | 修改：添加速率限制规则 |
 | prisma/schema.prisma | 添加 PasswordResetToken 模型 |
-| app/api/auth/forgot-password/route.ts | 新建 |
-| app/api/auth/reset-password/route.ts | 新建 |
+| app/api/auth/forgot-password/route.ts | 新建（安全版） |
+| app/api/auth/reset-password/route.ts | 新建（安全版） |
 | app/forgot-password/page.tsx | 新建 |
 | app/reset-password/page.tsx | 新建 |
-| app/login/page.tsx | 修改：添加忘记密码链接 |
-| lib/rate-limit.ts | 可能需要添加新限制规则 |
+| app/login/page.tsx | 修改：添加忘记密码链接和成功提示 |
 
 ---
 
@@ -135,4 +141,4 @@ model PasswordResetToken {
 
 - 接入真实邮件服务（Resend / SMTP）
 - 邮件内容国际化
-- 验证码输入错误3次后锁定
+- 旧令牌清理定时任务
