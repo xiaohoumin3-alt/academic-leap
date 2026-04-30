@@ -28,6 +28,9 @@ export const DEGRADATION_RULES: Record<string, DegradationRule> = {
   },
 };
 
+// System user ID for automated operations (no authenticated user)
+const SYSTEM_USER_ID = 'system';
+
 /**
  * GracefulDegrader handles graceful degradation when metrics degrade.
  *
@@ -50,6 +53,7 @@ export class GracefulDegrader {
     // Log the degradation
     await this.prisma.auditLog.create({
       data: {
+        userId: SYSTEM_USER_ID,
         action: 'degrade',
         entity: 'template',
         entityId: templateId,
@@ -93,9 +97,11 @@ export class GracefulDegrader {
     // Log the switch
     await this.prisma.auditLog.create({
       data: {
+        userId: SYSTEM_USER_ID,
         action: 'switch_to_rule_engine',
         entity: 'template',
         entityId: templateId,
+        changes: {},
       },
     });
 
@@ -113,9 +119,11 @@ export class GracefulDegrader {
     // Log the rollback
     await this.prisma.auditLog.create({
       data: {
+        userId: SYSTEM_USER_ID,
         action: 'immediate_rollback',
         entity: 'template',
         entityId: templateId,
+        changes: {},
       },
     });
 
@@ -137,9 +145,11 @@ export class GracefulDegrader {
     // Log recovery
     await this.prisma.auditLog.create({
       data: {
+        userId: SYSTEM_USER_ID,
         action: 'recover',
         entity: 'template',
         entityId: templateId,
+        changes: {},
       },
     });
 
