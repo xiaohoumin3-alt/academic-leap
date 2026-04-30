@@ -37,3 +37,6 @@ export type { QuestionAttempt, DifficultyDrift } from './monitor';
 
 // Phase 2: Core Reinforcement
 export * from './phase2';
+
+// Phase 3: Core Reconstruction
+export * from './phase3';

@@ -245,6 +245,30 @@ RL_DISTMON_ENABLED=true
 
 ---
 
+## Phase 3: 完整重构 (2026-05-01)
+
+### 组件
+
+| 组件 | 文件 | 描述 |
+|------|------|------|
+| LQM | `lib/rl/quality/label-quality.ts` | 题目标签质量估计与修正 |
+| Normalizer | `lib/rl/normalize/feature-normalizer.ts` | z-score 特征归一化 |
+| Adaptation | `lib/rl/control/adaptation-controller.ts` | 自适应探索率控制 |
+
+### 特性开关
+
+```bash
+RL_LQM_ENABLED=true
+RL_NORMALIZER_ENABLED=true
+RL_ADAPTATION_ENABLED=true
+```
+
+### API 端点
+
+- `GET /api/rl/quality-report` - Phase 3 组件状态报告
+
+---
+
 ## 产品原则映射
 
 当遇到技术冲突时，参考 [PRODUCT.md#权衡原则](./PRODUCT.md#8-权衡原则-trade-off-principles)：
