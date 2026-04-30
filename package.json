@@ -39,7 +39,9 @@
     "test:rl-destruction:single": "npx tsx scripts/rl-destruction-simulator.ts single",
     "test:rl-destruction:compare": "npx tsx scripts/rl-destruction-simulator.ts compare",
     "test:rl-destruction:compare:severe": "npx tsx scripts/rl-destruction-simulator.ts compare label_chaos_severe inverse_learner 1000",
-    "test:rl-destruction:json": "npx tsx scripts/rl-destruction-simulator.ts full --json"
+    "test:rl-destruction:json": "npx tsx scripts/rl-destruction-simulator.ts full --json",
+    "test:gaming": "npx tsx scripts/test-gaming.ts",
+    "test:gaming-integration": "npx tsx scripts/test-gaming-integration.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

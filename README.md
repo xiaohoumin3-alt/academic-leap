@@ -55,6 +55,40 @@ npm run dev
 
 详见 [PRODUCT.md#核心KPI](./PRODUCT.md#5-核心kpi-key-metrics)
 
+## 🎮 游戏化系统
+
+系统包含完整的游戏化激励机制，提升学习动力：
+
+### 核心特性
+
+- **等级与经验** - 练习获得经验，升级解锁新奖励
+- **成就系统** - 基于学习效果的多维度成就（学习、坚持、精度、探索）
+- **排行榜** - 每日/周/总榜竞争，激发学习热情
+- **连续学习** - 连续打卡获得额外奖励
+- **家长控制** - 可配置的每日限额、时间限制、隐私设置
+- **A/B实验** - 持续优化激励机制效果
+
+### API 端点
+
+```bash
+# 游戏化事件处理
+POST /api/gaming
+GET /api/gaming/leaderboard
+POST /api/gaming/achievements
+
+# 家长控制
+PATCH /api/gaming/parental/settings
+GET /api/gaming/parental/trend
+GET /api/gaming/parental/report
+
+# 监控
+GET /api/gaming/monitoring/health
+GET /api/gaming/monitoring/noise
+GET /api/gaming/monitoring/experiment
+```
+
+详见 [docs/CODEMAPS/gamification.md](./docs/CODEMAPS/gamification.md)
+
 ## 🧪 测试
 
 ```bash
@@ -72,6 +106,10 @@ npm run test:rl-adversarial
 
 # 破坏性验证
 npm run test:rl-destruction
+
+# 游戏化系统测试
+npm run test:gaming
+npm run test:gaming-integration
 ```
 
 ## 📦 部署
@@ -84,6 +122,21 @@ npm run build
 npm run start
 ```
 
+## 🏗️ 系统架构
+
+### 核心组件
+
+- **学习引擎** - 基于IRT和强化学习的自适应推荐
+- **游戏化系统** - 完整的激励机制（等级、成就、排行榜）
+- **健康监控** - RL系统健康状态监测与自动降级
+- **数据完整性** - DFI ≥ 99% 的全链路追踪
+- **家长控制** - 安全的使用限制和隐私保护
+
+### 架构图与详情
+
+详见 [docs/CODEMAPS/INDEX.md](./docs/CODEMAPS/INDEX.md)  
+游戏化系统详情见 [docs/CODEMAPS/gamification.md](./docs/CODEMAPS/gamification.md)
+
 ## 🛠️ 技术栈
 
 - **Frontend**: Next.js 15, React 19, Tailwind CSS
@@ -91,6 +144,8 @@ npm run start
 - **AI**: Google Gemini API
 - **Database**: PostgreSQL (Supabase)
 - **Auth**: NextAuth.js v5
+- **Cache**: Redis (排行榜、缓存)
+- **Monitoring**: 自定义健康监控系统
 
 ## 📝 许可证
 
