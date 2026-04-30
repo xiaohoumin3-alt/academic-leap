@@ -12,7 +12,18 @@ const createCanarySchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const take = Math.min(Number(searchParams.get('limit')) || 20, 100);
+    const skip = Number(searchParams.get('offset')) || 0;
+
     const canaries = await prisma.canaryRelease.findMany({
+      take,
+      skip,
       orderBy: { startedAt: 'desc' },
       include: {
         history: { orderBy: { enteredAt: 'desc' }, take: 1 },

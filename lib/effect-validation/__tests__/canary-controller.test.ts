@@ -44,6 +44,15 @@ describe('CanaryController', () => {
         }),
       })
     );
+
+    // Verify canaryStageHistory uses canary.id, not templateId
+    expect(mockPrisma.canaryStageHistory.create).toHaveBeenCalledWith({
+      data: {
+        canaryId: 'c-1', // Must be the actual CanaryRelease.id, not templateId
+        stage: 0,
+        trafficPercent: 5,
+      },
+    });
   });
 
   it('should increase traffic to next stage', async () => {
@@ -66,6 +75,19 @@ describe('CanaryController', () => {
         }),
       })
     );
+
+    // Verify canaryStageHistory uses canary.id for both updateMany and create
+    expect(mockPrisma.canaryStageHistory.updateMany).toHaveBeenCalledWith({
+      where: { canaryId: 'c-1', exitedAt: null }, // Must be CanaryRelease.id
+      data: { exitedAt: expect.any(Date) },
+    });
+    expect(mockPrisma.canaryStageHistory.create).toHaveBeenCalledWith({
+      data: {
+        canaryId: 'c-1', // Must be CanaryRelease.id, not templateId
+        stage: 1,
+        trafficPercent: 10,
+      },
+    });
   });
 
   it('should complete canary at final stage', async () => {

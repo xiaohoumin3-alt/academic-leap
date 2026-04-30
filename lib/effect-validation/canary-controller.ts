@@ -10,6 +10,14 @@ export class CanaryController {
   }
 
   async startCanary(templateId: string): Promise<void> {
+    const canary = await this.prisma.canaryRelease.findUnique({
+      where: { templateId },
+    });
+
+    if (!canary) {
+      throw new Error(`Canary not found for template ${templateId}`);
+    }
+
     await this.prisma.canaryRelease.update({
       where: { templateId },
       data: {
@@ -22,7 +30,7 @@ export class CanaryController {
 
     await this.prisma.canaryStageHistory.create({
       data: {
-        canaryId: templateId,
+        canaryId: canary.id,
         stage: 0,
         trafficPercent: CANARY_STAGES[0],
       },
@@ -59,13 +67,13 @@ export class CanaryController {
 
     if (!isFinalStage) {
       await this.prisma.canaryStageHistory.updateMany({
-        where: { canaryId: templateId, exitedAt: null },
+        where: { canaryId: canary.id, exitedAt: null },
         data: { exitedAt: new Date() },
       });
 
       await this.prisma.canaryStageHistory.create({
         data: {
-          canaryId: templateId,
+          canaryId: canary.id,
           stage: nextStage,
           trafficPercent: CANARY_STAGES[nextStage],
         },
