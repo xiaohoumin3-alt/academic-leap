@@ -44,6 +44,8 @@
     "e2e",
     "validation",
     "lib/rl/health/__tests__",
-    "lib/rl/fallback/__tests__"
+    "lib/rl/fallback/__tests__",
+    "apps",
+    "scripts"
   ]
 }

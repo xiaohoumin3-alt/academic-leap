@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { gamificationListener } from '@/lib/gaming/event-listener';
 
 // POST /api/practice/finish - 完成练习
 export async function POST(req: NextRequest) {
@@ -162,9 +163,50 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 集成游戏化：处理学习事件
+    // 获取该Attempt的LE数据（如果有）
+    const rlLog = await prisma.rLTrainingLog.findFirst({
+      where: { attemptId },
+      select: { leDelta: true },
+    });
+
+    const leDelta = rlLog?.leDelta ?? 0;
+
+    // 为每个答题步骤处理游戏化事件
+    // 注意：每个 step 需要唯一的 eventId，否则 CriticalHitLog 的 attemptId 唯一约束会冲突
+    const gamificationRewards = [];
+    for (const step of attempt.steps) {
+      if (step.questionStep) {
+        try {
+          // 使用 step.id 作为 eventId 保证唯一性
+          const reward = await gamificationListener.processEvent({
+            eventId: step.id,
+            attemptId: attempt.id,
+            userId: session.user.id,
+            questionId: step.questionStep.questionId,
+            isCorrect: step.isCorrect,
+            leDelta, // 使用整体LE
+            duration: step.duration,
+            timestamp: new Date(),
+          });
+
+          if (reward) {
+            gamificationRewards.push({
+              stepId: step.id,
+              reward,
+            });
+          }
+        } catch (error) {
+          // 游戏化失败不影响练习完成
+          console.error('[Gamification] Event processing error:', error);
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       attempt,
+      gamificationRewards,
     });
   } catch (error) {
     console.error('完成练习错误:', error);

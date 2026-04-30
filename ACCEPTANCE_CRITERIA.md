@@ -90,6 +90,62 @@ curl -X POST http://localhost:3000/api/questions/generate \
 | 数学公式提取 | 上传包含公式的图片 | expressions数组非空 |
 | 置信度 | 检查返回的confidence | 0-1之间的数值 |
 
+### 1.8 游戏化系统 (MUST)
+
+| 验收项 | 测试方法 | 预期结果 |
+|--------|----------|----------|
+| **等级系统** | POST /api/gaming (practice_completed) | 玩家经验增加，等级提升 |
+| **经验计算** | 模拟不同准确率 | 100%准确率获得更多经验 |
+| **连续学习奖励** | 连续3天练习 | 获得streak bonus加成 |
+| **成就解锁** | 触发成就条件 | 解锁对应成就，获得额外奖励 |
+| **排行榜更新** | GET /api/gaming/leaderboard | 排名正确更新，数据实时 |
+| **家长控制** | PATCH /api/gaming/parental/settings | 设置生效，限制生效 |
+| **数据完整性** | 检查 eventId 链路 | 所有事件可追踪，DFI >= 99% |
+| **错误处理** | 模拟系统错误 | 进入死信队列，不影响主流程 |
+| **性能要求** | 并发100个游戏化事件 | 平均处理时间 < 100ms |
+
+**测试命令**:
+```bash
+# 游戏化事件处理
+curl -X POST http://localhost:3000/api/gaming \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event": "practice_completed",
+    "eventId": "test_123",
+    "data": {
+      "userId": "user_123",
+      "accuracy": 0.95,
+      "experience": 150
+    }
+  }'
+
+# 获取排行榜
+curl http://localhost:3000/api/gaming/leaderboard?limit=10
+
+# 更新家长设置
+curl -X PATCH http://localhost:3000/api/gaming/parental/settings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "dailyMinutes": 60,
+    "showRanking": false
+  }'
+
+# 验证数据完整性
+psql $DATABASE_URL -c "
+  SELECT COUNT(*) as total_events FROM \"Attempt\" WHERE event_id IS NOT NULL;
+  SELECT COUNT(*) as failures FROM \"GamificationFailure\";
+"
+
+# 验证DFI
+DFI=$(echo "scale=2; $(psql $DATABASE_URL -t -c "SELECT COUNT(*) FROM \"Attempt\" WHERE event_id IS NOT NULL;") / $(psql $DATABASE_URL -t -c "SELECT COUNT(*) FROM \"Attempt\";") * 100" | bc)
+echo "DFI: $DFI%"
+if (( $(echo "$DFI >= 99.0" | bc -l) )); then
+  echo "✅ DFI 达标"
+else
+  echo "❌ DFI 不达标"
+fi
+```
+
 ---
 
 ## 二、性能验收标准 (Performance Acceptance)

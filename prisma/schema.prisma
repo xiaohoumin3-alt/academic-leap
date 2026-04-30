@@ -44,6 +44,7 @@ model User {
   knowledge                  UserKnowledge[]
   studentAbilities           StudentAbility[]
   predictionLogs             PredictionLog[]
+  playerProfile              PlayerProfile?
 }
 
 model Question {
@@ -783,4 +784,121 @@ model CanaryStageHistory {
   accuracyValue  Float?
 
   canary CanaryRelease @relation(fields: [canaryId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// Gamification System - 游戏化层（与学习核心解耦）
+// ============================================================
+
+// PlayerProfile - 玩家积分与主题配置
+model PlayerProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  totalXP   Int      @default(0)
+  level     Int      @default(1)
+  theme     String   @default("adventure") // adventure | sci-fi | fantasy | sports
+  character String   @default("explorer")
+
+  // 连胜数据（基于LE，非简单答对）
+  currentStreak    Int      @default(0)
+  bestStreak       Int      @default(0)
+  streakLastUpdate DateTime @default(now())
+
+  // 暴击统计
+  totalCriticalHits Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streaks     Streak[]
+  achievements Achievement[]
+  parentalControls ParentalControl?
+
+  @@index([userId, totalXP])
+  @@index([level])
+}
+
+// Streak - 连胜记录（仅基于LE >= 0.15的答对）
+model Streak {
+  id           String   @id @default(cuid())
+  userId       String
+  profileId    String
+  length       Int // 连胜长度
+  leDelta      Float // 平均LE增量
+  startedAt    DateTime
+  endedAt      DateTime @default(now())
+
+  profile PlayerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startedAt])
+  @@index([profileId])
+}
+
+// Achievement - 成就系统
+model Achievement {
+  id          String   @id @default(cuid())
+  userId      String
+  profileId   String
+  type        String // streak_master | knowledge_explorer | early_bird | consistency_king | challenge_legend
+  name        String
+  description String
+  unlockedAt  DateTime @default(now())
+
+  profile PlayerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@index([userId])
+}
+
+// CriticalHitLog - 暴击记录（用于从LE计算中排除噪声）
+model CriticalHitLog {
+  id        String   @id @default(cuid())
+  eventId   String   @unique // 唯一事件ID，每个gamification event最多一次暴击
+  userId    String
+  attemptId String
+  questionId String
+  xpMultiplier Float // 暴击倍率（1.5x, 2x, 3x）
+  baseXP    Int
+  bonusXP   Int
+  triggerReason String // lucky_streak | double_lucky | jackpot
+  loggedAt  DateTime @default(now())
+
+  @@index([userId, loggedAt])
+  @@index([attemptId])
+  @@index([eventId])
+}
+
+// ParentalControl - 家长控制设置
+model ParentalControl {
+  id                String   @id @default(cuid())
+  profileId         String   @unique
+  gamificationEnabled Boolean @default(true)
+  dailyXPCap        Int      @default(500) // 每日积分上限
+  allowedTimeStart  String?  @default("08:00") // 允许开始时间
+  allowedTimeEnd    String?  @default("21:00") // 允许结束时间
+  showRankings      Boolean @default(true) // 是否显示排行榜
+  rewardThreshold   Int      @default(100) // 奖励解锁所需积分
+
+  profile PlayerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+}
+
+// GamificationFailure - 游戏化处理失败事件（Dead Letter Queue）
+model GamificationFailure {
+  id         String   @id @default(cuid())
+  eventId    String   @unique
+  attemptId  String
+  userId     String
+  questionId String
+  isCorrect  Boolean
+  leDelta    Float
+  duration   Int
+  error      String
+  failedAt   DateTime @default(now())
+  retryCount Int      @default(0)
+
+  @@index([userId, failedAt])
+  @@index([eventId])
 }
