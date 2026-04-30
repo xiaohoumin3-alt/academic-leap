@@ -104,10 +104,10 @@ export const RATE_LIMIT_CONSTANTS = {
 // ============================================================
 
 export const THEMES = {
-  adventure: { name: '冒险', icon: '🗺️' },
-  sciFi: { name: '科幻', icon: '🚀' },
-  fantasy: { name: '奇幻', icon: '⚔️' },
-  sports: { name: '运动', icon: '⚽' },
+  'magic-academy': { name: '魔法学院', icon: '🎓' },
+  'career': { name: '职业养成', icon: '💼' },
+  'racing': { name: '极限竞速', icon: '🏎️' },
+  'detective': { name: '特工行动', icon: '🕵️' },
 } as const;
 
 // ============================================================

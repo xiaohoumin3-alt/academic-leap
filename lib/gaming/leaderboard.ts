@@ -91,28 +91,14 @@ class LeaderboardService {
       },
     });
 
-    const [total, users] = await Promise.all([
-      prisma.playerProfile.count({ where }),
-      // 批量获取用户信息
-      prisma.user.findMany({
-        where: {
-          id: { in: profiles.map((p) => p.userId) },
-        },
-        select: {
-          id: true,
-          name: true,
-        },
-      }),
-    ]);
+    // 获取总数
+    const total = await prisma.playerProfile.count({ where });
 
-    // 创建用户名映射
-    const userNameMap = new Map(users.map((u) => [u.id, u.name]));
-
-    // 转换为排行榜格式
+    // 创建用户名映射 - 匿名化
     const entries: LeaderboardEntry[] = profiles.map((profile, index) => ({
       rank: offset + index + 1,
       userId: profile.userId,
-      userName: userNameMap.get(profile.userId) || '匿名',
+      userName: `匿名用户${offset + index + 1}`,  // 匿名化：匿名用户1, 匿名用户2...
       totalXP: profile.totalXP,
       level: profile.level,
       theme: profile.theme,
