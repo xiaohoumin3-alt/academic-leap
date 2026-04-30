@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 
 const ReviewDecisionSchema = z.object({
   decision: z.enum(['approve', 'reject', 'modify']),
@@ -10,9 +11,11 @@ const ReviewDecisionSchema = z.object({
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  // Next.js 15: params is a Promise
+  { params }: { params: Promise<{ id?: string }> }
 ) {
   try {
+    const { id = '' } = await params;
     const body = await request.json();
     const parsed = ReviewDecisionSchema.safeParse(body);
 
@@ -26,7 +29,7 @@ export async function POST(
     const { decision, notes, modifications } = parsed.data;
 
     await prisma.template.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         reviewStatus: decision === 'approve' ? 'approved' : 'rejected',
         reviewedAt: new Date(),
@@ -36,18 +39,18 @@ export async function POST(
 
     await prisma.templateReview.create({
       data: {
-        templateId: params.id,
+        templateId: id,
         reviewerId: 'admin',
         decision,
         notes: notes || null,
-        modifications: modifications || {},
+        modifications: (modifications || {}) as Prisma.InputJsonValue,
         duration: 0,
       },
     });
 
     return NextResponse.json({
       success: true,
-      templateId: params.id,
+      templateId: id,
       decision,
     });
   } catch (error) {
