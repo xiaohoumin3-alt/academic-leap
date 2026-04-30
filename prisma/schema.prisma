@@ -691,3 +691,96 @@ model LEKnowledgePointState {
   @@index([userId])
   @@index([knowledgePointId])
 }
+
+// ============================================================
+// Effect Validation - Shadow Attempts, Experiments, Canary Releases
+// ============================================================
+
+model ShadowAttempt {
+  id             String   @id @default(cuid())
+  templateId     String
+  userId         String
+  knowledgePoint String
+  isCorrect      Boolean
+  duration       Int // seconds
+  leDelta        Float?
+  recordedAt     DateTime @default(now())
+
+  @@index([templateId])
+  @@index([knowledgePoint])
+  @@index([userId])
+}
+
+model EffectExperiment {
+  id                  String    @id @default(cuid())
+  name                String
+  controlTemplateId   String
+  treatmentTemplateId String
+  status              String    @default("draft")
+  targetMetric        String // 'accuracy' | 'le'
+  minSampleSize       Int       @default(50)
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime  @default(now())
+
+  assignments  EffectAssignment[]
+  observations EffectObservation[]
+
+  @@index([status])
+}
+
+model EffectAssignment {
+  id           String          @id @default(cuid())
+  experimentId String
+  userId       String
+  variant      String // 'control' | 'treatment'
+  assignedAt   DateTime        @default(now())
+
+  experiment   EffectExperiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+
+  @@unique([experimentId, userId])
+}
+
+model EffectObservation {
+  id           String          @id @default(cuid())
+  experimentId String
+  userId       String
+  variant      String
+  metricName   String
+  value        Float
+  timestamp    DateTime        @default(now())
+
+  experiment   EffectExperiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+
+  @@index([experimentId, variant])
+}
+
+model CanaryRelease {
+  id               String    @id @default(cuid())
+  templateId       String    @unique
+  currentStage     Int       @default(0)
+  trafficPercent   Int       @default(0)
+  status           String    @default("pending")
+  startedAt        DateTime?
+  lastHealthCheck  DateTime?
+  healthStatus     String?
+  createdAt        DateTime  @default(now())
+
+  history CanaryStageHistory[]
+
+  @@index([templateId])
+  @@index([status])
+}
+
+model CanaryStageHistory {
+  id             String        @id @default(cuid())
+  canaryId       String
+  stage          Int
+  trafficPercent Int
+  enteredAt      DateTime      @default(now())
+  exitedAt       DateTime?
+  leValue        Float?
+  accuracyValue  Float?
+
+  canary CanaryRelease @relation(fields: [canaryId], references: [id], onDelete: Cascade)
+}
