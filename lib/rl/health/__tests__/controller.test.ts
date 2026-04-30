@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from '@jest/globals';
 import { decideDegradation } from '../controller';
 import type { HealthStatus } from '../types';
 
