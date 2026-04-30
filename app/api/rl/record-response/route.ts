@@ -8,6 +8,8 @@ import { calculateHybridReward, type StudentResponse, type LETrackingContext } f
 import { HealthMonitor } from '@/lib/rl/health/monitor';
 import { applyTimeDecay } from '@/lib/rl/reward/time-decay-credit';
 import { isFeatureEnabled, getFeatureConfig, TDCAConfig } from '@/lib/rl/config/phase2-features';
+import { isFeatureEnabled as isPhase3Enabled, getFeatureConfig as getPhase3Config, LQMConfig } from '@/lib/rl/config/phase3-features';
+import { LabelQualityModel } from '@/lib/rl/quality/label-quality';
 
 const healthMonitor = new HealthMonitor();
 
@@ -130,13 +132,28 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // Initialize Label Quality Model if enabled
+    let labelQualityModel: LabelQualityModel | null = null;
+    if (isPhase3Enabled('lqm')) {
+      const lqmConfig = getPhase3Config<LQMConfig>('lqm');
+      labelQualityModel = new LabelQualityModel(lqmConfig);
+    }
+
     // Update bandit
     const bandit = await modelStore.loadModel(deployedModel.id);
     if (!bandit) {
       return NextResponse.json({ error: 'Failed to load model' }, { status: 500 });
     }
 
-    bandit.update(selectedDeltaC.toFixed(1), finalReward > 0.5);
+    // Apply label quality correction if LQM is enabled
+    let banditUpdateValue = finalReward > 0.5;
+    if (labelQualityModel) {
+      const corrected = labelQualityModel.correctLabel(questionId, finalReward > 0.5);
+      banditUpdateValue = corrected.value;
+      // Update LQM model with this response
+      labelQualityModel.update(questionId, { correct, theta: thetaAfter });
+    }
+    bandit.update(selectedDeltaC.toFixed(1), banditUpdateValue);
     await modelStore.saveModel(deployedModel.id, bandit);
 
     // Log training
