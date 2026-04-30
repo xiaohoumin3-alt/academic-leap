@@ -221,6 +221,30 @@ if (action.type === 'switch_to_rule') {
 
 ---
 
+## Phase 2: 核心加固 (2026-04-30)
+
+### 组件
+
+| 组件 | 文件 | 描述 |
+|------|------|------|
+| CW-TS | `lib/rl/bandit/cw-thompson-sampling.ts` | 置信度加权采样 |
+| TD-CA | `lib/rl/reward/time-decay-credit.ts` | 时间衰减 Credit Assignment |
+| DistMon | `lib/rl/monitor/distribution.ts` | 分布监控（三类漂移检测） |
+
+### 特性开关
+
+```bash
+RL_CWTS_ENABLED=true
+RL_TDCA_ENABLED=true
+RL_DISTMON_ENABLED=true
+```
+
+### API 端点
+
+- `POST /api/rl/recalibrate` - 手动触发重校准
+
+---
+
 ## 产品原则映射
 
 当遇到技术冲突时，参考 [PRODUCT.md#权衡原则](./PRODUCT.md#8-权衡原则-trade-off-principles)：

@@ -7,6 +7,8 @@ import { InMemoryLEHistoryService } from '@/lib/rl/history/le-history-service';
 import { HealthMonitor } from '@/lib/rl/health/monitor';
 import { decideDegradation } from '@/lib/rl/health/controller';
 import { ruleEngineRecommendation } from '@/lib/rl/fallback/rule-engine';
+import { isFeatureEnabled, getFeatureConfig, CWTSConfig } from '@/lib/rl/config/phase2-features';
+import { CWThompsonSamplingBandit } from '@/lib/rl/bandit/cw-thompson-sampling';
 
 const healthMonitor = new HealthMonitor();
 
@@ -65,7 +67,26 @@ export async function POST(request: NextRequest) {
       // TODO: Add proper logging library for health monitoring
       // console.warn(`[Health] ${degradationAction.reason}, increasing exploration`);
     } else {
-      selectedDeltaC = parseFloat(bandit.selectArm(theta));
+      // Use CW-TS if enabled, otherwise use standard bandit
+      if (isFeatureEnabled('cwts')) {
+        const cwtsConfig = getFeatureConfig<CWTSConfig>('cwts');
+        const cwBandit = new CWThompsonSamplingBandit(cwtsConfig, {
+          bucketSize: bandit.getState().bucketSize,
+          minDeltaC: 0,
+          maxDeltaC: 10,
+          priorAlpha: 1,
+          priorBeta: 1,
+        });
+        // Copy bucket state from loaded bandit
+        for (const [key, arm] of bandit.getState().buckets) {
+          for (let i = 0; i < arm.pullCount; i++) {
+            cwBandit.update(key, i < arm.successCount);
+          }
+        }
+        selectedDeltaC = parseFloat(cwBandit.selectArm(theta));
+      } else {
+        selectedDeltaC = parseFloat(bandit.selectArm(theta));
+      }
     }
 
     // Validate parseFloat result

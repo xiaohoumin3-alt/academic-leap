@@ -6,6 +6,8 @@ import { estimateAbilityEAP, type IRTResponse } from '@/lib/rl/irt/estimator';
 import { PrismaLEHistoryService } from '@/lib/rl/history/le-history-service';
 import { calculateHybridReward, type StudentResponse, type LETrackingContext } from '@/lib/rl/reward/le-reward';
 import { HealthMonitor } from '@/lib/rl/health/monitor';
+import { applyTimeDecay } from '@/lib/rl/reward/time-decay-credit';
+import { isFeatureEnabled, getFeatureConfig, TDCAConfig } from '@/lib/rl/config/phase2-features';
 
 const healthMonitor = new HealthMonitor();
 
@@ -25,7 +27,8 @@ export async function POST(request: NextRequest) {
       knowledgePointId,
       recommendationId,
       preAccuracy,
-      selectedDeltaC
+      selectedDeltaC,
+      responseTimestamp
     } = body;
 
     // Validate required fields
@@ -74,6 +77,18 @@ export async function POST(request: NextRequest) {
 
     const rewardResult = await calculateHybridReward(response, context, leService);
 
+    // Apply time-decay credit assignment if enabled
+    let finalReward = rewardResult.reward;
+    let rewardDecayInfo: { decayWeight: number; isIgnored: boolean } | undefined;
+
+    if (isFeatureEnabled('tdca')) {
+      const tdcaConfig = getFeatureConfig<TDCAConfig>('tdca');
+      const timestamp = responseTimestamp || Date.now();
+      const decayed = applyTimeDecay(finalReward, timestamp, tdcaConfig);
+      finalReward = decayed.adjustedReward;
+      rewardDecayInfo = { decayWeight: decayed.decayWeight, isIgnored: decayed.isIgnored };
+    }
+
     // Update IRT state
     const recentAttempts = await prisma.attemptStep.findMany({
       where: {
@@ -121,7 +136,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to load model' }, { status: 500 });
     }
 
-    bandit.update(selectedDeltaC.toFixed(1), correct);
+    bandit.update(selectedDeltaC.toFixed(1), finalReward > 0.5);
     await modelStore.saveModel(deployedModel.id, bandit);
 
     // Log training
@@ -135,7 +150,7 @@ export async function POST(request: NextRequest) {
       preAccuracy,
       stateTheta: thetaBefore,
       selectedDeltaC,
-      reward: rewardResult.reward,
+      reward: finalReward,
       postAccuracy: rewardResult.postAccuracy,
       leDelta: rewardResult.leDelta
     });

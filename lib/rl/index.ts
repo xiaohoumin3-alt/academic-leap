@@ -34,3 +34,6 @@ export type { CSValidationResult } from './validation/cs';
 // Monitor
 export { irtProbability, estimateDifficulty, detectDifficultyDrift } from './monitor';
 export type { QuestionAttempt, DifficultyDrift } from './monitor';
+
+// Phase 2: Core Reinforcement
+export * from './phase2';
