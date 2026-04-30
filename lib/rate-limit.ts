@@ -28,6 +28,8 @@ interface RateLimitResult {
 const RATE_LIMITS: Record<string, RateLimitConfig> = {
   gaming_post: { windowMs: 60000, maxRequests: 10 }, // 游戏化事件：每分钟10次
   gaming_leaderboard: { windowMs: 60000, maxRequests: 30 }, // 排行榜：每分钟30次
+  forgot_password: { windowMs: 5 * 60 * 1000, maxRequests: 3 }, // 忘记密码：5分钟3次
+  reset_password: { windowMs: 5 * 60 * 1000, maxRequests: 5 }, // 重置密码：5分钟5次
 };
 
 // ============================================================
