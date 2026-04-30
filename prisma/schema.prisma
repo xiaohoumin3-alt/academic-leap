@@ -854,17 +854,19 @@ model Achievement {
 // CriticalHitLog - 暴击记录（用于从LE计算中排除噪声）
 model CriticalHitLog {
   id        String   @id @default(cuid())
+  eventId   String   @unique // 唯一事件ID，每个gamification event最多一次暴击
   userId    String
-  attemptId String   @unique
+  attemptId String
   questionId String
   xpMultiplier Float // 暴击倍率（1.5x, 2x, 3x）
   baseXP    Int
   bonusXP   Int
-  triggerReason String // lucky_streak | perfect_answer | speed_demon | knowledge_master
+  triggerReason String // lucky_streak | double_lucky | jackpot
   loggedAt  DateTime @default(now())
 
   @@index([userId, loggedAt])
   @@index([attemptId])
+  @@index([eventId])
 }
 
 // ParentalControl - 家长控制设置

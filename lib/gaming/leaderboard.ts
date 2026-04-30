@@ -131,6 +131,8 @@ class LeaderboardService {
 
   /**
    * 获取用户排名
+   *
+   * 使用缓存优化排名查询
    */
   async getUserRank(userId: string, options: LeaderboardOptions = {}): Promise<{
     rank: number;
@@ -138,31 +140,51 @@ class LeaderboardService {
   }> {
     const { theme, character } = options;
 
+    // 构建缓存键
+    const cacheKey = `rank:${userId}:${theme || 'all'}:${character || 'all'}`;
+
+    // 尝试从缓存获取
+    if (redisClient) {
+      const cached = await this.getCached(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
     const where: any = {};
     if (theme) where.theme = theme;
     if (character) where.character = character;
 
-    // 计算排名
+    // 并行获取用户XP和总数
+    const [userProfile, totalParticipants] = await Promise.all([
+      prisma.playerProfile.findUnique({
+        where: { userId },
+        select: { totalXP: true },
+      }),
+      prisma.playerProfile.count({ where }),
+    ]);
+
+    const userXP = userProfile?.totalXP || 0;
+
+    // 计算排名（只统计XP更高的）
     const rank = await prisma.playerProfile.count({
       where: {
         ...where,
-        totalXP: {
-          gt: (
-            await prisma.playerProfile.findUnique({
-              where: { userId },
-              select: { totalXP: true },
-            })
-          )?.totalXP || 0,
-        },
+        totalXP: { gt: userXP },
       },
     });
 
-    const totalParticipants = await prisma.playerProfile.count({ where });
-
-    return {
+    const result = {
       rank: rank + 1,
       totalParticipants,
     };
+
+    // 缓存结果（较短的TTL，因为排名会变化）
+    if (redisClient) {
+      await this.setCached(cacheKey, result, 60); // 1分钟缓存
+    }
+
+    return result;
   }
 
   /**
@@ -223,11 +245,11 @@ class LeaderboardService {
   /**
    * 设置Redis缓存
    */
-  private async setCached(key: string, value: any): Promise<void> {
+  private async setCached(key: string, value: any, ttl?: number): Promise<void> {
     try {
       await redisClient.setEx(
         key,
-        this.CACHE_TTL,
+        ttl || this.CACHE_TTL,
         JSON.stringify(value)
       );
     } catch (error) {

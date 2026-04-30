@@ -76,6 +76,7 @@ class GamificationEventListener {
       // 6. 记录暴击日志（用于从LE计算中排除噪声）
       if (criticalHit.isCritical) {
         await this.logCriticalHit({
+          eventId: event.eventId, // 唯一事件ID
           userId: event.userId,
           attemptId: event.attemptId,
           questionId: event.questionId,
@@ -189,7 +190,8 @@ class GamificationEventListener {
   /**
    * 更新玩家档案
    *
-   * 使用事务保证原子性，避免竞态条件
+   * 使用事务 + 原子操作避免竞态条件
+   * Prisma 的 increment 操作在数据库层面是原子的
    */
   private async updatePlayerProfile(
     userId: string,
@@ -197,7 +199,6 @@ class GamificationEventListener {
     streakExtended: boolean
   ): Promise<void> {
     await prisma.$transaction(async (tx) => {
-      // 获取当前状态（加锁）
       const existing = await tx.playerProfile.findUnique({
         where: { userId },
       });
@@ -211,24 +212,23 @@ class GamificationEventListener {
             level: this.calculateLevel(xp),
             currentStreak: streakExtended ? 1 : 0,
             bestStreak: streakExtended ? 1 : 0,
+            streakLastUpdate: new Date(),
           },
         });
         return;
       }
 
-      // 计算新值
+      // 使用原子 increment 操作
       const newTotalXP = existing.totalXP + xp;
       const newLevel = this.calculateLevel(newTotalXP);
-      const newStreak = streakExtended ? existing.currentStreak + 1 : 0;
-      const newBestStreak = Math.max(existing.bestStreak, newStreak);
+      const newBestStreak = Math.max(existing.bestStreak, streakExtended ? existing.currentStreak + 1 : 0);
 
-      // 原子更新
       await tx.playerProfile.update({
         where: { userId },
         data: {
-          totalXP: newTotalXP,
+          totalXP: { increment: xp }, // 原子递增
           level: newLevel,
-          currentStreak: newStreak,
+          currentStreak: streakExtended ? { increment: 1 } : 0,
           bestStreak: newBestStreak,
           streakLastUpdate: new Date(),
         },
@@ -242,6 +242,7 @@ class GamificationEventListener {
    * 用于从LE计算中排除噪声
    */
   private async logCriticalHit(data: {
+    eventId: string;
     userId: string;
     attemptId: string;
     questionId: string;
@@ -252,6 +253,7 @@ class GamificationEventListener {
   }): Promise<void> {
     await prisma.criticalHitLog.create({
       data: {
+        eventId: data.eventId,
         userId: data.userId,
         attemptId: data.attemptId,
         questionId: data.questionId,

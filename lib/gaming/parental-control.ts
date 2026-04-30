@@ -279,6 +279,8 @@ class ParentalControlService {
 
   /**
    * 获取学习趋势报告
+   *
+   * 使用单次聚合查询避免 N+1 问题
    */
   async getTrendReport(userId: string, days: number = 7): Promise<{
     dates: string[];
@@ -289,58 +291,86 @@ class ParentalControlService {
     const endDate = new Date();
     const startDate = new Date(endDate);
     startDate.setDate(startDate.getDate() - days);
+    startDate.setHours(0, 0, 0, 0);
 
+    // 生成日期数组
     const dates: string[] = [];
-    const xp: number[] = [];
-    const accuracy: number[] = [];
-    const le: number[] = [];
+    const dateMap = new Map<string, { xp: number; correct: number; total: number; leSum: number; leCount: number }>();
 
     for (let i = 0; i < days; i++) {
       const date = new Date(startDate);
       date.setDate(date.getDate() + i);
-      const dateStart = new Date(date);
-      dateStart.setHours(0, 0, 0, 0);
-      const dateEnd = new Date(dateStart);
-      dateEnd.setDate(dateEnd.getDate() + 1);
+      const dateStr = date.toISOString().split('T')[0];
+      dates.push(dateStr);
+      dateMap.set(dateStr, { xp: 0, correct: 0, total: 0, leSum: 0, leCount: 0 });
+    }
 
-      dates.push(dateStart.toISOString().split('T')[0]);
+    // 单次查询获取所有 XP 数据（暴击日志）
+    const criticalHits = await prisma.criticalHitLog.findMany({
+      where: {
+        userId,
+        loggedAt: { gte: startDate },
+      },
+      select: { loggedAt: true, baseXP: true, bonusXP: true },
+    });
 
-      // XP
-      const criticalHits = await prisma.criticalHitLog.findMany({
-        where: {
-          userId,
-          loggedAt: { gte: dateStart, lt: dateEnd },
-        },
-      });
-      xp.push(
-        criticalHits.reduce((sum, hit) => sum + hit.baseXP + hit.bonusXP, 0)
-      );
+    // 单次查询获取所有步骤数据
+    const attempts = await prisma.attempt.findMany({
+      where: {
+        userId,
+        startedAt: { gte: startDate },
+      },
+      include: { steps: true },
+    });
 
-      // 正确率
-      const attempts = await prisma.attempt.findMany({
-        where: {
-          userId,
-          startedAt: { gte: dateStart, lt: dateEnd },
-        },
-        include: { steps: true },
-      });
-      const allSteps = attempts.flatMap((a) => a.steps);
-      const correctSteps = allSteps.filter((s) => s.isCorrect).length;
-      accuracy.push(
-        allSteps.length > 0 ? correctSteps / allSteps.length : 0
-      );
+    // 单次查询获取所有 LE 数据
+    const leRecords = await prisma.rLTrainingLog.findMany({
+      where: {
+        userId,
+        createdAt: { gte: startDate },
+      },
+      select: { createdAt: true, leDelta: true },
+    });
 
-      // LE
-      const leRecords = await prisma.rLTrainingLog.findMany({
-        where: {
-          userId,
-          createdAt: { gte: dateStart, lt: dateEnd },
-        },
-      });
-      const avgLE = leRecords.length > 0
-        ? leRecords.reduce((sum, r) => sum + (r.leDelta || 0), 0) / leRecords.length
-        : 0;
-      le.push(avgLE);
+    // 聚合数据到日期桶
+    for (const hit of criticalHits) {
+      const dateStr = hit.loggedAt.toISOString().split('T')[0];
+      const bucket = dateMap.get(dateStr);
+      if (bucket) {
+        bucket.xp += hit.baseXP + hit.bonusXP;
+      }
+    }
+
+    for (const attempt of attempts) {
+      const dateStr = attempt.startedAt.toISOString().split('T')[0];
+      const bucket = dateMap.get(dateStr);
+      if (bucket) {
+        for (const step of attempt.steps) {
+          bucket.total++;
+          if (step.isCorrect) bucket.correct++;
+        }
+      }
+    }
+
+    for (const record of leRecords) {
+      const dateStr = record.createdAt.toISOString().split('T')[0];
+      const bucket = dateMap.get(dateStr);
+      if (bucket && record.leDelta !== null) {
+        bucket.leSum += record.leDelta;
+        bucket.leCount++;
+      }
+    }
+
+    // 构建结果数组
+    const xp: number[] = [];
+    const accuracy: number[] = [];
+    const le: number[] = [];
+
+    for (const date of dates) {
+      const bucket = dateMap.get(date) || { xp: 0, correct: 0, total: 0, leSum: 0, leCount: 0 };
+      xp.push(bucket.xp);
+      accuracy.push(bucket.total > 0 ? bucket.correct / bucket.total : 0);
+      le.push(bucket.leCount > 0 ? bucket.leSum / bucket.leCount : 0);
     }
 
     return { dates, xp, accuracy, le };

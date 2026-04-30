@@ -173,12 +173,14 @@ export async function POST(req: NextRequest) {
     const leDelta = rlLog?.leDelta ?? 0;
 
     // 为每个答题步骤处理游戏化事件
+    // 注意：每个 step 需要唯一的 eventId，否则 CriticalHitLog 的 attemptId 唯一约束会冲突
     const gamificationRewards = [];
     for (const step of attempt.steps) {
       if (step.questionStep) {
         try {
+          // 使用 step.id 作为 eventId 保证唯一性
           const reward = await gamificationListener.processEvent({
-            eventId: attempt.id, // 使用attempt ID作为事件ID
+            eventId: step.id,
             attemptId: attempt.id,
             userId: session.user.id,
             questionId: step.questionStep.questionId,
