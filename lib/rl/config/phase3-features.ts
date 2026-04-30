@@ -28,6 +28,11 @@ export interface AdaptationConfig {
   confidenceThreshold: number;
 }
 
+export interface UokIntegrationConfig {
+  baseCandidateCount: number;
+  maxCandidateCount: number;
+}
+
 export interface FeatureConfig<T> {
   enabled: boolean;
   config: T;
@@ -47,6 +52,13 @@ function parseEnvNumber(key: string, defaultValue: number): number {
   const value = process.env[key];
   if (value === undefined) return defaultValue;
   const parsed = Number(value);
+  return isNaN(parsed) ? defaultValue : parsed;
+}
+
+function parseEnvInt(key: string, defaultValue: number): number {
+  const value = process.env[key];
+  if (value === undefined) return defaultValue;
+  const parsed = parseInt(value, 10);
   return isNaN(parsed) ? defaultValue : parsed;
 }
 
@@ -106,6 +118,22 @@ const adaptationConfig: FeatureConfig<AdaptationConfig> = {
   },
 };
 
+/**
+ * UOK Integration Configuration
+ *
+ * Environment Variables:
+ * - RL_UOK_INTEGRATION_ENABLED: Enable/disable feature (default: true)
+ * - RL_BASE_CANDIDATE_COUNT: Base candidate count (default: 2)
+ * - RL_MAX_CANDIDATE_COUNT: Maximum candidate count (default: 5)
+ */
+const uokIntegrationConfig: FeatureConfig<UokIntegrationConfig> = {
+  enabled: parseEnvBool('RL_UOK_INTEGRATION_ENABLED', true),
+  config: {
+    baseCandidateCount: parseEnvInt('RL_BASE_CANDIDATE_COUNT', 2),
+    maxCandidateCount: parseEnvInt('RL_MAX_CANDIDATE_COUNT', 5),
+  },
+};
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -117,12 +145,13 @@ export const PHASE_3_FEATURES = {
   lqm: lqmConfig,
   normalizer: normalizerConfig,
   adaptation: adaptationConfig,
+  uokIntegration: uokIntegrationConfig,
 } as const;
 
 /**
  * Get configuration for a specific feature
  *
- * @param name - Feature name ('lqm' | 'normalizer' | 'adaptation')
+ * @param name - Feature name ('lqm' | 'normalizer' | 'adaptation' | 'uokIntegration')
  * @returns Feature configuration object
  *
  * @example
@@ -142,7 +171,7 @@ export function getFeatureConfig<T>(name: keyof typeof PHASE_3_FEATURES): T {
 /**
  * Check if a feature is enabled
  *
- * @param name - Feature name ('lqm' | 'normalizer' | 'adaptation')
+ * @param name - Feature name ('lqm' | 'normalizer' | 'adaptation' | 'uokIntegration')
  * @returns true if feature is enabled, false otherwise
  *
  * @example
