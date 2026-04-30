@@ -25,8 +25,8 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    // 验证主题
-    const validThemes = ['adventure', 'sci-fi', 'fantasy', 'sports'];
+    // 验证主题 - 更新为新主题
+    const validThemes = ['magic-academy', 'career', 'racing', 'detective'];
     if (theme && !validThemes.includes(theme)) {
       return NextResponse.json(
         { error: 'Invalid theme' },
