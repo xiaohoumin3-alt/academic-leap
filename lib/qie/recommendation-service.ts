@@ -8,6 +8,74 @@
 import { prisma } from '@/lib/prisma';
 import { UOK } from './uok';
 import type { Action, RecommendationRationale } from './types';
+import { RLExplorationController, selectCandidate } from '@/lib/rl/exploration';
+import { isFeatureEnabled, getFeatureConfig } from '@/lib/rl/config/phase3-features';
+import type { ExplorationInfo } from './types';
+
+// Global singleton for RL controller
+let rlController: RLExplorationController | null = null;
+
+function getRLController(): RLExplorationController | null {
+  if (!isFeatureEnabled('uokIntegration')) return null;
+  if (!rlController) {
+    const uokConfig = getFeatureConfig<{ baseCandidateCount: number; maxCandidateCount: number }>('uokIntegration');
+    rlController = new RLExplorationController({
+      baseCandidateCount: uokConfig.baseCandidateCount,
+      maxCandidateCount: uokConfig.maxCandidateCount,
+    });
+  }
+  return rlController;
+}
+
+/**
+ * Find top N candidate questions by complexity proximity
+ */
+async function findTopNCandidates(
+  topic: string,
+  mastery: number,
+  n: number
+): Promise<QuestionWithComplexity[]> {
+  const targetComplexity = 0.3 + (mastery * 0.5);
+
+  const questions = await prisma.question.findMany({
+    where: {
+      extractionStatus: 'SUCCESS',
+      complexity: { not: null },
+    },
+    select: {
+      id: true,
+      content: true,
+      difficulty: true,
+      knowledgePoints: true,
+      cognitiveLoad: true,
+      reasoningDepth: true,
+      complexity: true,
+    },
+    take: 100,
+  });
+
+  const scored = questions
+    .filter(q => {
+      const kp = parseKnowledgePoints(q.knowledgePoints);
+      return kp.some(k => k.includes(topic) || topic.includes(k));
+    })
+    .map(q => ({
+      ...q,
+      score: -Math.abs((q.complexity ?? 0.5) - targetComplexity),
+    }))
+    .sort((a, b) => a.score - b.score)
+    .slice(0, n);
+
+  return scored.map(q => ({
+    id: q.id,
+    content: q.content,
+    difficulty: q.difficulty,
+    knowledgePoints: parseKnowledgePoints(q.knowledgePoints),
+    cognitiveLoad: q.cognitiveLoad,
+    reasoningDepth: q.reasoningDepth,
+    complexity: q.complexity,
+  }));
+}
 
 export interface QuestionWithComplexity {
   id: string;
@@ -84,72 +152,63 @@ async function recommendByTopic(
     return { success: false, error: 'Failed to get student state' };
   }
 
-  const topicMastery = studentExplanation.weakTopics.find(t => t.topic === topic)?.mastery ?? 0.5;
+  const mastery = studentExplanation.weakTopics.find(t => t.topic === topic)?.mastery ?? 0.5;
 
-  // Calculate target complexity based on mastery (inverse relationship)
-  // Lower mastery → lower target complexity (scaffold)
-  // Higher mastery → higher target complexity (challenge)
-  const targetComplexity = 0.3 + (topicMastery * 0.5); // Range: 0.3 - 0.8
+  // Get RL controller and candidates
+  const rl = getRLController();
+  const candidates = await findTopNCandidates(topic, mastery, 10);
 
-  // Build database query
-  const where: any = {
-    extractionStatus: 'SUCCESS',
-    complexity: { not: null },
-    cognitiveLoad: { not: null },
-    reasoningDepth: { not: null },
-  };
-
-  if (excludeIds.length > 0) {
-    where.id = { notIn: excludeIds };
+  if (!rl) {
+    // No RL integration, return best candidate
+    const best = candidates[0];
+    if (!best) {
+      return { success: false, error: 'No questions available' };
+    }
+    return {
+      success: true,
+      question: best,
+      rationale: {
+        currentMastery: mastery,
+        targetComplexity: 0.3 + mastery * 0.5,
+        complexityGap: 0,
+        reason: 'UOK recommendation (RL disabled)',
+      },
+    };
   }
 
-  // Parse knowledge points (stored as JSON string)
-  const questions = await prisma.question.findMany({
-    where,
-    select: {
-      id: true,
-      content: true,
-      difficulty: true,
-      knowledgePoints: true,
-      cognitiveLoad: true,
-      reasoningDepth: true,
-      complexity: true,
+  // Get exploration info from RL controller
+  const exploration = rl.getCandidateCount({
+    topic,
+    mastery,
+    consecutiveSameTopic: rl.getConsecutiveSameTopicCount(topic),
+  });
+
+  // Select from candidates using RL exploration
+  const selected = selectCandidate(
+    candidates.slice(0, exploration.candidateCount),
+    exploration.explorationLevel
+  );
+
+  // Record recommendation for history tracking
+  rl.recordRecommendation(topic);
+
+  if (!selected) {
+    return { success: false, error: 'No candidates available' };
+  }
+
+  const targetComplexity = 0.3 + mastery * 0.5;
+
+  return {
+    success: true,
+    question: selected,
+    rationale: {
+      currentMastery: mastery,
+      targetComplexity,
+      complexityGap: Math.abs((selected.complexity ?? 0.5) - targetComplexity),
+      reason: exploration.reason,
+      explorationInfo: exploration,
     },
-    take: 100,
-  });
-
-  // Filter by topic/knowledge point
-  const filteredQuestions = questions.filter(q => {
-    const kpList = parseKnowledgePoints(q.knowledgePoints);
-    // Check if question contains the target topic
-    const hasTopic = kpList.some(kp => kp.includes(topic) || topic.includes(kp));
-
-    // Apply knowledge filter if provided
-    if (knowledgeFilter && knowledgeFilter.length > 0) {
-      return hasTopic && kpList.some(kp => knowledgeFilter.includes(kp));
-    }
-
-    return hasTopic;
-  });
-
-  if (filteredQuestions.length === 0) {
-    // Fallback: any question with complexity features
-    const fallbackQuestions = questions.filter(q => {
-      if (knowledgeFilter && knowledgeFilter.length > 0) {
-        const kpList = parseKnowledgePoints(q.knowledgePoints);
-        return kpList.some(kp => knowledgeFilter.includes(kp));
-      }
-      return true;
-    });
-
-    if (fallbackQuestions.length === 0) {
-      return { success: false, error: 'No questions available with complexity features' };
-    }
-
-    return findBestMatch(fallbackQuestions, topicMastery, targetComplexity, topic);
-  }
-
-  return findBestMatch(filteredQuestions, topicMastery, targetComplexity, topic);
+  };
 }
 
 /**
@@ -265,6 +324,17 @@ export async function encodeAnswerToUOK(
 
   // Save state
   await uok.saveStudentState(studentId);
+
+  // Record response with RL controller for health monitoring
+  const rl = getRLController();
+  if (rl && topics.length > 0) {
+    const topic = topics[0] ?? 'unknown';
+    rl.recordResponse({
+      topic,
+      correct,
+      complexity: question.complexity ?? 0.5,
+    });
+  }
 
   return { probability };
 }

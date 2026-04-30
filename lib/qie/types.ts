@@ -265,11 +265,18 @@ export type Explanation =
   | { type: 'system'; totalQuestions: number; totalStudents: number; totalAttempts: number; topics: string[]; traceLength: number }
   | { type: 'error'; message: string };
 
+export interface ExplorationInfo {
+  candidateCount: number;
+  explorationLevel: 'minimal' | 'moderate' | 'aggressive';
+  reason: string;
+}
+
 export interface RecommendationRationale {
   currentMastery: number;
   targetComplexity: number;
   complexityGap: number;
   reason: string;
+  explorationInfo?: ExplorationInfo;
 }
 
 export type Action =
