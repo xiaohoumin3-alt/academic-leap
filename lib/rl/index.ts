@@ -35,6 +35,10 @@ export type { CSValidationResult } from './validation/cs';
 export { irtProbability, estimateDifficulty, detectDifficultyDrift } from './monitor';
 export type { QuestionAttempt, DifficultyDrift } from './monitor';
 
+// Exploration (UOK integration)
+export { RLExplorationController } from './exploration';
+export type { ExplorationConfig, ExplorationContext, ExplorationResult } from './exploration';
+
 // Phase 2: Core Reinforcement
 export * from './phase2';
 
