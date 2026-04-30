@@ -3,6 +3,40 @@
  */
 
 // ============================================================================
+// Parser Types (Legacy - for backward compatibility)
+// ============================================================================
+
+export interface ParseResult<T = unknown> {
+  success: boolean;
+  data?: T;
+  errors?: Array<{ field: string; message: string }>;
+}
+
+export interface TextbookChapter {
+  number: number;
+  name: string;
+  knowledgePoints: Array<{ name: string; weight: number }>;
+}
+
+export interface QuestionSample {
+  content: string;
+  difficulty: number;
+  answer: string;
+  stepType: StepTypeKey;
+  knowledgePoint: string;
+}
+
+export type StepTypeKey =
+  | 'COMPUTE_SQRT' | 'SIMPLIFY_SQRT' | 'SQRT_MIXED'
+  | 'VERIFY_RIGHT_ANGLE' | 'VERIFY_PARALLELOGRAM' | 'VERIFY_RECTANGLE'
+  | 'VERIFY_RHOMBUS' | 'VERIFY_SQUARE' | 'COMPUTE_RECT_PROPERTY'
+  | 'COMPUTE_RHOMBUS_PROPERTY' | 'COMPUTE_SQUARE_PROPERTY'
+  | 'IDENTIFY_QUADRATIC' | 'SOLVE_DIRECT_ROOT' | 'SOLVE_COMPLETE_SQUARE'
+  | 'SOLVE_QUADRATIC_FORMULA' | 'SOLVE_FACTORIZE' | 'QUADRATIC_APPLICATION'
+  | 'COMPUTE_MEAN' | 'COMPUTE_MEDIAN' | 'COMPUTE_MODE'
+  | 'COMPUTE_VARIANCE' | 'COMPUTE_STDDEV';
+
+// ============================================================================
 // Knowledge Gap Detection
 // ============================================================================
 
