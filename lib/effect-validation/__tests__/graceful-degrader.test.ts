@@ -76,9 +76,12 @@ describe('GracefulDegrader', () => {
     it('should switch to rule engine on danger severity', async () => {
       await degrader.degrade('t-1', 'LE dropped 20%', 'danger');
 
-      expect(mockPrisma.template.update).toHaveBeenCalledWith(
+      // Verify audit log and canary pause (actual effects of switchToRuleEngine)
+      expect(mockPrisma.auditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 't-1' },
+          data: expect.objectContaining({
+            action: 'switch_to_rule_engine',
+          }),
         })
       );
 

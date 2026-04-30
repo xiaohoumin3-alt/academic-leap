@@ -82,7 +82,12 @@ export class GracefulDegrader {
 
   /**
    * Switch template to use rule engine instead of RL.
-   * Pauses the canary release.
+   *
+   * Effects:
+   * 1. Audit log is created
+   * 2. Canary is paused
+   *
+   * Note: When Template model has a strategy field, update it here.
    */
   async switchToRuleEngine(templateId: string): Promise<void> {
     // Log the switch
@@ -94,16 +99,7 @@ export class GracefulDegrader {
       },
     });
 
-    // Update template to use rule engine
-    // Note: Template model should have a strategy field to track active strategy
-    await this.prisma.template.update({
-      where: { id: templateId },
-      data: {
-        // Implementation-specific: add strategy field to template if needed
-      },
-    });
-
-    // Pause canary
+    // Pause canary (this is the primary signal that rule engine is active)
     await this.prisma.canaryRelease.update({
       where: { templateId },
       data: { status: 'paused' },
