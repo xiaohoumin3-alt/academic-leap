@@ -82,8 +82,8 @@ describe('Effect Validation Integration', () => {
             userId: `${TEST_USER_ID}-${i}`,
             knowledgePoint: 'kp-1',
             isCorrect: i % 10 < 7, // 70% correct rate
-            duration: 30000 + Math.random() * 20000,
-            leDelta: 0.12 + Math.random() * 0.06,
+            duration: 30000 + i * 400,
+            leDelta: 0.12 + (i % 10) * 0.006,
             recordedAt: new Date(),
           }))
       );
@@ -379,8 +379,10 @@ describe('Effect Validation Integration', () => {
 
       await gracefulDegrader.degrade(TEST_TEMPLATE_ID, 'LE dropped 20%', 'danger');
 
-      // Danger should pause canary
-      expect(mockPrisma.auditLog.create).toHaveBeenCalledTimes(2); // degrade + switch_to_rule_engine
+      // First verify audit log was called twice (degrade + switch_to_rule_engine)
+      expect(mockPrisma.auditLog.create).toHaveBeenCalledTimes(2);
+
+      // Then verify canary status update for danger
       expect(mockPrisma.canaryRelease.update).toHaveBeenCalledWith({
         where: { templateId: TEST_TEMPLATE_ID },
         data: expect.objectContaining({ status: 'paused' }),
