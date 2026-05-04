@@ -222,19 +222,38 @@ model KnowledgeConcept {
 }
 
 model TextbookVersion {
-  id        String    @id @default(cuid())
+  id        String           @id @default(cuid())
   name      String
   publisher String?
   grade     Int
-  subject   String
+  subject   String           // 保留用于兼容性，与subjectId.code一致
+  subjectId String?          // 关联Subject表
   year      String?
-  status    String    @default("active")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  status    String           @default("active")
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
   chapters  Chapter[]
+  subjectRecord Subject?     @relation("SubjectTextbooks", fields: [subjectId], references: [id])
 
   @@unique([grade, subject, name])
   @@index([grade, subject, status])
+  @@index([subjectId])
+}
+
+// Subject表 - 科目管理
+model Subject {
+  id        String           @id @default(cuid())
+  name      String           // 科目名称：数学、英语、物理等
+  code      String           // 科目代码：MATH, ENGLISH, PHYSICS
+  grade     Int              // 适用年级
+  status    String           @default("active") // active, inactive
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  textbooks TextbookVersion[] @relation("SubjectTextbooks")
+
+  @@unique([grade, code])
+  @@index([grade, status])
 }
 
 model Chapter {
@@ -796,8 +815,7 @@ model PlayerProfile {
   userId    String   @unique
   totalXP   Int      @default(0)
   level     Int      @default(1)
-  theme     String   @default("adventure") // adventure | sci-fi | fantasy | sports
-  character String   @default("explorer")
+  theme     String   @default("magic-academy") // magic-academy | career | racing | detective
 
   // 连胜数据（基于LE，非简单答对）
   currentStreak    Int      @default(0)
