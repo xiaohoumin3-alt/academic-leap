@@ -933,3 +933,23 @@ model PasswordResetToken {
   @@index([email])
   @@index([code])
 }
+
+// ============================================================
+// Practice Session - 断点恢复功能
+// ============================================================
+
+model PracticeSession {
+  id                  String   @id @default(cuid())
+  userId              String
+  status              String   @default("active") // active | paused | completed
+  currentQuestionIndex Int     @default(0)
+  answers             String   @default("[]") // JSON array of answers
+  subject             String?
+  questionCount       Int?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  completedAt         DateTime?
+
+  @@index([userId, status])
+  @@index([userId, updatedAt])
+}
