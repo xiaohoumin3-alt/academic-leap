@@ -30,9 +30,17 @@ export interface UserAchievement {
   type: string;
   name: string;
   description: string;
-  unlockedAt: Date;
+  unlockedAt: Date | string;  // API returns string
   progress: number;
   maxProgress: number;
+}
+
+/**
+ * 安全地解析 unlockedAt 为 Date 对象
+ */
+export function parseUnlockedAt(unlockedAt: Date | string): Date {
+  if (unlockedAt instanceof Date) return unlockedAt;
+  return new Date(unlockedAt);
 }
 
 // ============================================================
@@ -233,8 +241,8 @@ class AchievementService {
 
     // 排序：已解锁在前，然后按进度
     return result.sort((a, b) => {
-      const aUnlocked = a.unlockedAt.getTime() > 0;
-      const bUnlocked = b.unlockedAt.getTime() > 0;
+      const aUnlocked = parseUnlockedAt(a.unlockedAt).getTime() > 0;
+      const bUnlocked = parseUnlockedAt(b.unlockedAt).getTime() > 0;
 
       if (aUnlocked && !bUnlocked) return -1;
       if (!aUnlocked && bUnlocked) return 1;

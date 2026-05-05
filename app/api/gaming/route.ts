@@ -45,8 +45,7 @@ export async function GET(request: NextRequest) {
       const newProfile = await prisma.playerProfile.create({
         data: {
           userId: session.user.id,
-          theme: 'adventure',
-          character: 'explorer',
+          theme: 'magic-academy',
         },
         include: {
           user: {
@@ -135,7 +134,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * PATCH /api/gaming
- * 更新玩家设置（主题、角色）
+ * 更新玩家设置（主题）
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -150,11 +149,10 @@ export async function PATCH(request: NextRequest) {
     // 导入排行榜服务
     const { leaderboardService } = await import('@/lib/gaming/leaderboard');
 
-    // 更新主题/角色
+    // 更新主题（移除角色系统）
     await leaderboardService.updateUserTheme(
       session.user.id,
-      data.theme || 'adventure',
-      data.character || 'explorer'
+      data.theme || 'magic-academy'
     );
 
     // 获取更新后的档案

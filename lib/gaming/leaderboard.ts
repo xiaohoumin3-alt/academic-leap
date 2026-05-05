@@ -34,12 +34,10 @@ export interface LeaderboardEntry {
   totalXP: number;
   level: number;
   theme: string;
-  character: string;
 }
 
 export interface LeaderboardOptions {
-  theme?: string; // adventure | sci-fi | fantasy | sports
-  character?: string;
+  theme?: string; // magic-academy | career | racing | detective
   limit?: number;
   offset?: number;
 }
@@ -58,10 +56,10 @@ class LeaderboardService {
     entries: LeaderboardEntry[];
     total: number;
   }> {
-    const { theme, character, limit = 50, offset = 0 } = options;
+    const { theme, limit = 50, offset = 0 } = options;
 
     // 构建缓存键
-    const cacheKey = this.buildCacheKey(theme, character, limit, offset);
+    const cacheKey = this.buildCacheKey(theme, limit, offset);
 
     // 尝试从Redis获取
     if (redisClient) {
@@ -74,7 +72,6 @@ class LeaderboardService {
     // 从数据库查询
     const where: any = {};
     if (theme) where.theme = theme;
-    if (character) where.character = character;
 
     // 分两步查询避免循环依赖
     const profiles = await prisma.playerProfile.findMany({
@@ -87,7 +84,6 @@ class LeaderboardService {
         totalXP: true,
         level: true,
         theme: true,
-        character: true,
       },
     });
 
@@ -102,7 +98,6 @@ class LeaderboardService {
       totalXP: profile.totalXP,
       level: profile.level,
       theme: profile.theme,
-      character: profile.character,
     }));
 
     const result = { entries, total };
@@ -124,10 +119,10 @@ class LeaderboardService {
     rank: number;
     totalParticipants: number;
   }> {
-    const { theme, character } = options;
+    const { theme } = options;
 
     // 构建缓存键
-    const cacheKey = `rank:${userId}:${theme || 'all'}:${character || 'all'}`;
+    const cacheKey = `rank:${userId}:${theme || 'all'}`;
 
     // 尝试从缓存获取
     if (redisClient) {
@@ -139,7 +134,6 @@ class LeaderboardService {
 
     const where: any = {};
     if (theme) where.theme = theme;
-    if (character) where.character = character;
 
     // 并行获取用户XP和总数
     const [userProfile, totalParticipants] = await Promise.all([
@@ -174,23 +168,20 @@ class LeaderboardService {
   }
 
   /**
-   * 更新用户主题/角色
+   * 更新用户主题
    */
   async updateUserTheme(
     userId: string,
-    theme: string,
-    character: string
+    theme: string
   ): Promise<void> {
     await prisma.playerProfile.upsert({
       where: { userId },
       create: {
         userId,
         theme,
-        character,
       },
       update: {
         theme,
-        character,
       },
     });
 
@@ -203,13 +194,11 @@ class LeaderboardService {
    */
   private buildCacheKey(
     theme?: string,
-    character?: string,
     limit?: number,
     offset?: number
   ): string {
     const parts = ['leaderboard'];
     if (theme) parts.push(theme);
-    if (character) parts.push(character);
     parts.push(String(limit || 50));
     parts.push(String(offset || 0));
     return parts.join(':');
@@ -253,19 +242,14 @@ class LeaderboardService {
       // 清除该用户参与的所有排行榜缓存
       const profile = await prisma.playerProfile.findUnique({
         where: { userId },
-        select: { theme: true, character: true },
+        select: { theme: true },
       });
 
       if (!profile) return;
 
       // 清除主题排行榜
       await redisClient.del(
-        this.buildCacheKey(profile.theme, undefined, 50, 0)
-      );
-
-      // 清除角色排行榜
-      await redisClient.del(
-        this.buildCacheKey(undefined, profile.character, 50, 0)
+        this.buildCacheKey(profile.theme, 50, 0)
       );
     } catch (error) {
       console.error('[Leaderboard] Cache clear failed:', error);
@@ -280,7 +264,7 @@ class LeaderboardService {
 
     try {
       // 刷新所有主题的排行榜
-      const themes = ['adventure', 'sci-fi', 'fantasy', 'sports'];
+      const themes = ['magic-academy', 'career', 'racing', 'detective'];
 
       for (const theme of themes) {
         await this.getLeaderboard({ theme, limit: 50, offset: 0 });

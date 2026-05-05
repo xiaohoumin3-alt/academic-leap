@@ -1,340 +1,107 @@
-# CLAUDE.md - 学力跃迁项目指南
+# 产品愿景 — "让每个学生都能获得最适合自己当前能力的学习路径"
 
-> **产品定义源文档**: 本文档的技术标准和验收标准基于 [PRODUCT.md](./PRODUCT.md) 中定义的产品目标、KPI和权衡原则。
-> 当技术决策存在冲突时，应回溯到 PRODUCT.md 中的产品原则进行决策。
 
-## 项目概述
-Next.js + Supabase + Prisma + Gemini AI 的数学练习平台
+# 这个项目是什么
 
----
+**自适应数学学习推荐引擎** — 不是题库，不是练习软件，是让学生"真正学会"的智能系统。
 
-## ✅ 收敛系统 v1.0 验收标准（可交付版本）
+# 核心问题：如何确保推荐给学生的题目既不太难（放弃）、也不太简单（无聊）、而是刚好在"最近发展区"？
 
-### 三个核心指标（删掉所有理论，只保留可测量）
 
-#### ① 数据链完整度（Data Flow Integrity, DFI）
+# 核心原则
 
-**衡量**：题目 → 作答 → 诊断 → 推荐 是否全链路可追踪
+## 1. 目标导向：有目标才能开始，没有目标，任何一项任务，都必须围绕最终目标。
 
-**定义**：每一次学习事件必须有唯一ID贯穿全流程
+## 2. 标准先行：在开始行动前，先根据目标定义验收标准；没有标准，禁止任何行动。
 
-**计算**：
-```
-DFI = trace_complete_events / total_events
-```
+## 3. 2/8原则：用20%的核心工作解决80%的问题。警惕过度设计。
 
-**目标**：`DFI ≥ 0.99`
+## 4. 第一性原理：剥离假设和惯例，回到最根本的问题。
 
----
+## 5. 再优化收益递减：承认完美主义的边际成本。
 
-#### ② 预测有效性（Learning Effectiveness, LE）
+<!-- gitnexus:start -->
+# GitNexus — Code Intelligence
 
-**衡量**：系统推荐/诊断是否真的"带来学习提升"
+This project is indexed by GitNexus as **academic-leap** (13629 symbols, 20371 relationships, 297 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
-**定义**：学生在推荐后同类题正确率是否提升
+> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
-**计算**：
-```
-LE = avg(post_accuracy - pre_accuracy)
+## Always Do
 
-或更稳一点：
-LE = P(correct | after_recommendation) - P(correct | before)
-```
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
 
-**目标**：`LE > 0.15`（至少提升15%）
+## Never Do
 
----
+- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
+- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
 
-#### ③ 稳定收敛性（Convergence Stability, CS）
+## Resources
 
-**衡量**：系统输出是否稳定（不乱跳、不漂移）
+| Resource | Use for |
+|----------|---------|
+| `gitnexus://repo/academic-leap/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/academic-leap/clusters` | All functional areas |
+| `gitnexus://repo/academic-leap/processes` | All execution flows |
+| `gitnexus://repo/academic-leap/process/{name}` | Step-by-step execution trace |
 
-**定义**：同一知识点在多次评估中的推荐差异
+## CLI
 
-**计算**：
-```
-CS = 1 - variance(recommendation_distribution)
+| Task | Read this skill file |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
-或：
-CS = similarity(top_k_recommendations across runs)
-```
-
-**目标**：`CS ≥ 0.85`
-
----
-
-### 收敛公式（系统是否"完成"）
-
-```
-Converged =
-  (DFI ≥ 0.99)
-  AND (LE ≥ 0.15)
-  AND (CS ≥ 0.85)
-```
-
-👉 **人话解释**：数据是通的 + 学生真的变好了 + 系统不乱变 = 才算系统收敛
+<!-- gitnexus:end -->
 
 ---
 
-### CI 门禁（工程化核心）
+# Productivity Kit — Daily Rhythm
 
-**Pre-merge / Pre-deploy Gate**
+**Powered by [productivity-kit](https://github.com/hendrikhemken/claude-plugin-productivity-kit)**
 
-```yaml
-CI_GATES:
-  data_integrity:
-    rule: DFI >= 0.99
-    block_on_fail: true
+## Daily Workflow
 
-  learning_gain:
-    rule: LE >= 0.15
-    window: last_100_sessions
-    block_on_fail: true
+| When | Skill | What |
+|------|-------|------|
+| Morning (Mon) | `/productivity-kit:okr-monday` → `/productivity-kit:good-morning` | Weekly goals + day start |
+| Morning (Tue-Sun) | `/productivity-kit:good-morning` | Yesterday review + plan today |
+| During day | automatic | Claude tracks activities in journal `## Notes` |
+| Anytime | `/productivity-kit:journal` | Quick update: add note, check off todo |
+| Friday | `/productivity-kit:okr-friday` | Celebrate wins, capture learnings |
 
-  stability_check:
-    rule: CS >= 0.85
-    runs: 5_seeds
-    block_on_fail: true
+## File Structure
+
+```
+academic-leap/
+├── journal/                          # Daily journal files
+│   └── {YYYY-MM-DD}.md
+├── okrs/                             # OKR tracking
+│   ├── CURRENT_WEEK.md               # This week's focus
+│   └── Q{X}-{YYYY}.md               # Quarterly OKR file
+├── dashboards/
+│   └── OPPORTUNITIES.md              # Pipeline tracking
+└── user_context/
+    └── COMPANY_CONTEXT.md            # Business context (提分神器)
 ```
 
-| 阶段   | 是否阻断 |
-|--------|----------|
-| commit | ❌       |
-| merge  | ✅       |
-| deploy | ✅       |
+## Key Principles
 
-🚫 **CI失败直接阻断 merge 和 deploy**
+- **Outcomes > Outputs** — measure impact, not activity
+- **Weekly Cadence** — Monday commitments, Friday celebrations (Wodtke method)
+- **5/10 Confidence** — OKRs should be ambitious (0.6-0.7 = success!)
+- **Journal tracking** — after notable work, add entry to `## Notes`
 
 ---
 
-## 技术栈
 
-- **Frontend**: Next.js 15, React 19, Tailwind, Framer Motion
-- **Backend**: Next.js API Routes, Prisma ORM
-- **Auth**: NextAuth.js v5 (beta)
-- **AI**: Gemini API
-- **DB**: PostgreSQL (Supabase)
-- **Testing**: Playwright (E2E), Jest (unit)
-
----
-
-## 开发工作流
-
-### TDD 流程
-1. 写测试（RED）
-2. 实现功能（GREEN）
-3. 重构（IMPROVE）
-4. 验证覆盖率
-
-### Pre-commit 检查
-```bash
-pnpm tsc --noEmit  # 类型检查
-pnpm lint           # 代码规范
-```
-
-### Pre-merge 检查
-```bash
-pnpm build          # 构建检查
-pnpm test           # 单元测试
-pnpm test:e2e       # E2E测试
-```
-
-### CI 门禁验证
-```bash
-# 数据链完整度测试
-pnpm test:data-integrity
-
-# 预测有效性测试
-pnpm test:learning-effectiveness
-
-# 稳定收敛性测试
-pnpm test:stability
-```
-
----
-
-## 数据模型关键约定
-
-### 学习事件追踪
-- 每次 `Attempt` 必须有唯一 `eventId`
-- `AttemptStep` 必须关联父 `eventId`
-- AI 诊断结果必须关联 `eventId`
-
-### 推荐系统
-- 推荐必须记录 `preAccuracy` 和 `postAccuracy`
-- 同一知识点的多次推荐需要计算方差
-- Top-K 推荐需要持久化用于相似度计算
-
----
-
-## RL健康监控
-
-RL自适应引擎的安全壳保护层，位于 `lib/rl/health/`。
-
-### 架构
-
-```
-HealthMonitor (健康监控)
-    ↓
-FailureDetector (失效检测)
-    ↓
-DegradationController (降级控制)
-    ↓
-RuleEngine (规则引擎兜底)
-```
-
-### 健康指标
-
-| 指标 | 说明 | 目标值 |
-|------|------|--------|
-| LE | 学习有效性 | > 0.15 |
-| CS | 收敛稳定性 | > 0.85 |
-| DFI | 数据完整度 | > 0.99 |
-| labelNoiseRate | 标签噪声率 | < 0.10 |
-| feedbackDelaySteps | 反馈延迟步数 | < 5 |
-
-### 降级行动
-
-| 状态 | 行动 |
-|------|------|
-| healthy | 继续RL |
-| warning | 增大exploration |
-| danger | 切换规则引擎 |
-| collapsed | 停止RL |
-
-### API集成
-
-```typescript
-import { HealthMonitor } from '@/lib/rl/health/monitor';
-import { decideDegradation } from '@/lib/rl/health/controller';
-
-const healthMonitor = new HealthMonitor();
-const healthStatus = healthMonitor.check();
-const action = decideDegradation(healthStatus);
-
-if (action.type === 'switch_to_rule') {
-  // 降级到规则引擎
-}
-```
-
-详见 [lib/rl/health/README.md](./lib/rl/health/README.md)。
-
----
-
-## Phase 2: 核心加固 (2026-04-30)
-
-### 组件
-
-| 组件 | 文件 | 描述 |
-|------|------|------|
-| CW-TS | `lib/rl/bandit/cw-thompson-sampling.ts` | 置信度加权采样 |
-| TD-CA | `lib/rl/reward/time-decay-credit.ts` | 时间衰减 Credit Assignment |
-| DistMon | `lib/rl/monitor/distribution.ts` | 分布监控（三类漂移检测） |
-
-### 特性开关
-
-```bash
-RL_CWTS_ENABLED=true
-RL_TDCA_ENABLED=true
-RL_DISTMON_ENABLED=true
-```
-
-### API 端点
-
-- `POST /api/rl/recalibrate` - 手动触发重校准
-
----
-
-## Phase 3: 完整重构 (2026-05-01)
-
-### 组件
-
-| 组件 | 文件 | 描述 |
-|------|------|------|
-| LQM | `lib/rl/quality/label-quality.ts` | 题目标签质量估计与修正 |
-| Normalizer | `lib/rl/normalize/feature-normalizer.ts` | z-score 特征归一化 |
-| Adaptation | `lib/rl/control/adaptation-controller.ts` | 自适应探索率控制 |
-
-### 特性开关
-
-```bash
-RL_LQM_ENABLED=true
-RL_NORMALIZER_ENABLED=true
-RL_ADAPTATION_ENABLED=true
-```
-
-### API 端点
-
-- `GET /api/rl/quality-report` - Phase 3 组件状态报告
-
----
-
-## Phase 4: RL-UOK Integration (2026-05-01)
-
-### 架构
-
-RL 作为 UOK 的探索增强层：
-
-```
-UOK 推荐 → RLExplorationController → 返回 Top-N 候选 → 加权随机选择
-```
-
-### 组件
-
-| 组件 | 文件 | 描述 |
-|------|------|------|
-| RLExplorationController | `lib/rl/exploration/rl-exploration-controller.ts` | 健康监控 + 候选数量 |
-| Selector | `lib/rl/exploration/selector.ts` | 加权随机选择 |
-
-### 探索等级
-
-| 等级 | 权重分布 | 触发条件 |
-|------|---------|----------|
-| minimal | [0.7, 0.2, 0.1, 0, 0] | 健康 |
-| moderate | [0.4, 0.25, 0.2, 0.1, 0.05] | Warning / 同知识点≥3 |
-| aggressive | [0.2, 0.2, 0.2, 0.2, 0.2] | Danger / 伪收敛 |
-
-### 特性开关
-
-```bash
-RL_UOK_INTEGRATION_ENABLED=true
-RL_BASE_CANDIDATE_COUNT=2
-RL_MAX_CANDIDATE_COUNT=5
-```
-
----
-
-## 产品原则映射
-
-当遇到技术冲突时，参考 [PRODUCT.md#权衡原则](./PRODUCT.md#8-权衡原则-trade-off-principles)：
-
-| 冲突场景 | 产品原则 | 技术决策 |
-|---------|---------|---------|
-| 优化CS可能降低LE | **LE 优先于 CS** | 不优化，保持LE |
-| 不确定推荐准确性 | **信任保护优先** | 保守推荐 |
-| 系统可能失效 | **检测优于隐藏** | 添加监控 |
-| 检测到异常 | **降级优于崩溃** | 切换规则引擎 |
-
----
-
-## 行为指南（通用）
-
-### 1. Think Before Coding
-- 状态假设明确说明。不确定就问。
-- 多种解释存在时，列出来——不要默默选。
-- 存在更简单的方式，说出来。该推就推。
-
-### 2. Simplicity First
-- 不做需求外的功能
-- 不为单次用代码抽象
-- 不做未被请求的"灵活性"
-- 不为不可能场景处理错误
-
-### 3. Surgical Changes
-- 只改必须改的
-- 不"改进"相邻代码
-- 匹配现有风格
-
-### 4. Goal-Driven Execution
-- 定义成功标准
-- 循环直到验证

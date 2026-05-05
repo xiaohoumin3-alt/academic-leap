@@ -103,12 +103,139 @@ export const RATE_LIMIT_CONSTANTS = {
 // 主题配置
 // ============================================================
 
-export const THEMES = {
-  'magic-academy': { name: '魔法学院', icon: '🎓' },
-  'career': { name: '职业养成', icon: '💼' },
-  'racing': { name: '极限竞速', icon: '🏎️' },
-  'detective': { name: '特工行动', icon: '🕵️' },
-} as const;
+export interface ThemeConfig {
+  id: string;
+  name: string;
+  displayName: string;
+  description: string;
+  icon: string;
+  colors: {
+    primary: string;
+    secondary: string;
+    accent: string;
+    background: string;
+    surface: string;
+  };
+  terminology: {
+    player: string;      // "魔法学徒" | "实习生" | "赛车手" | "特工"
+    level: string;       // "魔法等级" | "职级" | "段位" | "特工等级"
+    challenge: string;   // "施法练习" | "任务" | "过弯" | "行动"
+    reward: string;      // "魔力值" | "绩效" | "氮气" | "情报"
+    boss: string;        // "魔法考试" | "重要项目" | "冠军赛" | "终极任务"
+    progress: string;    // "魔力" | "经验" | "加速" | "情报"（用于显示）
+  };
+  feedback: {
+    correct: string;
+    wrong: string;
+  };
+}
+
+export const THEMES: Record<string, ThemeConfig> = {
+  'magic-academy': {
+    id: 'magic-academy',
+    name: 'magic-academy',
+    displayName: '魔法学院',
+    description: '像哈利波特一样学习',
+    icon: '🎓',
+    colors: {
+      primary: '#7C3AED',
+      secondary: '#A78BFA',
+      accent: '#F5D0FE',
+      background: '#1E1B4B',
+      surface: '#302B63',
+    },
+    terminology: {
+      player: '魔法学徒',
+      level: '魔法等级',
+      challenge: '施法练习',
+      reward: '魔力值',
+      boss: '魔法考试',
+      progress: '魔力',
+    },
+    feedback: {
+      correct: '魔力充能！',
+      wrong: '魔法反噬！调整呼吸...',
+    },
+  },
+  'career': {
+    id: 'career',
+    name: 'career',
+    displayName: '职业养成',
+    description: '提前体验职业，建立目标感',
+    icon: '💼',
+    colors: {
+      primary: '#2563EB',
+      secondary: '#64748B',
+      accent: '#22C55E',
+      background: '#0F172A',
+      surface: '#1E293B',
+    },
+    terminology: {
+      player: '实习生',
+      level: '职级',
+      challenge: '工作任务',
+      reward: '绩效',
+      boss: '重要项目',
+      progress: '经验值',
+    },
+    feedback: {
+      correct: '任务完成！绩效提升',
+      wrong: '工作失误！复盘一下...',
+    },
+  },
+  'racing': {
+    id: 'racing',
+    name: 'racing',
+    displayName: '极限竞速',
+    description: '竞技体育精神，目标感和拼搏',
+    icon: '🏎️',
+    colors: {
+      primary: '#DC2626',
+      secondary: '#F97316',
+      accent: '#EAB308',
+      background: '#18181B',
+      surface: '#27272A',
+    },
+    terminology: {
+      player: '赛车手',
+      level: '段位',
+      challenge: '过弯',
+      reward: '氮气',
+      boss: '冠军赛',
+      progress: '加速',
+    },
+    feedback: {
+      correct: '完美过弯！氮气充能',
+      wrong: '失控打滑！调整角度...',
+    },
+  },
+  'detective': {
+    id: 'detective',
+    name: 'detective',
+    displayName: '特工行动',
+    description: '智力挑战，培养专注力和反应',
+    icon: '🕵️',
+    colors: {
+      primary: '#06B6D4',
+      secondary: '#0891B2',
+      accent: '#14B8A6',
+      background: '#0F172A',
+      surface: '#1E293B',
+    },
+    terminology: {
+      player: '特工',
+      level: '特工等级',
+      challenge: '行动',
+      reward: '情报',
+      boss: '终极任务',
+      progress: '情报',
+    },
+    feedback: {
+      correct: '情报获取！新证据发现',
+      wrong: '行动暴露！快速撤离...',
+    },
+  },
+};
 
 // ============================================================
 // 实验配置
@@ -120,9 +247,6 @@ export const EXPERIMENT_CONSTANTS = {
     BASIC: 40, // basic组权重
     FULL: 40, // full组权重
   },
-  THEME_MAPPING: {
-    control: 'adventure',
-    basic: 'sci-fi',
-    full: 'fantasy',
-  },
+  // 实验与主题解耦 - 用户可以自由选择任何主题
+  // 实验变体只控制游戏化功能的可用性
 } as const;

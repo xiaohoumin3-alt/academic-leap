@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
+import { createRateLimitMiddleware } from '@/lib/rate-limit';
 
 const resetPasswordSchema = z.object({
   email: z.string().email('无效的邮箱格式'),
@@ -11,15 +12,16 @@ const resetPasswordSchema = z.object({
 
 const MAX_ATTEMPTS = 5;
 
+// 速率限制配置
+const RATE_LIMIT_CONFIG = { windowMs: 5 * 60 * 1000, maxRequests: 5 };
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { email, code, newPassword } = resetPasswordSchema.parse(body);
 
     // 速率限制检查
-    const createRateLimitMiddleware = () => import('@/lib/rate-limit').then(m => m.createRateLimitMiddleware);
-    const rateLimitFn = await createRateLimitMiddleware();
-    const rateLimit = await rateLimitFn('reset_password');
+    const rateLimit = createRateLimitMiddleware('reset_password', RATE_LIMIT_CONFIG);
     const rateLimitResult = await rateLimit(email);
 
     if (!rateLimitResult.allowed) {

@@ -16,6 +16,7 @@ interface Chapter {
   id: string;
   chapterNumber: number;
   chapterName: string;
+  sectionName?: string | null;
   enabled: boolean;
   knowledgePoints: KnowledgePoint[];
 }
@@ -74,8 +75,10 @@ export default function KnowledgeTreeView({
 
       {chapters.map((chapter) => {
         const isExpanded = expandedChapters.has(chapter.id);
-        const allPointsEnabled = chapter.knowledgePoints.every(p => p.enabled);
-        const somePointsEnabled = chapter.knowledgePoints.some(p => p.enabled);
+        const hasKnowledgePoints = chapter.knowledgePoints.length > 0;
+        // 只有当有知识点时才检查全部启用状态，空章节默认为未选中
+        const allPointsEnabled = hasKnowledgePoints && chapter.knowledgePoints.every(p => p.enabled);
+        const somePointsEnabled = hasKnowledgePoints && chapter.knowledgePoints.some(p => p.enabled);
 
         return (
           <div key={chapter.id} className="bg-surface-container-low rounded-2xl overflow-hidden">
@@ -103,7 +106,7 @@ export default function KnowledgeTreeView({
                 className="w-5 h-5 rounded"
               />
               <span className="flex-1 text-left font-medium text-on-surface">
-                第{chapter.chapterNumber}章 {chapter.chapterName}
+                第{chapter.chapterNumber}章{chapter.sectionName ? ` ${chapter.sectionName}` : ` ${chapter.chapterName}`}
               </span>
               <span className="text-sm text-on-surface-variant">
                 {chapter.knowledgePoints.filter(p => p.enabled).length}/{chapter.knowledgePoints.length}

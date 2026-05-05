@@ -93,10 +93,14 @@ export async function GET(req: NextRequest) {
     });
     const enabledIds = new Set(enabledKnowledge.map(k => k.nodeId));
 
-    // 获取章节
+    // 获取章节 - 只获取叶子章节（有sectionName的），不包括父章节容器
     let chapters = await prisma.chapter.findMany({
-      where: { textbookId: user.selectedTextbookId },
-      orderBy: { chapterNumber: 'asc' },
+      where: {
+        textbookId: user.selectedTextbookId,
+        // 只获取有sectionName的章节（叶子节点），不包括父章节容器
+        sectionName: { not: null },
+      },
+      orderBy: [{ chapterNumber: 'asc' }, { sort: 'asc' }],
       include: {
         knowledgePoints: {
           where: {
@@ -121,11 +125,12 @@ export async function GET(req: NextRequest) {
 
     // 构建响应数据
     const chaptersData = chapters.map(chapter => {
-      const chapterEnabled = chapter.knowledgePoints.every(kp => enabledIds.has(kp.id));
+      const chapterEnabled = chapter.knowledgePoints.length > 0 && chapter.knowledgePoints.every(kp => enabledIds.has(kp.id));
       return {
         id: chapter.id,
         chapterNumber: chapter.chapterNumber,
         chapterName: chapter.chapterName,
+        sectionName: chapter.sectionName,
         enabled: chapterEnabled,
         knowledgePoints: chapter.knowledgePoints.map(kp => ({
           id: kp.id,

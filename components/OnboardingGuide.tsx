@@ -28,13 +28,15 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
     // 加载教材列表
     const fetchTextbooks = async () => {
       try {
-        const res = await fetch('/api/admin/textbooks');
+        const res = await fetch('/api/user/textbooks');
         const data = await res.json();
-        if (data.success && data.data) {
-          setTextbooks(data.data);
-          if (data.data.length > 0) {
-            setSelectedTextbookId(data.data[0].id);
+        if (data.success && data.data?.textbooks) {
+          setTextbooks(data.data.textbooks);
+          if (data.data.textbooks.length > 0) {
+            setSelectedTextbookId(data.data.textbooks[0].id);
           }
+        } else {
+          console.error('加载教材失败: 响应格式错误', data);
         }
       } catch (error) {
         console.error('加载教材失败:', error);

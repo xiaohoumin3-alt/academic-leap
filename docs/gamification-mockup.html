@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>学力跃迁 - 游戏化主题预览</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; min-height: 100vh; display: flex; align-items: center; justify-content: center; gap: 20px; padding: 20px; }
+
+    .theme-card { width: 280px; height: 520px; border-radius: 24px; padding: 20px; display: flex; flex-direction: column; position: relative; overflow: hidden; transition: transform 0.3s; cursor: pointer; }
+    .theme-card:hover { transform: translateY(-10px); }
+
+    /* 太空主题 */
+    .space { background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%); border: 2px solid #6366f1; }
+    .space .header { text-align: center; margin-bottom: 16px; }
+    .space .badge { width: 60px; height: 60px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 50%; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+    .space .level { color: #a5b4fc; font-size: 14px; font-weight: 600; }
+    .space .player-icon { font-size: 48px; text-align: center; margin: 20px 0; animation: float 3s ease-in-out infinite; }
+    .space .progress-label { color: #a5b4fc; font-size: 12px; margin-bottom: 4px; }
+    .space .progress-bar { height: 8px; background: rgba(99, 102, 241, 0.2); border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
+    .space .progress-fill { height: 100%; background: linear-gradient(90deg, #6366f1, #8b5cf6); width: 75%; border-radius: 4px; }
+    .space .stat { display: flex; justify-content: space-between; color: #a5b4fc; font-size: 13px; margin-bottom: 20px; }
+    .space .btn { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; border: none; padding: 12px 20px; border-radius: 12px; font-weight: 600; cursor: pointer; margin-top: auto; }
+
+    /* 奇幻主题 */
+    .fantasy { background: linear-gradient(135deg, #1a1a2e 0%, #4a1c40 50%, #2d1b3d 100%); border: 2px solid #f59e0b; }
+    .fantasy .badge { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    .fantasy .level { color: #fcd34d; }
+    .fantasy .player-icon { font-size: 48px; text-align: center; margin: 20px 0; animation: bounce 2s ease-in-out infinite; }
+    .fantasy .progress-label { color: #fcd34d; }
+    .fantasy .progress-bar { background: rgba(245, 158, 11, 0.2); }
+    .fantasy .progress-fill { background: linear-gradient(90deg, #f59e0b, #d97706); }
+    .fantasy .stat { color: #fcd34d; }
+    .fantasy .btn { background: linear-gradient(135deg, #f59e0b, #d97706); color: #1a1a2e; }
+
+    /* 王国主题 */
+    .kingdom { background: linear-gradient(135deg, #1c1917 0%, #44403c 50%, #292524 100%); border: 2px solid #84cc16; }
+    .kingdom .badge { background: linear-gradient(135deg, #84cc16, #65a30d); }
+    .kingdom .level { color: #bef264; }
+    .kingdom .player-icon { font-size: 48px; text-align: center; margin: 20px 0; }
+    .kingdom .progress-label { color: #bef264; }
+    .kingdom .progress-bar { background: rgba(132, 204, 22, 0.2); }
+    .kingdom .progress-fill { background: linear-gradient(90deg, #84cc16, #65a30d); }
+    .kingdom .stat { color: #bef264; }
+    .kingdom .btn { background: linear-gradient(135deg, #84cc16, #65a30d); color: #1c1917; }
+
+    /* 侦探主题 */
+    .detective { background: linear-gradient(135deg, #0f172a 0%, #334155 50%, #1e293b 100%); border: 2px solid #06b6d4; }
+    .detective .badge { background: linear-gradient(135deg, #06b6d4, #0891b2); }
+    .detective .level { color: #67e8f9; }
+    .detective .player-icon { font-size: 48px; text-align: center; margin: 20px 0; }
+    .detective .progress-label { color: #67e8f9; }
+    .detective .progress-bar { background: rgba(6, 182, 212, 0.2); }
+    .detective .progress-fill { background: linear-gradient(90deg, #06b6d4, #0891b2); }
+    .detective .stat { color: #67e8f9; }
+    .detective .btn { background: linear-gradient(135deg, #06b6d4, #0891b2); color: #0f172a; }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-5px); }
+    }
+
+    .particles { position: absolute; width: 100%; height: 100%; pointer-events: none; overflow: hidden; }
+    .particle { position: absolute; width: 4px; height: 4px; background: rgba(255,255,255,0.3); border-radius: 50%; animation: rise 4s infinite ease-in; }
+    @keyframes rise {
+      0% { transform: translateY(100%) scale(0); opacity: 0; }
+      50% { opacity: 1; }
+      100% { transform: translateY(-100%) scale(1); opacity: 0; }
+    }
+
+    .theme-name { position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 8px; font-size: 11px; color: rgba(255,255,255,0.6); }
+  </style>
+</head>
+<body>
+  <!-- 太空探险 -->
+  <div class="theme-card space">
+    <div class="particles">
+      <div class="particle" style="left: 20%; animation-delay: 0s;"></div>
+      <div class="particle" style="left: 50%; animation-delay: 1s;"></div>
+      <div class="particle" style="left: 80%; animation-delay: 2s;"></div>
+    </div>
+    <div class="theme-name">🚀 太空探险</div>
+    <div class="header">
+      <div class="badge">🚀</div>
+      <div class="level">Lv.7 飞船船长</div>
+    </div>
+    <div class="player-icon">🛸</div>
+    <div class="progress-label">能量燃料</div>
+    <div class="progress-bar"><div class="progress-fill"></div></div>
+    <div class="stat">
+      <span>当前星域: 仙女座</span>
+      <span>12/25 星球</span>
+    </div>
+    <button class="btn">🚀 开始探险</button>
+  </div>
+
+  <!-- 奇幻冒险 -->
+  <div class="theme-card fantasy">
+    <div class="theme-name">⚔️ 奇幻冒险</div>
+    <div class="header">
+      <div class="badge">⚔️</div>
+      <div class="level">Lv.7 冒险者</div>
+    </div>
+    <div class="player-icon">🧙‍♂️</div>
+    <div class="progress-label">经验值</div>
+    <div class="progress-bar"><div class="progress-fill"></div></div>
+    <div class="stat">
+      <span>当前区域: 暗影森林</span>
+      <span>12/25 区域</span>
+    </div>
+    <button class="btn">⚔️ 开始冒险</button>
+  </div>
+
+  <!-- 王国建造 -->
+  <div class="theme-card kingdom">
+    <div class="theme-name">🏰 王国建造</div>
+    <div class="header">
+      <div class="badge">👑</div>
+      <div class="level">Lv.7 统治者</div>
+    </div>
+    <div class="player-icon">🏰</div>
+    <div class="progress-label">繁荣度</div>
+    <div class="progress-bar"><div class="progress-fill"></div></div>
+    <div class="stat">
+      <span>已开发: 12 领地</span>
+      <span>总人口: 25万</span>
+    </div>
+    <button class="btn">🏰 开始建造</button>
+  </div>
+
+  <!-- 侦探解谜 -->
+  <div class="theme-card detective">
+    <div class="theme-name">🔍 侦探解谜</div>
+    <div class="header">
+      <div class="badge">🔍</div>
+      <div class="level">Lv.7 侦探</div>
+    </div>
+    <div class="player-icon">🕵️</div>
+    <div class="progress-label">线索收集</div>
+    <div class="progress-bar"><div class="progress-fill"></div></div>
+    <div class="stat">
+      <span>当前案件: 第7号</span>
+      <span>已破解: 12 案</span>
+    </div>
+    <button class="btn">🔍 开始调查</button>
+  </div>
+</body>
+</html>

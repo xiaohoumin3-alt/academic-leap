@@ -3,16 +3,15 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { useGamingStore } from '@/lib/stores/gaming-store';
-import { THEMES } from './ThemeProvider';
-import type { ThemeId } from '@/types/gaming';
+import { THEMES } from '@/lib/gaming/constants';
 
 export function ThemeSelector() {
   const activeThemeId = useGamingStore((state) => state.activeThemeId);
   const setTheme = useGamingStore((state) => state.setTheme);
 
-  const handleSelect = async (themeId: ThemeId) => {
+  const handleSelect = async (themeId: string) => {
     // 更新本地状态
-    setTheme(themeId);
+    setTheme(themeId as any);
 
     // 同步到后端
     try {
@@ -28,25 +27,25 @@ export function ThemeSelector() {
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {(Object.keys(THEMES) as ThemeId[]).map((themeId) => {
-        const theme = THEMES[themeId];
-        const isActive = activeThemeId === themeId;
+      {Object.values(THEMES).map((theme) => {
+        const isActive = activeThemeId === theme.id;
 
         return (
           <motion.button
-            key={themeId}
+            key={theme.id}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => handleSelect(themeId)}
+            onClick={() => handleSelect(theme.id)}
             className={`
               relative p-4 rounded-xl border-2 transition-all text-left
               ${isActive
-                ? 'border-purple-500 bg-purple-500/20'
+                ? 'border-current bg-current/20'
                 : 'border-white/10 bg-white/5 hover:border-white/20'}
             `}
             style={{
               backgroundColor: isActive ? theme.colors.surface + '40' : undefined,
               borderColor: isActive ? theme.colors.primary : undefined,
+              color: isActive ? theme.colors.primary : undefined,
             }}
           >
             <div className="text-4xl mb-2">{theme.icon}</div>

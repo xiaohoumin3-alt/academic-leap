@@ -6,10 +6,7 @@ import { useSession, signOut } from 'next-auth/react';
 import MaterialIcon from '../../components/MaterialIcon';
 import { BottomNavigation } from '../../components/BottomNavigation';
 import LearningSettings from '@/components/LearningSettings';
-import { ThemeProvider } from '@/components/gaming/ThemeProvider';
-import { AchievementGrid } from '@/components/gaming/AchievementGrid';
-import { Leaderboard } from '@/components/gaming/Leaderboard';
-import { StreakDisplay } from '@/components/gaming/StreakDisplay';
+// 游戏化功能已移除 - 专注于学习体验
 
 const DEFAULT_TARGET_SCORE = 90;
 
@@ -122,8 +119,7 @@ export default function MePage() {
 
   // 已登录 - 显示用户信息
   return (
-    <ThemeProvider>
-      <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full">
         <div className="flex-1 px-6 py-8 overflow-y-auto pb-24">
           {/* 用户信息 & 设置卡片 */}
           <div className="bg-surface-container-low rounded-[2rem] p-6 mb-6">
@@ -169,31 +165,6 @@ export default function MePage() {
             </div>
           </div>
 
-          {/* 游戏化状态 */}
-          <div className="bg-surface-container-low rounded-[2rem] p-6 mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <MaterialIcon icon="emoji_events" className="text-primary" style={{ fontSize: '24px' }} />
-              <h3 className="text-lg font-display font-bold text-on-surface">游戏化</h3>
-            </div>
-
-            {/* 连胜展示 */}
-            <div className="mb-4">
-              <h4 className="text-sm text-on-surface-variant mb-2">当前连胜</h4>
-              <StreakDisplay />
-            </div>
-
-            {/* 成就展示 */}
-            <div className="mb-4">
-              <h4 className="text-sm text-on-surface-variant mb-2">成就</h4>
-              <AchievementGrid unlockedCodes={['streak-3', 'first-win']} />
-            </div>
-
-            {/* 排行榜 */}
-            <div>
-              <h4 className="text-sm text-on-surface-variant mb-2">排行榜</h4>
-              <Leaderboard />
-            </div>
-          </div>
 
           {/* 设置入口 */}
           <button
@@ -218,6 +189,6 @@ export default function MePage() {
 
         <BottomNavigation />
       </div>
-    </ThemeProvider>
+    </div>
   );
 }

@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { randomBytes } from 'crypto';
-
-// 动态导入速率限制器
-const createRateLimitMiddleware = () => import('@/lib/rate-limit').then(m => m.createRateLimitMiddleware);
+import { createRateLimitMiddleware } from '@/lib/rate-limit';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('无效的邮箱格式'),
 });
+
+// 速率限制配置
+const RATE_LIMIT_CONFIG = { windowMs: 5 * 60 * 1000, maxRequests: 3 };
 
 // 安全随机验证码生成器
 function generateCode(): string {
@@ -23,8 +24,7 @@ export async function POST(request: NextRequest) {
     const { email } = forgotPasswordSchema.parse(body);
 
     // 速率限制检查
-    const rateLimitFn = await createRateLimitMiddleware();
-    const rateLimit = await rateLimitFn('forgot_password');
+    const rateLimit = createRateLimitMiddleware('forgot_password', RATE_LIMIT_CONFIG);
     const rateLimitResult = await rateLimit(email);
 
     if (!rateLimitResult.allowed) {

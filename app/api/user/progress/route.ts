@@ -25,17 +25,45 @@ export async function GET() {
     });
 
     if (!user || !user.selectedTextbookId) {
+      console.error('[Progress API] User missing textbook:', {
+        userId: session.user.id,
+        hasUser: !!user,
+        selectedTextbookId: user?.selectedTextbookId,
+        selectedSubject: user?.selectedSubject,
+      });
       return NextResponse.json(
-        { success: false, error: '用户未设置教材' },
+        {
+          success: false,
+          error: '用户未设置教材',
+          errorCode: 'TEXTBOOK_NOT_SET',
+          setupUrl: '/setup',
+        },
+        { status: 400 }
+      );
+    }
+
+    // 验证日期格式
+    const semesterStart = user.semesterStart ? new Date(user.semesterStart) : undefined;
+    const semesterEnd = user.semesterEnd ? new Date(user.semesterEnd) : undefined;
+
+    if (semesterStart && isNaN(semesterStart.getTime())) {
+      console.error('[Progress API] Invalid semesterStart:', user.semesterStart);
+      return NextResponse.json(
+        { success: false, error: '学期开始日期无效', errorCode: 'INVALID_DATE' },
+        { status: 400 }
+      );
+    }
+
+    if (semesterEnd && isNaN(semesterEnd.getTime())) {
+      console.error('[Progress API] Invalid semesterEnd:', user.semesterEnd);
+      return NextResponse.json(
+        { success: false, error: '学期结束日期无效', errorCode: 'INVALID_DATE' },
         { status: 400 }
       );
     }
 
     // 计算基于时间的进度
-    const progressInfo = calculateProgress(
-      user.semesterStart ? new Date(user.semesterStart) : undefined,
-      user.semesterEnd ? new Date(user.semesterEnd) : undefined
-    );
+    const progressInfo = calculateProgress(semesterStart, semesterEnd);
 
     // 获取教材的所有章节
     const chapters = await prisma.chapter.findMany({

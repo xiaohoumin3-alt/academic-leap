@@ -25,14 +25,12 @@ export type GamingEventInput = z.output<typeof gamingEventSchema>;
 
 // PATCH /api/gaming - 更新玩家设置
 export const updatePlayerSchema = z.object({
-  theme: z.enum(['adventure', 'sci-fi', 'fantasy', 'sports']).optional(),
-  character: z.string().min(1).max(50).optional(),
+  theme: z.enum(['magic-academy', 'career', 'racing', 'detective']).optional(),
 });
 
 // GET /api/gaming/leaderboard - 排行榜查询
 export const leaderboardQuerySchema = z.object({
-  theme: z.enum(['adventure', 'sci-fi', 'fantasy', 'sports']).optional(),
-  character: z.string().optional(),
+  theme: z.enum(['magic-academy', 'career', 'racing', 'detective']).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
   offset: z.coerce.number().int().min(0).optional().default(0),
 });

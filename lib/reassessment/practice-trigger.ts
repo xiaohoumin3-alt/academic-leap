@@ -73,7 +73,7 @@ export async function addPracticeRecord(
 ): Promise<void> {
   const key = `user:${userId}:practice:window`;
 
-  await evalLua({
+  await evalLua(ADD_RECORD_SCRIPT, {
     keys: [key],
     arguments: [JSON.stringify(record), WINDOW_TTL.toString()]
   });

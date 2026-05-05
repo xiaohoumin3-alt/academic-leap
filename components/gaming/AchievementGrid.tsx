@@ -2,20 +2,27 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import type { Achievement } from '@/types/gaming';
+
+interface UserAchievement {
+  type: string;
+  name: string;
+  description: string;
+  unlockedAt: Date | string;  // API returns string
+  progress: number;
+  maxProgress: number;
+}
 
 /**
- * 预定义成就列表
+ * 安全地解析 unlockedAt 为 Date 对象
  */
-const ACHIEVEMENT_LIST = [
-  { code: 'streak-3', name: '状态来了', description: '达成3连胜', icon: '🔥', rarity: 'common' as const },
-  { code: 'streak-5', name: '势不可挡', description: '达成5连胜', icon: '⚡', rarity: 'rare' as const },
-  { code: 'streak-10', name: '超神模式', description: '达成10连胜', icon: '👑', rarity: 'epic' as const },
-  { code: 'first-win', name: '初入学院', description: '答对第一道题', icon: '🌟', rarity: 'common' as const },
-  { code: 'knowledge-10', name: '知识探险家', description: '解锁10个知识点', icon: '🗺️', rarity: 'rare' as const },
-  { code: 'early-bird', name: '早起鸟', description: '8点前完成10题', icon: '🌅', rarity: 'common' as const },
-];
+function parseUnlockedAt(unlockedAt: Date | string): Date {
+  if (unlockedAt instanceof Date) return unlockedAt;
+  return new Date(unlockedAt);
+}
 
+/**
+ * 稀有度颜色配置
+ */
 const RARITY_COLORS = {
   common: { border: 'border-gray-500', badge: 'bg-gray-500/20 text-gray-400', text: 'text-gray-400' },
   rare: { border: 'border-blue-500', badge: 'bg-blue-500/20 text-blue-400', text: 'text-blue-400' },
@@ -30,34 +37,95 @@ const RARITY_LABELS = {
   legendary: '传说',
 };
 
-interface AchievementGridProps {
-  unlockedCodes?: string[];
-  onUnlock?: (achievement: Achievement) => void;
+/**
+ * 根据成就类型推断稀有度
+ */
+function getRarityByType(type: string): keyof typeof RARITY_COLORS {
+  if (type.includes('legend')) return 'legendary';
+  if (type.includes('master')) return 'epic';
+  if (type.includes('explorer') || type.includes('demon')) return 'rare';
+  return 'common';
 }
 
-export function AchievementGrid({ unlockedCodes = [], onUnlock }: AchievementGridProps) {
-  const [showUnlock, setShowUnlock] = useState<typeof ACHIEVEMENT_LIST[0] | null>(null);
-  const unlockedSet = new Set(unlockedCodes);
+/**
+ * 根据成就类型获取图标
+ */
+function getIconByType(type: string): string {
+  const iconMap: Record<string, string> = {
+    'streak_master': '🔥',
+    'streak_legend': '⚡',
+    'knowledge_explorer': '🗺️',
+    'knowledge_master': '📚',
+    'early_bird': '🌅',
+    'night_owl': '🦉',
+    'consistency_king': '👑',
+    'speed_demon': '💨',
+    'perfect_day': '⭐',
+  };
+  return iconMap[type] || '🏆';
+}
+
+interface AchievementGridProps {
+  onUnlock?: (achievement: UserAchievement) => void;
+}
+
+export function AchievementGrid({ onUnlock }: AchievementGridProps) {
+  const [achievements, setAchievements] = useState<UserAchievement[]>([]);
+  const [showUnlock, setShowUnlock] = useState<UserAchievement | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadAchievements();
+  }, []);
+
+  const loadAchievements = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/gaming/achievements');
+      if (res.ok) {
+        const data = await res.json();
+        setAchievements(data.achievements || []);
+      }
+    } catch (error) {
+      console.error('Failed to load achievements:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="bg-white/5 rounded-xl p-6">
+        <div className="animate-pulse text-white/60">加载中...</div>
+      </div>
+    );
+  }
+
+  // 显示前6个成就
+  const displayAchievements = achievements.slice(0, 6);
 
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        {ACHIEVEMENT_LIST.map((achievement) => {
-          const isUnlocked = unlockedSet.has(achievement.code);
-          const rarity = RARITY_COLORS[achievement.rarity];
+        {displayAchievements.map((achievement) => {
+          const isUnlocked = parseUnlockedAt(achievement.unlockedAt).getTime() > 0;
+          const rarity = getRarityByType(achievement.type);
+          const rarityConfig = RARITY_COLORS[rarity];
+          const icon = getIconByType(achievement.type);
+          const progress = Math.min(100, (achievement.progress / achievement.maxProgress) * 100);
 
           return (
             <motion.div
-              key={achievement.code}
+              key={achievement.type}
               whileHover={{ scale: 1.05 }}
               className={`
                 relative p-4 rounded-xl border-2 transition-all
-                ${isUnlocked ? rarity.border : 'border-white/10 opacity-50'}
+                ${isUnlocked ? rarityConfig.border : 'border-white/10 opacity-60'}
               `}
             >
               {/* 图标 */}
               <div className={`text-3xl mb-2 ${isUnlocked ? '' : 'grayscale'}`}>
-                {achievement.icon}
+                {icon}
               </div>
 
               {/* 名称 */}
@@ -66,18 +134,37 @@ export function AchievementGrid({ unlockedCodes = [], onUnlock }: AchievementGri
               </div>
 
               {/* 描述 */}
-              <div className="text-xs text-white/60">
+              <div className="text-xs text-white/60 mb-2">
                 {achievement.description}
               </div>
 
+              {/* 进度条 */}
+              {!isUnlocked && (
+                <div className="w-full bg-white/10 rounded-full h-1.5">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.5 }}
+                    className="h-full bg-primary rounded-full"
+                  />
+                </div>
+              )}
+
+              {/* 进度文本 */}
+              {!isUnlocked && (
+                <div className="text-xs text-white/40 mt-1">
+                  {achievement.progress}/{achievement.maxProgress}
+                </div>
+              )}
+
               {/* 稀有度标签 */}
-              <div className={`absolute top-2 right-2 text-xs px-2 py-0.5 rounded ${rarity.badge}`}>
-                {RARITY_LABELS[achievement.rarity]}
+              <div className={`absolute top-2 right-2 text-xs px-2 py-0.5 rounded ${rarityConfig.badge}`}>
+                {RARITY_LABELS[rarity]}
               </div>
 
               {/* 未解锁遮罩 */}
               {!isUnlocked && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl">
+                <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-xl">
                   <span className="text-2xl">🔒</span>
                 </div>
               )}
@@ -106,7 +193,7 @@ export function AchievementGrid({ unlockedCodes = [], onUnlock }: AchievementGri
               <div className="text-2xl font-bold text-white mb-2">
                 新成就解锁！
               </div>
-              <div className={`text-xl mb-2 ${RARITY_COLORS[showUnlock.rarity].text}`}>
+              <div className="text-xl mb-2 text-yellow-400">
                 [{showUnlock.name}]
               </div>
               <div className="text-sm text-white/60">

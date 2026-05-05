@@ -6,6 +6,7 @@ import ExercisePage from '@/components/ExercisePage';
 import { practiceApi } from '@/lib/api';
 import type { ExerciseResult } from '@/components/ExercisePage';
 import { BottomNavigation } from '@/components/BottomNavigation';
+import { ThemeProvider } from '@/components/gaming/ThemeProvider';
 
 function PracticePageContent() {
   const router = useRouter();
@@ -45,7 +46,7 @@ function PracticePageContent() {
   };
 
   return (
-    <>
+    <ThemeProvider>
       <ExercisePage
         mode={mode}
         initialDifficulty={2}
@@ -54,7 +55,7 @@ function PracticePageContent() {
         onFinish={handleFinish}
       />
       <BottomNavigation />
-    </>
+    </ThemeProvider>
   );
 }
 
