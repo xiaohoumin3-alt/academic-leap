@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: 'standalone', // 支持Docker部署
+  output: 'standalone',
   env: {
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
     DATABASE_URL: process.env.DATABASE_URL,
@@ -9,9 +9,8 @@ const nextConfig = {
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
   },
   experimental: {
-    turbo: undefined, // 禁用Turbopack
+    turbo: undefined,
   },
-  // TypeScript 和 ESLint 检查已启用，确保代码质量
 };
 
 module.exports = nextConfig;

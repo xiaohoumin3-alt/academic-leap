@@ -17,7 +17,6 @@ export default function Home() {
   };
 
   const handleAssess = (retry = false) => {
-    // 跳转到测评页面，retry=true表示重新测评
     router.push(retry ? '/assessment?mode=retry' : '/assessment');
   };
 
@@ -25,12 +24,12 @@ export default function Home() {
     router.push('/console');
   };
 
-  // 防止SSR hydration问题
+  // Prevent SSR hydration issues
   if (!mounted) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4">
-        <div className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-        <p className="font-medium text-on-surface-variant">加载中...</p>
+        <div className="w-8 h-8 rounded-full border-4 border-[#006a28] border-t-transparent animate-spin" />
+        <p className="font-medium text-[#2f6555]">加载中...</p>
       </div>
     );
   }

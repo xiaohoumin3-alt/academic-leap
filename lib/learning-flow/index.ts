@@ -10,11 +10,17 @@
  * Integrates with:
  * - recommendation/ for question selection
  * - learning-path/ for path micro-adjustments
+ * - question-engine/ for template-based questions
  */
+
+export * from './session';
+export * from './types';
+export * from './template-question';
 
 import { prisma } from '@/lib/prisma';
 import { recommendNextQuestion, type RecommendationContext } from '@/lib/recommendation';
 import { applyMicroAdjustments, type PracticeResult } from '@/lib/learning-path/adapter';
+import { generateTemplateQuestion, hasTemplate } from './template-question';
 import type {
   LearningSession,
   CreateSessionOptions,
@@ -76,6 +82,7 @@ export async function startSession(
  * Get the next question for a session
  *
  * Integrates with recommendation engine to select optimal question.
+ * Falls back to template-based generation when no database questions available.
  */
 export async function getNextQuestion(sessionId: string): Promise<NextQuestionResult | null> {
   const session = await loadSession(sessionId);
@@ -107,35 +114,86 @@ export async function getNextQuestion(sessionId: string): Promise<NextQuestionRe
   try {
     const recommendation = await recommendNextQuestion(context);
 
-    // Fetch full question data
+    // Try to fetch full question data from database
     const questionData = await prisma.question.findUnique({
       where: { id: recommendation.question.id },
       include: { steps: true }
     });
 
-    if (!questionData) {
-      throw new Error(`Question not found: ${recommendation.question.id}`);
+    if (questionData) {
+      // Found question in database
+      const knowledgePoints = JSON.parse(questionData.knowledgePoints) as string[];
+      const knowledgePointId = knowledgePoints[0] || session.currentKnowledgePoint || 'general';
+
+      return {
+        questionId: questionData.id,
+        content: {
+          question: questionData.content,
+          hint: questionData.hint || undefined,
+          inputType: questionData.steps[0]?.inputType || undefined,
+          keyboard: questionData.steps[0]?.keyboard || undefined,
+        },
+        knowledgePointId,
+        recommendedDifficulty: recommendation.expectedDifficulty,
+        reason: recommendation.reason,
+        sessionIndex: session.currentQuestionIndex,
+      };
     }
 
-    // Parse knowledge points from question
-    const knowledgePoints = JSON.parse(questionData.knowledgePoints) as string[];
-    const knowledgePointId = knowledgePoints[0] || session.currentKnowledgePoint || 'general';
+    // No database question found - check if we can generate from template
+    const targetKnowledgePoint = session.currentKnowledgePoint || recommendation.question.knowledgePoint;
 
-    return {
-      questionId: questionData.id,
-      content: {
-        question: questionData.content,
-        hint: questionData.hint || undefined,
-        inputType: questionData.steps[0]?.inputType || undefined,
-        keyboard: questionData.steps[0]?.keyboard || undefined,
-      },
-      knowledgePointId,
-      recommendedDifficulty: recommendation.expectedDifficulty,
-      reason: recommendation.reason,
-      sessionIndex: session.currentQuestionIndex,
-    };
+    if (hasTemplate(targetKnowledgePoint)) {
+      const templateQuestion = await generateTemplateQuestion(
+        targetKnowledgePoint,
+        Math.round((recommendation.expectedDifficulty / 10) * 5)
+      );
+
+      if (templateQuestion) {
+        return {
+          questionId: templateQuestion.id,
+          content: {
+            question: templateQuestion.content.question,
+            hint: templateQuestion.content.explanation,
+          },
+          knowledgePointId: targetKnowledgePoint,
+          recommendedDifficulty: recommendation.expectedDifficulty,
+          reason: recommendation.reason + ' (generated from template)',
+          sessionIndex: session.currentQuestionIndex,
+        };
+      }
+    }
+
+    // Fallback: return recommendation without full content
+    // (UI will need to handle this gracefully)
+    console.warn('No database question or template found for recommendation');
+    return null;
+
   } catch (error) {
     console.error('Failed to get recommendation:', error);
+
+    // Try template generation as fallback
+    if (session.currentKnowledgePoint && hasTemplate(session.currentKnowledgePoint)) {
+      const templateQuestion = await generateTemplateQuestion(
+        session.currentKnowledgePoint,
+        3 // Default to medium difficulty
+      );
+
+      if (templateQuestion) {
+        return {
+          questionId: templateQuestion.id,
+          content: {
+            question: templateQuestion.content.question,
+            hint: templateQuestion.content.explanation,
+          },
+          knowledgePointId: session.currentKnowledgePoint,
+          recommendedDifficulty: 5.0,
+          reason: 'Generated from template (fallback)',
+          sessionIndex: session.currentQuestionIndex,
+        };
+      }
+    }
+
     return null;
   }
 }

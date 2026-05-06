@@ -7,12 +7,14 @@
  */
 
 import { ModelAdapter, ModelType, TaskComplexity } from '@/lib/ai/model-adapter';
+import { generateFillBlank as generateFillBlankFromAI, type FillBlankRequest, type FillBlankQuestion } from '@/lib/ai/question-generator';
 
 export type QuestionType =
   | 'multiple_choice'  // 选择题
   | 'true_false'       // 判断题
   | 'calculation'      // 计算题
-  | 'word_problem';    // 应用题
+  | 'word_problem'     // 应用题
+  | 'fill_blank';     // 填空题
 
 export interface GenerateRequest {
   type: QuestionType;
@@ -35,6 +37,7 @@ export interface GeneratedQuestion {
   explanation?: string;
   template?: string;
   difficulty: number;
+  blanks?: { question: string; answer: string }[];  // 填空题答案
 }
 
 export class QuestionGenerator {
@@ -57,6 +60,8 @@ export class QuestionGenerator {
         return this.generateCalculation(request);
       case 'word_problem':
         return this.generateWordProblem(request);
+      case 'fill_blank':
+        return this.generateFillBlank(request);
       default:
         throw new Error(`Unsupported question type: ${request.type}`);
     }
@@ -207,6 +212,36 @@ export class QuestionGenerator {
   }
 
   /**
+   * 填空题生成（模板+AI）
+   */
+  private async generateFillBlank(request: GenerateRequest): Promise<GeneratedQuestion> {
+    // 使用新的模板填充式填空题生成器
+    const fillBlankRequest: FillBlankRequest = {
+      knowledgePoint: request.knowledgePoint,
+      difficultyLevel: this.calculateDifficulty(request.grade),
+      grade: request.grade
+    };
+
+    const result = await generateFillBlankFromAI(fillBlankRequest);
+
+    if (!result.success || !result.question) {
+      throw new Error(result.error || 'Failed to generate fill-in-the-blank question');
+    }
+
+    const q: FillBlankQuestion = result.question;
+
+    return {
+      id: q.id,
+      type: 'fill_blank' as const,
+      question: q.question,
+      answer: q.answer,
+      explanation: q.explanation,
+      template: q.template,
+      difficulty: q.difficulty
+    };
+  }
+
+  /**
    * 批量生成
    */
   async generateBatch(request: GenerateRequest & { count: number }): Promise<GeneratedQuestion[]> {
@@ -268,7 +303,7 @@ export class QuestionGenerator {
     if (request.type === 'multiple_choice' || request.type === 'true_false') {
       return 'claude-haiku-4.5';
     }
-    // 复杂题型用Sonnet
+    // 复杂题型用Sonnet（填空题需要较强的文本生成能力）
     return 'claude-sonnet-4.6';
   }
 

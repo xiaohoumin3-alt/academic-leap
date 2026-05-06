@@ -13,7 +13,7 @@ export default defineConfig({
   ],
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:3000',
-    storageState: process.env.STORAGE_STATE || 'e2e/storage-state.json',
+    ...(require('fs').existsSync('e2e/storage-state.json') && { storageState: 'e2e/storage-state.json' }),
     actionTimeout: 60000,
     navigationTimeout: 60000,
     trace: 'on-first-retry',
@@ -59,10 +59,10 @@ export default defineConfig({
       testMatch: /.*(visual-regression|smoke)\.spec\.ts/,
     },
   ],
-  webServer: process.env.CI || process.env.BASE_URL?.includes('vercel') ? undefined : {
+  webServer: process.env.SKIP_WEB_SERVER ? undefined : (process.env.CI || process.env.BASE_URL?.includes('vercel') ? undefined : {
     command: 'npm run dev',
     url: 'http://localhost:3000',
     reuseExistingServer: true,
     timeout: 120000,
-  },
+  }),
 });

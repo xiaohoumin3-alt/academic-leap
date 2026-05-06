@@ -21,8 +21,8 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const theme = searchParams.get('theme') || undefined;
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const offset = parseInt(searchParams.get('offset') || '0');
+    const limit = Math.max(1, Math.min(parseInt(searchParams.get('limit') || '50'), 100)); // 限制 1-100
+    const offset = Math.max(0, parseInt(searchParams.get('offset') || '0')); // 限制 >= 0
 
     // 验证主题
     const validThemes = ['magic-academy', 'career', 'racing', 'detective'];

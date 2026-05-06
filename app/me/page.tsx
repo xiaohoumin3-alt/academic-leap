@@ -6,15 +6,8 @@ import { useSession, signOut } from 'next-auth/react';
 import MaterialIcon from '../../components/MaterialIcon';
 import { BottomNavigation } from '../../components/BottomNavigation';
 import LearningSettings from '@/components/LearningSettings';
-// 游戏化功能已移除 - 专注于学习体验
 
 const DEFAULT_TARGET_SCORE = 90;
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-}
 
 interface UserSettings {
   grade?: number;
@@ -30,7 +23,6 @@ export default function MePage() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
-  // 获取学习设置
   useEffect(() => {
     if (status === 'loading') return;
     if (!session) {
@@ -76,7 +68,6 @@ export default function MePage() {
     );
   }
 
-  // 未登录 - 显示登录引导
   if (!session) {
     return (
       <div className="flex flex-col h-full">
@@ -117,78 +108,69 @@ export default function MePage() {
     );
   }
 
-  // 已登录 - 显示用户信息
   return (
     <div className="flex flex-col h-full">
-        <div className="flex-1 px-6 py-8 overflow-y-auto pb-24">
-          {/* 用户信息 & 设置卡片 */}
-          <div className="bg-surface-container-low rounded-[2rem] p-6 mb-6">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                <MaterialIcon icon="person" className="text-primary" style={{ fontSize: '32px' }} />
-              </div>
-              <div className="flex-1">
-                <h2 className="text-xl font-display font-bold text-on-surface">
-                  {session.user?.name || '学习者'}
-                </h2>
-                <p className="text-sm text-on-surface-variant">{session.user?.email}</p>
-              </div>
+      <div className="flex-1 px-6 py-8 overflow-y-auto pb-24">
+        <div className="bg-surface-container-low rounded-[2rem] p-6 mb-6">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+              <MaterialIcon icon="person" className="text-primary" style={{ fontSize: '32px' }} />
             </div>
-
-            {settingsError && (
-              <div className="bg-error-container/10 text-error text-sm p-3 rounded-xl mb-4">
-                {settingsError}
-              </div>
-            )}
-
-            {settings ? (
-              <div className="bg-surface rounded-2xl p-4">
-                <div className="flex items-center gap-2 text-sm text-on-surface-variant">
-                  <MaterialIcon icon="school" style={{ fontSize: '18px' }} />
-                  <span>
-                    {settings.grade}年级 · {settings.selectedSubject || '未设置'}
-                    {settings.selectedTextbookId && ' | 目标 ' + (settings.targetScore || DEFAULT_TARGET_SCORE) + '分'}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <button
-                className="w-full py-3 rounded-xl bg-primary text-on-primary font-medium"
-              >
-                设置学习信息
-              </button>
-            )}
-
-            {/* 学习设置（始终展开） */}
-            <div className="mt-4 -mx-2 -mb-2">
-              <LearningSettings onRefresh={refreshSettings} embedded={true} />
+            <div className="flex-1">
+              <h2 className="text-xl font-display font-bold text-on-surface">
+                {session.user?.name || '学习者'}
+              </h2>
+              <p className="text-sm text-on-surface-variant">{session.user?.email}</p>
             </div>
           </div>
 
+          {settingsError && (
+            <div className="bg-error-container/10 text-error text-sm p-3 rounded-xl mb-4">
+              {settingsError}
+            </div>
+          )}
 
-          {/* 设置入口 */}
-          <button
-            onClick={() => router.push('/console')}
-            className="w-full py-4 text-on-surface font-medium hover:bg-surface-container-high rounded-2xl transition-colors flex items-center justify-center gap-2"
-          >
-            <MaterialIcon icon="settings" style={{ fontSize: '20px' }} />
-            设置
-          </button>
+          {settings ? (
+            <div className="bg-surface rounded-2xl p-4">
+              <div className="flex items-center gap-2 text-sm text-on-surface-variant">
+                <MaterialIcon icon="school" style={{ fontSize: '18px' }} />
+                <span>
+                  {settings.grade}年级 · {settings.selectedSubject || '未设置'}
+                  {settings.selectedTextbookId && ' | 目标 ' + (settings.targetScore || DEFAULT_TARGET_SCORE) + '分'}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="w-full py-3 rounded-xl bg-primary text-on-primary font-medium"
+            >
+              设置学习信息
+            </button>
+          )}
 
-          {/* 退出登录 */}
-          <button
-            onClick={() => {
-              signOut({ callbackUrl: '/login' });
-            }}
-            className="w-full mt-3 py-4 text-error font-medium hover:bg-error-container/10 rounded-2xl transition-colors flex items-center justify-center gap-2"
-          >
-            <MaterialIcon icon="logout" style={{ fontSize: '20px' }} />
-            退出登录
-          </button>
+          <div className="mt-4 -mx-2 -mb-2">
+            <LearningSettings onRefresh={refreshSettings} embedded={true} />
+          </div>
         </div>
 
-        <BottomNavigation />
+        <button
+          onClick={() => router.push('/console')}
+          className="w-full py-4 text-on-surface font-medium hover:bg-surface-container-high rounded-2xl transition-colors flex items-center justify-center gap-2"
+        >
+          <MaterialIcon icon="settings" style={{ fontSize: '20px' }} />
+          设置
+        </button>
+
+        <button
+          onClick={() => signOut({ callbackUrl: '/login' })}
+          className="w-full mt-3 py-4 text-error font-medium hover:bg-error-container/10 rounded-2xl transition-colors flex items-center justify-center gap-2"
+        >
+          <MaterialIcon icon="logout" style={{ fontSize: '20px' }} />
+          退出登录
+        </button>
       </div>
+
+      <BottomNavigation />
     </div>
   );
 }

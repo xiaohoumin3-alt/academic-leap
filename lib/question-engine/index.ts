@@ -18,6 +18,9 @@ export * from './render';
 // 难度配置
 export * from './difficulty';
 
+// 知识点映射
+export * from './knowledge-point-mapping';
+
 /**
  * 生成题目（主入口）
  */

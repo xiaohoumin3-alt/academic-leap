@@ -3,12 +3,15 @@ import { prisma } from '@/lib/prisma';
 import { getTemplateIdByKnowledgePointId, getTemplate, QuestionProtocol, StepProtocol } from '@/lib/question-engine';
 import { renderQuestion } from '@/lib/question-engine/render';
 import { detectProtocolVersion } from '@/lib/question-engine/migrate';
-import { StepProtocolV2 } from '@/lib/question-engine/protocol-v2';
+import { StepProtocolV2, AnswerMode } from '@/lib/question-engine/protocol-v2';
 
 // Union type for questions that may use either v1 or v2 protocol
 type QuestionProtocolUnion = Omit<QuestionProtocol, 'steps'> & {
   steps: Array<StepProtocol | StepProtocolV2>;
 };
+
+// Question type enum
+type QuestionType = 'calculation' | 'fill_blank';
 
 /**
  * 生成单个题目
@@ -16,8 +19,14 @@ type QuestionProtocolUnion = Omit<QuestionProtocol, 'steps'> & {
 async function generateSingleQuestion(
   knowledgePoint: string,
   difficulty: number,
-  renderStyle: 'standard' | 'guided' | 'gamified' | 'story'
+  renderStyle: 'standard' | 'guided' | 'gamified' | 'story',
+  questionType: QuestionType = 'calculation'
 ): Promise<QuestionProtocolUnion> {
+  // 填空题使用 AI 直接生成，不需要模板
+  if (questionType === 'fill_blank') {
+    return generateFillBlankQuestion(knowledgePoint, difficulty, renderStyle);
+  }
+
   // 1. 根据知识点获取模板ID
   const templateId = await getTemplateIdByKnowledgePointId(knowledgePoint);
 
@@ -60,12 +69,101 @@ async function generateSingleQuestion(
   return renderedQuestion as QuestionProtocolUnion;
 }
 
+/**
+ * 生成填空题（AI直接生成，不使用模板）
+ */
+async function generateFillBlankQuestion(
+  knowledgePoint: string,
+  difficulty: number,
+  renderStyle: 'standard' | 'guided' | 'gamified' | 'story'
+): Promise<QuestionProtocolUnion> {
+  const { ModelAdapter } = await import('@/lib/ai/model-adapter');
+
+  const prompt = `
+请为初中生生成一道关于"${knowledgePoint}"的填空题。
+
+要求：
+1. 包含3-5个空
+2. 每个空有明确的数值答案
+3. 题目考察核心概念和计算
+4. 使用___表示空格
+
+请返回JSON格式：
+{
+  "question": "题目描述，用___表示空格，例如：已知x²=9，则x=___",
+  "blanks": [
+    {"position": 1, "answer": "3或-3"},
+    {"position": 2, "answer": "..."}
+  ]
+}
+`;
+
+  const adapter = new ModelAdapter({ model: 'claude-sonnet-4.6' });
+  const response = await adapter.generate(prompt, {
+    responseFormat: 'json',
+    maxTokens: 1500
+  });
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(response.content);
+  } catch {
+    throw new Error('生成填空题失败');
+  }
+
+  const data = parsed as {
+    question: string;
+    blanks?: { position: number; answer: string }[];
+  };
+
+  // 将填空题转换为步骤格式
+  const steps: StepProtocolV2[] = (data.blanks || []).map((blank, index) => ({
+    stepId: `s${index + 1}`,
+    answerMode: AnswerMode.EXPRESSION,
+    ui: {
+      instruction: `第${index + 1}空`,
+      hint: '',
+      inputPlaceholder: '输入答案',
+    },
+    keyboard: {
+      type: 'qwerty',
+      extraKeys: [],
+    },
+    expectedAnswer: {
+      type: 'string',
+      value: blank.answer,
+      tolerance: 0,
+    },
+  }));
+
+  const question: QuestionProtocolUnion = {
+    id: `q_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    knowledgePoint,
+    templateId: 'fill_blank_ai',
+    difficultyLevel: difficulty,
+    params: {},
+    steps,
+    content: {
+      title: '填空题',
+      description: data.question,
+      context: `知识点：${knowledgePoint}，难度：${difficulty}`,
+    },
+    meta: {
+      version: '2.0',
+      source: 'template_engine_v2',
+    },
+  };
+
+  return question;
+}
+
 // POST /api/questions/generate - 使用模板引擎生成题目
 export async function POST(req: NextRequest) {
   let knowledgePoint = '二次函数';  // 默认知识点
   let difficulty = 2;
   let count = 1;
   let renderStyle: 'standard' | 'guided' | 'gamified' | 'story' = 'standard';
+  let questionType: QuestionType = 'calculation';
 
   try {
     const requestData = await req.json();
@@ -73,8 +171,9 @@ export async function POST(req: NextRequest) {
     difficulty = requestData.difficulty || 2;
     count = requestData.count || 1;
     renderStyle = requestData.renderStyle || 'standard';
+    questionType = requestData.type === 'fill_blank' ? 'fill_blank' : 'calculation';
 
-    console.log('=== 使用模板引擎生成题目 ===', { knowledgePoint, difficulty, count, renderStyle });
+    console.log('=== 使用模板引擎生成题目 ===', { knowledgePoint, difficulty, count, renderStyle, questionType });
   } catch (e) {
     console.error('解析请求失败:', e);
   }
@@ -82,6 +181,43 @@ export async function POST(req: NextRequest) {
   // 限制生成数量
   if (count > 10) {
     count = 10;
+  }
+
+  // 填空题和模板题型使用不同的生成路径
+  if (questionType === 'fill_blank') {
+    try {
+      const questions: QuestionProtocolUnion[] = [];
+
+      for (let i = 0; i < count; i++) {
+        const question = await generateFillBlankQuestion(
+          knowledgePoint,
+          difficulty,
+          renderStyle
+        );
+        questions.push(question);
+      }
+
+      return NextResponse.json({
+        success: true,
+        questions: questions.map(q => ({
+          id: q.id,
+          templateId: q.templateId,
+          knowledgePoint: q.knowledgePoint,
+          difficultyLevel: q.difficultyLevel,
+          params: q.params,
+          steps: q.steps,
+          content: q.content,
+          meta: q.meta,
+          type: 'fill_blank',
+        })),
+      });
+    } catch (error) {
+      console.error('生成填空题错误:', error);
+      return NextResponse.json({
+        success: false,
+        error: error instanceof Error ? error.message : '生成失败',
+      }, { status: 500 });
+    }
   }
 
   try {

@@ -1,10 +1,10 @@
 /**
  * Rate Limiter - 速率限制器
- *
- * 防止API滥用，特别是防止刷XP
+ * 使用 Redis 实现滑动窗口速率限制
+ * 防止 API 滥用，特别是防止刷 XP
  */
 
-import { prisma } from '@/lib/prisma';
+import { getRedis } from './redis';
 
 // ============================================================
 // 类型定义
@@ -30,98 +30,114 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   gaming_leaderboard: { windowMs: 60000, maxRequests: 30 }, // 排行榜：每分钟30次
   forgot_password: { windowMs: 5 * 60 * 1000, maxRequests: 3 }, // 忘记密码：5分钟3次
   reset_password: { windowMs: 5 * 60 * 1000, maxRequests: 5 }, // 重置密码：5分钟5次
+  ocr: { windowMs: 60000, maxRequests: 20 }, // OCR：每分钟20次
+  ai_generate: { windowMs: 60000, maxRequests: 30 }, // AI生成：每分钟30次
 };
 
 // ============================================================
-// 内存存储（生产环境应使用Redis）
+// Redis 滑动窗口速率限制器
 // ============================================================
 
-class RateLimiter {
-  private requests = new Map<string, number[]>();
-  private cleanupInterval: NodeJS.Timeout;
+/**
+ * 检查速率限制（Redis 实现）
+ * 使用滑动窗口算法，支持多实例部署
+ */
+export async function checkRateLimit(
+  key: string,
+  config: RateLimitConfig
+): Promise<RateLimitResult> {
+  const redis = getRedis();
+  const now = Date.now();
+  const windowMs = config.windowMs;
+  const windowStart = now - windowMs;
 
-  constructor() {
-    // 每分钟清理过期记录
-    this.cleanupInterval = setInterval(() => {
-      this.cleanup();
-    }, 60000);
-  }
+  // Lua 脚本：滑动窗口速率限制
+  // 返回 [allowed (0/1), remaining, resetTime]
+  const luaScript = `
+    local key = KEYS[1]
+    local now = tonumber(ARGV[1])
+    local windowStart = tonumber(ARGV[2])
+    local maxRequests = tonumber(ARGV[3])
+    local windowMs = tonumber(ARGV[4])
 
-  /**
-   * 检查速率限制
-   */
-  async check(
-    key: string,
-    config: RateLimitConfig
-  ): Promise<RateLimitResult> {
-    const now = Date.now();
-    const windowStart = now - config.windowMs;
+    -- 移除窗口外的请求
+    redis.call('ZREMRANGEBYSCORE', key, '-inf', windowStart)
 
-    // 获取用户的请求记录
-    let timestamps = this.requests.get(key) || [];
+    -- 获取当前请求数
+    local currentCount = redis.call('ZCARD', key)
 
-    // 清除过期记录
-    timestamps = timestamps.filter((t) => t > windowStart);
+    -- 检查是否超过限制
+    if currentCount < maxRequests then
+      -- 添加当前请求
+      redis.call('ZADD', key, now, now .. ':' .. math.random(1000000))
+      -- 设置过期时间（窗口大小 + 1）
+      redis.call('PEXPIRE', key, windowMs + 1000)
+      return {1, maxRequests - currentCount - 1, now + windowMs}
+    else
+      -- 获取最旧的请求时间
+      local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+      local resetAt = oldest[2] and (tonumber(oldest[2]) + windowMs) or (now + windowMs)
+      return {0, 0, resetAt}
+    end
+  `;
 
-    // 检查是否超过限制
-    const allowed = timestamps.length < config.maxRequests;
-
-    if (allowed) {
-      // 记录本次请求
-      timestamps.push(now);
-      this.requests.set(key, timestamps);
-    }
-
-    // 计算重置时间
-    const oldestTimestamp = timestamps[0] || now;
-    const resetAt = new Date(oldestTimestamp + config.windowMs);
+  try {
+    const result = await redis.eval(
+      luaScript,
+      1,
+      `ratelimit:${key}`,
+      now,
+      windowStart,
+      config.maxRequests,
+      windowMs
+    ) as [number, number, number];
 
     return {
-      allowed,
-      remaining: Math.max(0, config.maxRequests - timestamps.length),
-      resetAt,
+      allowed: result[0] === 1,
+      remaining: result[1],
+      resetAt: new Date(result[2]),
     };
-  }
-
-  /**
-   * 清理过期记录
-   */
-  private cleanup(): void {
-    const now = Date.now();
-    const hourAgo = now - 3600000; // 1小时前
-
-    for (const [key, timestamps] of this.requests.entries()) {
-      // 移除1小时前没有活动的记录
-      const latest = timestamps[timestamps.length - 1];
-      if (latest && latest < hourAgo) {
-        this.requests.delete(key);
-      }
-    }
-  }
-
-  /**
-   * 重置用户的速率限制（管理员功能）
-   */
-  reset(key: string): void {
-    this.requests.delete(key);
+  } catch (error) {
+    console.error('Rate limit check failed:', error);
+    // Redis 故障时返回允许（降级策略）
+    return {
+      allowed: true,
+      remaining: config.maxRequests,
+      resetAt: new Date(now + windowMs),
+    };
   }
 }
 
-// ============================================================
-// 单例导出
-// ============================================================
-
-export const rateLimiter = new RateLimiter();
+/**
+ * 重置用户的速率限制（管理员功能）
+ */
+export async function resetRateLimit(key: string): Promise<void> {
+  const redis = getRedis();
+  await redis.del(`ratelimit:${key}`);
+}
 
 /**
- * 速率限制中间件工厂
+ * 创建速率限制中间件工厂
  */
 export function createRateLimitMiddleware(
   keyPrefix: string,
   config: RateLimitConfig
 ) {
   return async (userId: string): Promise<RateLimitResult> => {
-    const key = `${keyPrefix}:${userId}`;
-    return await rateLimiter.check(key, config);
+    return await checkRateLimit(`${keyPrefix}:${userId}`, config);
   };
+}
+
+/**
+ * 获取速率限制配置
+ */
+export function getRateLimitConfig(name: string): RateLimitConfig | undefined {
+  return RATE_LIMITS[name];
+}
+
+/**
+ * 检查是否有预设的速率限制
+ */
+export function hasRateLimit(name: string): boolean {
+  return name in RATE_LIMITS;
 }
