@@ -8,7 +8,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 export const test = base.extend<{
   adminConsole: Page;
 }>({
-  adminConsole: async ({ page }, use) => {
+  adminConsole: async ({ page, baseURL }, use) => {
     const authPath = 'e2e/.auth/admin-console.json';
     let needsLogin = true;
 
@@ -27,60 +27,73 @@ export const test = base.extend<{
       // No valid auth state, will login
     }
 
-    // Navigate to console and check auth status
+    // Login using API directly to get the token cookie
     try {
-      await page.goto('/console', { waitUntil: 'domcontentloaded', timeout: 10000 });
+      const loginResponse = await page.request.post(`${baseURL}/api/admin/login`, {
+        data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const loginData = await loginResponse.json();
+      if (loginData.success) {
+        needsLogin = false;
+      }
+    } catch (error) {
+      // Login failed, will try page-based login
+    }
+
+    // Navigate to console
+    try {
+      await page.goto('/console', { waitUntil: 'networkidle', timeout: 15000 });
     } catch {
-      // Console page might not exist, go to login
-      await page.goto('/console/login', { waitUntil: 'domcontentloaded' });
+      // If redirect loop detected, just continue
     }
 
-    // Check if we need to login
-    const hasLoginButton = await page.getByText('登录控制台').count() > 0;
-    const isOnLoginPage = page.url().includes('/login');
-
-    if (needsLogin || hasLoginButton || isOnLoginPage) {
-      // Navigate to login if needed
-      if (!page.url().includes('/login')) {
-        await page.goto('/console/login', { waitUntil: 'domcontentloaded' });
-      }
-
-      // Fill and submit login form with multiple selector strategies
-      const emailInput = page.locator('input[type="email"]').or(page.locator('input[name="email"]'));
-      const passwordInput = page.locator('input[type="password"]').or(page.locator('input[name="password"]'));
-
-      await emailInput.fill(ADMIN_EMAIL);
-      await passwordInput.fill(ADMIN_PASSWORD);
-
-      await page.click('button[type="submit"]');
-
-      // Wait for navigation to console
+    // Check if authenticated - if not, try page-based login
+    const currentUrl = page.url();
+    if (currentUrl.includes('/console/login') || needsLogin) {
       try {
-        await page.waitForURL(/\/console/, { timeout: 10000 });
+        await page.goto('/console/login', { waitUntil: 'networkidle', timeout: 15000 });
       } catch {
-        // Login might not redirect, check if we're on a valid page
-        await page.waitForLoadState('domcontentloaded');
+        // Ignore
       }
 
-      // Wait for page to stabilize
-      await page.waitForTimeout(2000);
+      // Fill login form
+      const emailInput = page.locator('input[type="email"]');
+      const passwordInput = page.locator('input[type="password"]');
+      const submitButton = page.locator('button[type="submit"]');
 
-      // Save storage state for future runs
-      try {
-        const fs = require('fs');
-        const path = require('path');
-        const authDir = path.dirname(authPath);
-        if (!fs.existsSync(authDir)) {
-          fs.mkdirSync(authDir, { recursive: true });
+      if (await emailInput.count() > 0) {
+        await emailInput.fill(ADMIN_EMAIL);
+        await passwordInput.fill(ADMIN_PASSWORD);
+        await submitButton.click();
+
+        try {
+          await page.waitForURL(/\/console/, { timeout: 10000 });
+        } catch {
+          // Ignore
         }
-        await page.context().storageState({ path: authPath });
-      } catch (error) {
-        console.log('Could not save auth state:', error.message);
       }
     }
 
-    // Ensure page is ready
-    await page.waitForLoadState('domcontentloaded');
+    // Wait for page to stabilize
+    try {
+      await page.waitForLoadState('networkidle');
+    } catch {
+      await page.waitForLoadState('domcontentloaded');
+    }
+
+    // Save storage state for future runs
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const authDir = path.dirname(authPath);
+      if (!fs.existsSync(authDir)) {
+        fs.mkdirSync(authDir, { recursive: true });
+      }
+      await page.context().storageState({ path: authPath });
+    } catch (error) {
+      // Ignore storage state errors
+    }
 
     await use(page);
   },
