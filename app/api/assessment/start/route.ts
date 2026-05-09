@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { getGradeDifficultyRange, getAssessmentStartLevel } from '@/lib/assessment-guidance';
+import { getGradeDifficultyRange, getAssessmentStartLevel } from '@/lib/assessment-utils';
+import { generateAndSaveCards } from '@/lib/ai/generation';
+import type { QuestionType } from '@/lib/ai/generation';
 
 /**
  * POST /api/assessment/start
@@ -20,11 +22,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '未登录' }, { status: 401 });
     }
 
-    // 解析请求体，支持retry参数
+    // 解析请求体，支持retry和difficulty参数
     let retry = false;
+    let requestedDifficulty: number | null = null;
     try {
       const body = await req.json();
       retry = body.retry === true;
+      requestedDifficulty = typeof body.difficulty === 'number' ? body.difficulty : null;
     } catch {
       // 没有请求体，使用默认值
     }
@@ -72,10 +76,20 @@ export async function POST(req: NextRequest) {
     const userGrade = user.grade || 7;
     const targetScore = user.targetScore || 80;
 
-    // retry模式下使用更高难度
-    let startDifficulty = getAssessmentStartLevel(userGrade, targetScore);
-    if (retry && (user.initialAssessmentScore ?? 0) >= 90) {
-      startDifficulty = Math.min(startDifficulty + 2, 10);
+    // 计算起始难度：优先使用传入的 difficulty，否则按原有逻辑计算
+    let startDifficulty: number;
+    if (requestedDifficulty !== null) {
+      // 传入的难度必须验证范围 1-12
+      startDifficulty = Math.max(1, Math.min(12, requestedDifficulty));
+    } else if (retry) {
+      // retry模式：根据上次的分数计算新难度
+      startDifficulty = getAssessmentStartLevel(userGrade, targetScore);
+      if ((user.initialAssessmentScore ?? 0) >= 90) {
+        startDifficulty = Math.min(startDifficulty + 2, 10);
+      }
+    } else {
+      // 首次测评
+      startDifficulty = getAssessmentStartLevel(userGrade, targetScore);
     }
     const { min: minDifficulty, max: maxDifficulty } = getGradeDifficultyRange(userGrade);
 
@@ -103,13 +117,19 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    if (knowledgePoints.length === 0) {
+    // 限制测评知识点数量（最多7个知识点）- 随机选择避免重复
+    const maxKnowledgePoints = 7;
+    // Fisher-Yates 洗牌算法打乱知识点顺序
+    const shuffledKnowledgePoints = [...knowledgePoints];
+    for (let i = shuffledKnowledgePoints.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledKnowledgePoints[i], shuffledKnowledgePoints[j]] = [shuffledKnowledgePoints[j], shuffledKnowledgePoints[i]];
+    }
+    const selectedKnowledgePoints = shuffledKnowledgePoints.slice(0, maxKnowledgePoints);
+
+    if (selectedKnowledgePoints.length === 0) {
       return NextResponse.json({ success: false, error: '没有可用的测评知识点' }, { status: 400 });
     }
-
-    // 限制测评知识点数量（最多7个知识点）
-    const maxKnowledgePoints = 7;
-    const selectedKnowledgePoints = knowledgePoints.slice(0, maxKnowledgePoints);
 
     // 为每个知识点查找题目（根据年级适配难度）
     const questions: Array<{
@@ -119,81 +139,170 @@ export async function POST(req: NextRequest) {
       content: any;
       knowledgePoint: string;
       stepCount: number;
+      answer: string;  // 添加 answer 字段
     }> = [];
 
+    // 第一步：尝试通过 knowledgePoints 字段直接查询已有题目 - 随机选择
     for (const kp of selectedKnowledgePoints) {
-      // 查找该知识点关联的模板
-      const templates = await prisma.template.findMany({
-        where: {
-          knowledgeId: kp.id,
-          status: 'production',
-        },
-        take: 2,
-      });
-
-      if (templates.length > 0) {
-        for (const template of templates) {
-          // 根据难度筛选题目：retry模式下使用更高难度
-          const queryDifficulty = retry ? startDifficulty : minDifficulty;
-          const existingQuestions = await prisma.question.findMany({
-            where: {
-              knowledgePoints: { contains: kp.id },
-              difficulty: {
-                gte: queryDifficulty,
-                lte: retry ? queryDifficulty + 1 : maxDifficulty,
-              },
-            },
-            include: {
-              steps: true,
-            },
-            take: 1,
-            orderBy: { difficulty: 'asc' }, // 从最低难度开始
-          });
-
-          if (existingQuestions.length > 0) {
-            const q = existingQuestions[0];
-            questions.push({
-              id: q.id,
-              type: q.type,
-              difficulty: startDifficulty, // 使用计算出的起始难度
-              content: JSON.parse(q.content || '{}'),
-              knowledgePoint: kp.name,
-              stepCount: q.steps?.length ?? 1,
-            });
-          }
-        }
-      }
-    }
-
-    // 确保至少有10道题（如果不够，扩大难度范围）
-    if (questions.length < 10) {
       const queryDifficulty = retry ? startDifficulty : minDifficulty;
-      const additionalQuestions = await prisma.question.findMany({
+      const existingQuestions = await prisma.question.findMany({
         where: {
-          knowledgePoints: { not: '[]' },
+          knowledgePoints: { contains: kp.id },
           difficulty: {
             gte: queryDifficulty,
-            lte: retry ? queryDifficulty + 2 : maxDifficulty,
+            lte: retry ? queryDifficulty + 1 : maxDifficulty,
           },
         },
-        include: {
+        select: {
+          id: true,
+          type: true,
+          difficulty: true,
+          content: true,
+          answer: true,
           steps: true,
         },
-        take: 10 - questions.length,
+        take: 15,  // 增加抽取数量以提供更多随机选择
+        // 移除 orderBy，让数据库自然返回（配合 take 增加实现随机效果）
       });
 
-      for (const q of additionalQuestions) {
-        const kpList = JSON.parse(q.knowledgePoints || '[]');
+      for (const q of existingQuestions) {
         questions.push({
           id: q.id,
           type: q.type,
           difficulty: startDifficulty,
           content: JSON.parse(q.content || '{}'),
-          knowledgePoint: kpList[0] || '综合',
+          knowledgePoint: kp.name,
           stepCount: q.steps?.length ?? 1,
+          answer: q.answer,
         });
       }
     }
+
+    // 检查是否有足够的题目，如果没有则调用 AI 生成
+    const targetCount = 10;
+    if (questions.length < targetCount) {
+      // 获取知识点详情（用于 AI 生成）
+      const kpDetails = await prisma.knowledgePoint.findMany({
+        where: { id: { in: selectedKnowledgePoints.map(kp => kp.id) } },
+        include: {
+          concept: true,
+          chapter: {
+            include: {
+              textbook: true
+            }
+          }
+        },
+        take: 3,  // 优先取前3个知识点
+      });
+
+      // 构建 content 用于 AI 生成
+      const contentParts: string[] = [];
+      for (const kp of kpDetails) {
+        contentParts.push(`知识点: ${kp.name}`);
+        if (kp.concept?.name) {
+          contentParts.push(`概念分类: ${kp.concept.name}`);
+        }
+      }
+
+      // 如果有教材内容，加入到 content
+      const textbook = kpDetails[0]?.chapter?.textbook;
+      if (textbook) {
+        contentParts.push(`教材: ${textbook.name} (${textbook.grade}年级)`);
+      }
+
+      const generationContent = contentParts.join('\n\n') || `生成关于 ${selectedKnowledgePoints[0]?.name} 的题目`;
+
+      // 如果没有可用内容，使用知识点名称作为后备
+      if (generationContent === `生成关于 ${selectedKnowledgePoints[0]?.name} 的题目`) {
+        console.warn(`[Assessment Start] 知识点 "${selectedKnowledgePoints[0]?.name}" 没有详细描述，仅使用名称生成`);
+      }
+
+      try {
+        console.log(`[Assessment Start] 预置题目不足(${questions.length}/${targetCount})，调用 AI 生成`);
+
+        // CRITICAL 修复：添加超时保护
+        const timeout = parseInt(process.env.AI_GENERATION_TIMEOUT || '15000', 10);
+
+        const generatePromise = generateAndSaveCards({
+          knowledgePointId: selectedKnowledgePoints[0]?.id || '',
+          content: generationContent,
+          types: ['fill_blank', 'multiple_choice'] as QuestionType[],
+          count: targetCount - questions.length,
+          difficulty: startDifficulty,
+          onProgress: (batch, total, cards) => {
+            console.log(`[Assessment Start] AI 生成进度: ${batch}/${total}, 生成了 ${cards.length} 道`);
+          }
+        });
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`AI生成超时（${timeout}ms）`)), timeout)
+        );
+
+        const result = await Promise.race([generatePromise, timeoutPromise]) as Awaited<ReturnType<typeof generateAndSaveCards>>;
+
+        // 转换生成的题目为 API 返回格式
+        const generatedQuestions = result.questions.map((q: any) => {
+          let parsedContent: { question?: string; options?: string[]; explanation?: string } = {};
+          try {
+            parsedContent = typeof q.content === 'string' ? JSON.parse(q.content) : (q.content || {});
+          } catch {
+            parsedContent = {};
+          }
+
+          return {
+            id: q.id,
+            type: q.type || q.question_type || 'fill_blank',
+            difficulty: q.difficulty || startDifficulty,
+            content: {
+              question: parsedContent.question || '',
+              options: parsedContent.options || [],
+              explanation: parsedContent.explanation || ''
+            },
+            knowledgePoint: selectedKnowledgePoints[0]?.name || 'AI生成',
+            stepCount: 1,
+            answer: q.answer || '',
+            isAI: true,  // 标记为 AI 生成
+          };
+        });
+
+        questions.push(...generatedQuestions);
+        console.log(`[Assessment Start] AI 生成完成，当前共 ${questions.length} 道题目`);
+
+        // CRITICAL 修复：验证生成结果
+        if (questions.length < targetCount) {
+          throw new Error(`题目生成失败：已获取 ${questions.length}/${targetCount} 题`);
+        }
+      } catch (error) {
+        // CRITICAL 修复：AI 生成失败 = 不降级，直接返回 500 错误
+        console.error('[Assessment Start] AI 生成失败:', error);
+
+        return NextResponse.json({
+          success: false,
+          error: '题目生成失败，请稍后重试或联系管理员',
+          details: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : String(error)) : undefined,
+        }, { status: 500 });
+      }
+    }
+
+    // 如果仍然没有题目，返回错误
+    if (questions.length === 0) {
+      return NextResponse.json({
+        success: false,
+        error: '无法获取测评题目，请稍后重试',
+        noQuestionsAvailable: true,
+      }, { status: 400 });
+    }
+
+    // Fisher-Yates 洗牌：打乱题目顺序，避免连续测评出现重复
+    for (let i = questions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [questions[i], questions[j]] = [questions[j], questions[i]];
+    }
+
+    // 限制返回数量
+    const finalQuestions = questions.slice(0, targetCount);
+
+    console.log(`[Assessment Start] 最终返回 ${finalQuestions.length} 道题目（已打乱顺序）`);
 
     // 创建测评记录（临时状态）
     const assessment = await prisma.attempt.create({
@@ -209,13 +318,13 @@ export async function POST(req: NextRequest) {
       success: true,
       data: {
         attemptId: assessment.id,
-        questions,
+        questions: finalQuestions,
         knowledgePoints: selectedKnowledgePoints.map(kp => ({
           id: kp.id,
           name: kp.name,
           weight: kp.weight,
         })),
-        totalCount: questions.length,
+        totalCount: finalQuestions.length,
         // 返回诊断信息供结果页使用
         diagnostic: {
           userGrade,

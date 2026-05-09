@@ -51,15 +51,28 @@ interface MiniMaxResponse {
 
 /**
  * 修复 JSON 字符串中的 LaTeX 转义字符
- * AI 返回的 JSON 可能包含未正确转义的反斜杠（LaTeX 公式）
+ *
+ * 问题根源：AI 返回的 JSON 中 LaTeX 公式可能包含错误的转义字符。
+ *
+ * 问题分析：
+ * - 数据库中存储的是 `\\$`（两个反斜杠 + 美元）
+ * - JSON.parse 后变成 `\$`（一个反斜杠 + 美元）
+ * - 这不是有效的 LaTeX 公式定界符，会被 MathRenderer 显示为原始符号
+ *
+ * 修复策略：
+ * 将 `\$`（一个反斜杠 + 美元）替换为 `$`（单独的美元符号）
+ * 这让 MathRenderer 能够正确识别公式的起始定界符
+ *
+ * 注意：后面的正常 `$` 保持不变
  */
 function fixLaTeXEscapes(jsonString: string): string {
   let fixed = jsonString
-  // 修复形如 $\$ 的情况（应该是 \\$）
-  fixed = fixed.replace(/\$\\/g, '\\\\\\$')
-  // 修复不在转义序列中的单个反斜杠
-  const knownEscapes = ['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u']
-  fixed = fixed.replace(/\\(?!["\\/bfnrtu])/g, '\\\\')
+
+  // 匹配 JSON 中错误的 \\$（两个反斜杠+美元）
+  // 在正则中 /\\\\\\\\/ 匹配两个反斜杠，/\\$/ 匹配美元（因为 $ 需要转义）
+  // 将其替换为 $（正确的公式定界符）
+  fixed = fixed.replace(/\\\\\\\\\\$/g, '$')
+
   return fixed
 }
 
@@ -118,7 +131,7 @@ function sleep(ms: number): Promise<void> {
 // ============================================================
 
 /**
- * 调用 MiniMax API
+ * 调用 MiniMax API (OpenAI 兼容格式)
  */
 export async function callMimoAPI(prompt: string): Promise<string> {
   const config = getAIConfig()
@@ -129,12 +142,11 @@ export async function callMimoAPI(prompt: string): Promise<string> {
       const timeoutId = setTimeout(() => controller.abort(), config.timeout)
 
       try {
-        const response = await fetch(`${config.baseURL}/v1/messages`, {
+        const response = await fetch(`${config.baseURL}/chat/completions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': config.apiKey,
-            'anthropic-version': '2023-06-01',
+            'Authorization': `Bearer ${config.apiKey}`,
           },
           body: JSON.stringify({
             model: config.model,
@@ -149,18 +161,23 @@ export async function callMimoAPI(prompt: string): Promise<string> {
           throw new Error(`Mimo API ${response.status}: ${error}`)
         }
 
-        const data = (await response.json()) as MiniMaxResponse
+        const data = (await response.json()) as {
+          error?: { message: string }
+          choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>
+        }
 
         if (data.error) {
           throw new Error(`Mimo API error: ${data.error.message}`)
         }
 
-        const textBlock = data.content?.find((b) => b.type === 'text')
-        if (!textBlock?.text) {
-          throw new Error('Mimo API: no text in response')
+        // 支持两种响应格式：content 或 reasoning_content
+        const message = data.choices?.[0]?.message
+        const content = message?.content || message?.reasoning_content || ''
+        if (!content) {
+          throw new Error('Mimo API: no content in response')
         }
 
-        return textBlock.text
+        return content
       } finally {
         clearTimeout(timeoutId)
       }
@@ -376,8 +393,10 @@ export function parseCardsResponse(
     return []
   }
 
-  return (parsed.cards || [])
+  // 严格限制返回数量
+  const validCards = (parsed.cards || [])
     .slice(0, maxCount)
+    .filter((card) => card.question && card.answer)
     .map((card) => ({
       id: crypto.randomUUID(),
       question_type: type,
@@ -386,6 +405,8 @@ export function parseCardsResponse(
       options: card.options,
       explanation: card.explanation,
     }))
+
+  return validCards
 }
 
 // ============================================================
@@ -416,12 +437,15 @@ export async function generateCardsDirect(params: {
 
   const difficultyPrompt = difficulty ? `\n难度要求：${difficulty}/10，适合${difficulty}年级学生` : ''
 
+  // 平均分配数量到每种题型
+  const countPerType = Math.ceil(count / types.length)
+
   const results = await Promise.all(
     types.map(async (type) => {
       const prompt = PROMPTS[type].replace('{content}', content.slice(0, 8000)) + difficultyPrompt
 
       const response = await callMimoAPI(prompt)
-      return parseCardsResponse(response, type, count)
+      return parseCardsResponse(response, type, countPerType)
     })
   )
 
