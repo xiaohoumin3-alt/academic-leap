@@ -77,17 +77,21 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 2.3 分数-难度映射
+### 2.3 分数-难度映射（与 lib/adaptive-difficulty.ts 一致）
 
 | 测评得分 | 判断 | 下一轮动作 |
 |---------|------|-----------|
 | < 50% | 远超能力 | 目标难度 → 当前-3 |
-| 50-89% | 难度合适 | **进入练习模式** |
-| ≥ 90% | 远低能力 | 目标难度 → 当前+3 |
+| 50-59% | 略超能力 | 目标难度 → 当前-1 |
+| **60-89%** | **难度合适** | **进入练习模式** |
+| 90-94% | 略低能力 | 目标难度 → 当前+1 |
+| ≥ 95% | 远低能力 | 目标难度 → 当前+2 |
 
 **边界处理**：
-- 难度1 还是 <50% → 强制进入练习（已达最低难度）
+- 难度1 还是 <60% → 强制进入练习（已达最低难度）
 - 难度12 还是 ≥90% → 强制进入练习（已达最高难度）
+
+**注意**：分数判断使用 `lib/adaptive-difficulty.ts` 中的 `calculateNextDiagnosticDifficulty` 函数，**不要重新实现**。
 
 ---
 
@@ -141,70 +145,23 @@ const question = await prisma.question.findFirst({
 });
 ```
 
-### 3.4 新增：难度范围计算函数
+### 3.4 复用现有：难度计算函数
+
+**重要**：使用 `lib/adaptive-difficulty.ts` 中已有的函数，**不要重新实现**。
 
 ```typescript
-// lib/difficulty.ts
+import {
+  calculateNextDiagnosticDifficulty,  // 计算下一轮难度
+  shouldEnterPracticeMode,          // 判断是否进入练习
+  isDiagnosticBoundaryCase,         // 检查边界情况
+  DIFFICULTY_RULES                 // 难度常量
+} from '@/lib/adaptive-difficulty';
 
-/**
- * 计算下一轮目标难度范围
- * @param currentDifficulty 当前测评的难度
- * @param score 测评得分 (0-100)
- * @returns 下一轮的难度范围 { min, max }
- */
-export function calculateNextDifficultyRange(
-  currentDifficulty: number,
-  score: number
-): { min: number; max: number } {
-  // 边界检查
-  if (currentDifficulty <= 3 && score < 50) {
-    // 已是最低难度，仍无法及格，强制进入练习
-    return { min: 0, max: 0 }; // special marker
-  }
-  if (currentDifficulty >= 10 && score >= 90) {
-    // 已是最高难度，仍能及格，强制进入练习
-    return { min: 0, max: 0 }; // special marker
-  }
-
-  let nextDifficulty: number;
-  if (score < 50) {
-    nextDifficulty = Math.max(1, currentDifficulty - 3);
-  } else if (score < 90) {
-    // 进入练习模式
-    return { min: 0, max: 0 };
-  } else {
-    nextDifficulty = Math.min(12, currentDifficulty + 3);
-  }
-
-  return {
-    min: Math.max(1, nextDifficulty - 1),
-    max: Math.min(12, nextDifficulty + 1),
-  };
-}
-
-/**
- * 检查是否应进入练习模式
- */
-export function shouldEnterPractice(
-  currentDifficulty: number,
-  score: number
-): { enter: boolean; reason: string } {
-  if (score >= 50 && score < 90) {
-    return { enter: true, reason: '难度合适' };
-  }
-  if (currentDifficulty <= 3 && score < 50) {
-    return { enter: true, reason: '已达最低难度' };
-  }
-  if (currentDifficulty >= 10 && score >= 90) {
-    return { enter: true, reason: '已达最高难度' };
-  }
-  return { enter: false, reason: '' };
-}
-
-/**
- * 首次测评的固定难度范围
- */
-export const FIRST_ASSESSMENT_RANGE = { min: 4, max: 6 };
+// DIFFICULTY_RULES.diagnostic 包含：
+// - MIN: 1
+// - MAX: 12
+// - TARGET_MIN: 60（目标区间下限）
+// - TARGET_MAX: 89（目标区间上限）
 ```
 
 ---
@@ -327,51 +284,45 @@ API: POST /api/assessment/start { retry: true, difficulty: N }
 
 ## 八、实施步骤
 
-### Step 1: 创建新的难度计算模块
-
-**文件**: `lib/difficulty.ts`
-
-```typescript
-export const FIRST_ASSESSMENT_RANGE = { min: 4, max: 6 };
-
-export function calculateNextDifficultyRange(currentDifficulty: number, score: number) {
-  // 见第三节 3.4
-}
-
-export function shouldEnterPractice(currentDifficulty: number, score: number) {
-  // 见第三节 3.4
-}
-```
-
-**验证**: `tsc --noEmit` 通过
-
-### Step 2: 修改 assessment/start/route.ts
+### Step 1: 修改 assessment/start/route.ts
 
 **修改点**:
 
-1. 替换 import（第4行）
-2. 替换第86-101行的难度计算逻辑
-3. 替换第161-170行的取题难度过滤逻辑
+1. **替换 import（第4行）**
+   - 删除：`import { getGradeDifficultyRange, getAssessmentStartLevel } from '@/lib/assessment-utils';`
+   - 删除此导入
+
+2. **替换第86-101行的难度计算逻辑**
+   - 删除 `getGradeDifficultyRange()` 调用
+   - 删除 `getAssessmentStartLevel()` 调用
+   - 首次测评使用固定难度范围：`{ min: 4, max: 6 }`
+   - retry 模式使用传入的 `requestedDifficulty`
+
+3. **替换第161-170行的取题难度过滤逻辑**
+   - 首次测评：`difficulty: { gte: 4, lte: 6 }`
+   - retry 模式：`difficulty: { gte: difficulty-1, lte: difficulty+1 }`
 
 **验证**: `pnpm build` 成功
 
-### Step 3: 删除废弃代码
+### Step 2: 删除废弃代码
 
 ```bash
-# 删除 lib/assessment-utils.ts 中的两个函数（保留空文件或删除文件）
+# 删除 lib/assessment-utils.ts（不再需要）
+# 或删除其中的两个导出函数，保留空模块
+
 # 删除 prisma/schema.prisma 中的 difficultyLevel 字段
 ```
 
 **验证**: `prisma generate` 成功
 
-### Step 4: 更新测试
+### Step 3: 更新测试
 
-- 更新 `tests/unit/adaptive-difficulty.test.ts` 如存在
+- 检查 `tests/unit/adaptive-difficulty.test.ts` 是否有依赖
 - 运行 E2E 测试验证
 
 **验证**: `npx playwright test e2e/diagnostic-adaptive-flow.spec.ts` 全部通过
 
-### Step 5: 手动验证
+### Step 4: 手动验证
 
 1. 清除浏览器缓存
 2. 访问 http://localhost:3000/assessment/diagnostic
