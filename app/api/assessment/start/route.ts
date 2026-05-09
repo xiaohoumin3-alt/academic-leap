@@ -5,6 +5,13 @@ import { getGradeDifficultyRange, getAssessmentStartLevel } from '@/lib/assessme
 import { generateAndSaveCards } from '@/lib/ai/generation';
 import type { QuestionType } from '@/lib/ai/generation';
 
+// 题目内容类型
+interface QuestionContent {
+  question: string;
+  options?: string[];
+  explanation?: string;
+}
+
 /**
  * POST /api/assessment/start
  * 开始测评（支持重新测评）
@@ -142,44 +149,66 @@ export async function POST(req: NextRequest) {
       answer: string;  // 添加 answer 字段
     }> = [];
 
-    // 第一步：尝试通过 knowledgePoints 字段直接查询已有题目 - 随机选择
-    for (const kp of selectedKnowledgePoints) {
-      const queryDifficulty = retry ? startDifficulty : minDifficulty;
-      const existingQuestions = await prisma.question.findMany({
-        where: {
-          knowledgePoints: { contains: kp.id },
-          difficulty: {
-            gte: queryDifficulty,
-            lte: retry ? queryDifficulty + 1 : maxDifficulty,
-          },
-        },
-        select: {
-          id: true,
-          type: true,
-          difficulty: true,
-          content: true,
-          answer: true,
-          steps: true,
-        },
-        take: 15,  // 增加抽取数量以提供更多随机选择
-        // 移除 orderBy，让数据库自然返回（配合 take 增加实现随机效果）
-      });
+    // 第一步：轮询取题（每知识点每轮取1道，确保均匀分布）
+    const targetCount = 10;  // 目标题目数
+    const usedQuestionIds = new Set<string>();
+    const maxRounds = Math.ceil(targetCount / selectedKnowledgePoints.length);
 
-      for (const q of existingQuestions) {
-        questions.push({
-          id: q.id,
-          type: q.type,
-          difficulty: startDifficulty,
-          content: JSON.parse(q.content || '{}'),
-          knowledgePoint: kp.name,
-          stepCount: q.steps?.length ?? 1,
-          answer: q.answer,
+    for (let round = 0; round < maxRounds && questions.length < targetCount; round++) {
+      for (const kp of selectedKnowledgePoints) {
+        if (questions.length >= targetCount) break;
+
+        const queryDifficulty = retry ? startDifficulty : minDifficulty;
+
+        const question = await prisma.question.findFirst({
+          where: {
+            knowledgePoints: { contains: kp.id },
+            id: { notIn: Array.from(usedQuestionIds) },
+            difficulty: {
+              gte: queryDifficulty,
+              lte: retry ? queryDifficulty + 1 : maxDifficulty,
+            },
+          },
+          select: {
+            id: true,
+            type: true,
+            difficulty: true,
+            content: true,
+            answer: true,
+            steps: true,
+          },
         });
+
+        if (question) {
+          let content: QuestionContent;
+          try {
+            const parsed = typeof question.content === 'string'
+              ? JSON.parse(question.content)
+              : question.content;
+            content = {
+              question: parsed.question || '',
+              options: parsed.options || [],
+              explanation: parsed.explanation || '',
+            };
+          } catch {
+            content = { question: '题目解析失败' };
+          }
+
+          questions.push({
+            id: question.id,
+            type: question.type,
+            difficulty: startDifficulty,
+            content,
+            knowledgePoint: kp.name,
+            stepCount: question.steps?.length ?? 1,
+            answer: question.answer,
+          });
+          usedQuestionIds.add(question.id);
+        }
       }
     }
 
     // 检查是否有足够的题目，如果没有则调用 AI 生成
-    const targetCount = 10;
     if (questions.length < targetCount) {
       // 获取知识点详情（用于 AI 生成）
       const kpDetails = await prisma.knowledgePoint.findMany({
