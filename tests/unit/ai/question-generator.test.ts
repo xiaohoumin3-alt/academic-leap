@@ -3,7 +3,7 @@
  * 测试 JSON 解析、分块算法
  */
 
-const { describe, it, expect } = require('@jest/globals');
+// Jest globals are provided by ts-jest preset
 
 // 模拟 calculateCardCount 函数逻辑
 function calculateCardCount(content: string): number {

@@ -3,7 +3,7 @@
  * 测试正则解析、答案验证
  */
 
-const { describe, it, expect } = require('@jest/globals');
+// Jest globals are provided by ts-jest preset
 
 // 模拟 parseQuestion 函数逻辑
 function parseQuestion(question: string): Array<{ type: 'text' | 'input'; content: string; index?: number }> {

@@ -73,14 +73,14 @@ describe('UOK', () => {
   describe('predict', () => {
     it('should return probability between 0 and 1', () => {
       const uok = new UOK();
-      const p = uok.predict('student1', 'question1', { difficulty: 0.5, complexity: 0.5 });
+      const p = uok.predict('student1', 'question1', { difficulty: 0.5 });
       expect(p).toBeGreaterThanOrEqual(0);
       expect(p).toBeLessThanOrEqual(1);
     });
 
     it('should create new embeddings for unknown entities', () => {
       const uok = new UOK();
-      uok.predict('new_student', 'new_question', { difficulty: 0.5, complexity: 0.5 });
+      uok.predict('new_student', 'new_question', { difficulty: 0.5 });
 
       const state = (uok as any).state;
       expect(state._ml.embeddings.students.size).toBe(1);
@@ -89,8 +89,8 @@ describe('UOK', () => {
 
     it('should reuse embeddings for known entities', () => {
       const uok = new UOK();
-      uok.predict('student1', 'question1', { difficulty: 0.5, complexity: 0.5 });
-      uok.predict('student1', 'question1', { difficulty: 0.5, complexity: 0.5 });
+      uok.predict('student1', 'question1', { difficulty: 0.5 });
+      uok.predict('student1', 'question1', { difficulty: 0.5 });
 
       const state = (uok as any).state;
       expect(state._ml.embeddings.students.size).toBe(1);
@@ -126,7 +126,7 @@ describe('UOK', () => {
         topics: ['test']
       });
 
-      const ctx = { difficulty: 0.5, complexity: 0.5 };
+      const ctx = { difficulty: 0.5 };
       const pBefore = uok.predict('s1', 'q1', ctx);
 
       for (let i = 0; i < 10; i++) {
@@ -145,7 +145,7 @@ describe('UOK', () => {
         topics: ['test']
       });
 
-      const ctx = { difficulty: 0.5, complexity: 0.5 };
+      const ctx = { difficulty: 0.5 };
       const pBefore = uok.predict('s2', 'q1', ctx);
 
       for (let i = 0; i < 10; i++) {

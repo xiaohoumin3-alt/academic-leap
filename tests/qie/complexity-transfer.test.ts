@@ -19,13 +19,11 @@ describe('Complexity Transfer - Numerical Stability', () => {
     const state = (uok as any).state;
     state.questions.get('simple').features = {
       difficulty: 0.1,
-      complexity: 0.1,
       cognitiveLoad: 0.1,
       reasoningDepth: 0.1,
     };
     state.questions.get('complex').features = {
       difficulty: 1.0,
-      complexity: 1.0,
       cognitiveLoad: 1.0,
       reasoningDepth: 1.0,
     };
@@ -53,14 +51,13 @@ describe('Complexity Transfer - Numerical Stability', () => {
     const state = (uok as any).state;
     const features = {
       difficulty: 0.5,
-      complexity: 0.5,
       cognitiveLoad: 0.5,
       reasoningDepth: 0.5,
     };
     state.questions.get('q1').features = features;
     state.questions.get('q2').features = features;
 
-    const pSimple = uok.predict('s1', 'q1', { difficulty: 0.5, complexity: 0.5 });
+    const pSimple = uok.predict('s1', 'q1', { difficulty: 0.5 });
     const pTransfer = uok.predictWithComplexityTransfer('s1', 'q1', 'q2');
 
     // With zero delta, P_complex should equal P_simple

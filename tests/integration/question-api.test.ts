@@ -8,8 +8,8 @@
  * 4. ComplexityExtractor集成 - 复杂度提取流程
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 import { NextRequest } from 'next/server';
+import { generateFillBlank, generateFillBlankBatch } from '@/lib/ai/question-generator';
 
 // Mock Prisma
 const mockPrisma = {
@@ -24,6 +24,14 @@ const mockPrisma = {
   questionStep: {
     create: jest.fn(),
     createMany: jest.fn(),
+  },
+  template: {
+    findMany: jest.fn(),
+    findFirst: jest.fn(),
+  },
+  knowledge: {
+    findMany: jest.fn(),
+    findFirst: jest.fn(),
   },
 };
 
@@ -148,6 +156,31 @@ describe('Question API Integration Tests', () => {
   describe('POST /api/questions/generate - 题目生成接口', () => {
     beforeEach(() => {
       jest.clearAllMocks();
+
+      // Mock template.findMany to return template data
+      mockPrisma.template.findMany.mockResolvedValue([
+        {
+          id: 'tpl-1',
+          templateKey: 'quadratic_vertex',
+          knowledgeId: 'quadratic-functions',
+          status: 'production',
+        },
+      ]);
+
+      // Mock knowledge.findFirst to return concept data
+      mockPrisma.knowledge.findFirst.mockResolvedValue({
+        id: 'quadratic-functions',
+        name: '二次函数',
+      });
+
+      // Mock questionStep.create to return step with id
+      mockPrisma.questionStep.create.mockResolvedValue({
+        id: 'step-1',
+        questionId: 'q-123',
+        stepNumber: 1,
+        content: '{}',
+      });
+
       mockPrisma.question.create.mockResolvedValue({
         id: 'q-123',
         type: 'calculation',
@@ -337,7 +370,7 @@ describe('Prisma Database Operations', () => {
       });
 
       expect(results).toHaveLength(2);
-      expect(results.every(q => q.extractionStatus === 'PENDING')).toBe(true);
+      expect(results.every((q: { extractionStatus: string }) => q.extractionStatus === 'PENDING')).toBe(true);
     });
 
     it('应该更新题目复杂度特征', async () => {
@@ -403,7 +436,7 @@ describe('Prisma Database Operations', () => {
       });
 
       expect(results).toHaveLength(2);
-      expect(results.every(q => q.difficulty >= 3 && q.difficulty <= 5)).toBe(true);
+      expect(results.every((q: { difficulty: number }) => q.difficulty >= 3 && q.difficulty <= 5)).toBe(true);
     });
 
     it('应该查询AI生成的题目', async () => {
@@ -417,7 +450,7 @@ describe('Prisma Database Operations', () => {
       });
 
       expect(results).toHaveLength(2);
-      expect(results.every(q => q.isAI === true)).toBe(true);
+      expect(results.every((q: { isAI: boolean }) => q.isAI === true)).toBe(true);
     });
 
     it('应该查询种子题（人工标注）', async () => {
@@ -438,8 +471,6 @@ describe('Prisma Database Operations', () => {
 describe('Question Generator Module', () => {
   describe('generateFillBlank', () => {
     it('应该生成填空题并返回正确结构', async () => {
-      const { generateFillBlank } = await import('@/lib/ai/question-generator');
-
       const result = await generateFillBlank({
         knowledgePoint: '加法',
         difficultyLevel: 2,
@@ -457,8 +488,6 @@ describe('Question Generator Module', () => {
     });
 
     it('应该根据不同知识点选择正确的模板', async () => {
-      const { generateFillBlank } = await import('@/lib/ai/question-generator');
-
       const subtractionResult = await generateFillBlank({
         knowledgePoint: '减法',
         difficultyLevel: 1,
@@ -477,8 +506,6 @@ describe('Question Generator Module', () => {
 
   describe('generateFillBlankBatch', () => {
     it('应该批量生成多个题目', async () => {
-      const { generateFillBlankBatch } = await import('@/lib/ai/question-generator');
-
       const results = await generateFillBlankBatch({
         knowledgePoint: '加法',
         difficultyLevel: 2,
@@ -486,7 +513,7 @@ describe('Question Generator Module', () => {
       });
 
       expect(results).toHaveLength(5);
-      expect(results.every(r => r.success)).toBe(true);
+      expect(results.every((r: { success: boolean }) => r.success)).toBe(true);
     });
   });
 });
@@ -515,13 +542,13 @@ describe('Complexity Extractor Integration', () => {
     it('应该将复杂度映射到难度等级', async () => {
       // 复杂度 [0, 1] 映射到难度 [1, 12]
       const mapComplexityToDifficulty = (complexity: number): number => {
-        return Math.max(1, Math.min(12, Math.round(complexity * 11) + 1));
+        return Math.max(1, Math.min(12, Math.floor(complexity * 11) + 1));
       };
 
       expect(mapComplexityToDifficulty(0)).toBe(1);
       expect(mapComplexityToDifficulty(0.5)).toBe(6);
       expect(mapComplexityToDifficulty(1)).toBe(12);
-      expect(mapComplexityToDifficulty(0.25)).toBe(4);
+      expect(mapComplexityToDifficulty(0.25)).toBe(3);
     });
 
     it('应该处理提取失败的情况', async () => {

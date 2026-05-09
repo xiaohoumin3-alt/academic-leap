@@ -13,7 +13,7 @@ describe('QIE Integration', () => {
         topics: ['test']
       });
 
-      const ctx = { difficulty: 0.5, complexity: 0.5 };
+      const ctx = { difficulty: 0.5 };
       const p1 = uok.predict('s1', 'q1', ctx);
 
       // Train with correct answers
@@ -34,7 +34,7 @@ describe('QIE Integration', () => {
         topics: ['test']
       });
 
-      const ctx = { difficulty: 0.5, complexity: 0.5 };
+      const ctx = { difficulty: 0.5 };
 
       // Strong student gets correct answers
       for (let i = 0; i < 10; i++) {
@@ -138,20 +138,19 @@ describe('QIE Integration', () => {
       (UOK as any).resetGlobalWeights();
     });
 
-    it('should initialize transfer weights to biased prior (0.5, 0.3, 0.2)', () => {
+    it('should initialize transfer weights to biased prior (0.6, 0.4)', () => {
       const uok = new UOK();
       const weights = uok.getComplexityTransferWeights();
 
-      expect(weights.cognitiveLoad).toBeCloseTo(0.5, 5);
-      expect(weights.reasoningDepth).toBeCloseTo(0.3, 5);
-      expect(weights.complexity).toBeCloseTo(0.2, 5);
+      expect(weights.cognitiveLoad).toBeCloseTo(0.6, 5);
+      expect(weights.reasoningDepth).toBeCloseTo(0.4, 5);
     });
 
     it('should have weights that sum to 1', () => {
       const uok = new UOK();
       const weights = uok.getComplexityTransferWeights();
 
-      const sum = weights.cognitiveLoad + weights.reasoningDepth + weights.complexity;
+      const sum = weights.cognitiveLoad + weights.reasoningDepth;
       expect(sum).toBeCloseTo(1, 5);
     });
 
@@ -179,7 +178,7 @@ describe('QIE Integration', () => {
         }
 
         // Get P_simple to verify we're above threshold
-        const pSimple = uok.predict('student1', 'simple', { difficulty: 0.5, complexity: 0.5 });
+        const pSimple = uok.predict('student1', 'simple', { difficulty: 0.5 });
 
         // If still below 0.55, skip the rest of this assertion
         // The ML model may not converge quickly enough
@@ -234,7 +233,7 @@ describe('QIE Integration', () => {
         }
 
         // Get P_simple to verify it's below threshold
-        const pSimple = uok.predict('student1', 'simple', { difficulty: 0.5, complexity: 0.5 });
+        const pSimple = uok.predict('student1', 'simple', { difficulty: 0.5 });
 
         // Skip test if ML didn't converge as expected (P_simple still > 0.7)
         // This can happen due to random initialization
@@ -254,7 +253,6 @@ describe('QIE Integration', () => {
         // Weights should NOT have changed
         expect(weightsAfter.cognitiveLoad).toBeCloseTo(weightsBefore.cognitiveLoad, 5);
         expect(weightsAfter.reasoningDepth).toBeCloseTo(weightsBefore.reasoningDepth, 5);
-        expect(weightsAfter.complexity).toBeCloseTo(weightsBefore.complexity, 5);
       });
 
       it('should keep weights normalized (sum = 1) after update', () => {
@@ -278,7 +276,7 @@ describe('QIE Integration', () => {
           uok.encodeAnswer('student1', 'simple', true);
         }
 
-        const pSimple = uok.predict('student1', 'simple', { difficulty: 0.5, complexity: 0.5 });
+        const pSimple = uok.predict('student1', 'simple', { difficulty: 0.5 });
 
         // Answer complex question multiple times
         for (let i = 0; i < 5; i++) {
@@ -287,7 +285,7 @@ describe('QIE Integration', () => {
 
         // Check weights are still normalized
         const weights = uok.getComplexityTransferWeights();
-        const sum = weights.cognitiveLoad + weights.reasoningDepth + weights.complexity;
+        const sum = weights.cognitiveLoad + weights.reasoningDepth;
         expect(sum).toBeCloseTo(1, 5);
       });
 
@@ -321,7 +319,6 @@ describe('QIE Integration', () => {
         const weights = uok.getComplexityTransferWeights();
         expect(weights.cognitiveLoad).toBeGreaterThanOrEqual(0);
         expect(weights.reasoningDepth).toBeGreaterThanOrEqual(0);
-        expect(weights.complexity).toBeGreaterThanOrEqual(0);
       });
 
       it('should only update dimensions where deltaC > 0', () => {
@@ -381,9 +378,8 @@ describe('QIE Integration', () => {
         expect(config.weights).toBeDefined();
         expect(config.gateThreshold).toBe(0.55);
         expect(config.learningRate).toBe(0.01);
-        expect(config.weights.cognitiveLoad).toBeCloseTo(0.5, 5);
-        expect(config.weights.reasoningDepth).toBeCloseTo(0.3, 5);
-        expect(config.weights.complexity).toBeCloseTo(0.2, 5);
+        expect(config.weights.cognitiveLoad).toBeCloseTo(0.6, 5);
+        expect(config.weights.reasoningDepth).toBeCloseTo(0.4, 5);
       });
 
       it('should set gate threshold and learning rate', () => {
@@ -429,7 +425,7 @@ describe('QIE Integration', () => {
 
         // Attempting to set weights should be ignored
         uok.setComplexityTransferConfig({
-          weights: { cognitiveLoad: 0.5, reasoningDepth: 0.3, complexity: 0.2 },
+          weights: { cognitiveLoad: 0.5, reasoningDepth: 0.5 },
         } as any);
 
         const weightsAfter = uok.getComplexityTransferWeights();
@@ -451,7 +447,7 @@ describe('QIE Integration', () => {
         // Internal state should be unchanged
         const config3 = uok.getComplexityTransferConfig();
         expect(config3.gateThreshold).toBe(0.55);
-        expect(config3.weights.cognitiveLoad).toBeCloseTo(0.5, 5);
+        expect(config3.weights.cognitiveLoad).toBeCloseTo(0.6, 5);
       });
     });
 
@@ -479,7 +475,7 @@ describe('QIE Integration', () => {
         }
 
         // Get predictions
-        const pSimple = uok.predict('student1', 'simple', { difficulty: 0.5, complexity: 0.5 });
+        const pSimple = uok.predict('student1', 'simple', { difficulty: 0.5 });
         const pComplex = uok.predictWithComplexityTransfer('student1', 'simple', 'complex');
 
         // Complex question should have lower probability
@@ -513,13 +509,11 @@ describe('QIE Integration', () => {
         // Verify features are identical
         expect(q1Features.cognitiveLoad).toBe(q2Features.cognitiveLoad);
         expect(q1Features.reasoningDepth).toBe(q2Features.reasoningDepth);
-        expect(q1Features.complexity).toBe(q2Features.complexity);
 
         // When complexity delta is 0, the weighted delta is 0, so exp(0) = 1
         // Therefore pTransfer should equal predict(simpleQuestion)
         const pSimple = uok.predict('student1', 'q1', {
-          difficulty: q1Features.difficulty,
-          complexity: q1Features.complexity
+          difficulty: q1Features.difficulty
         });
 
         expect(pTransfer).toBe(pSimple);
@@ -589,7 +583,7 @@ describe('QIE Integration', () => {
 
         // 6. Verify weights remain normalized after updates
         const weightsAfter = uok.getComplexityTransferWeights();
-        const weightSum = weightsAfter.cognitiveLoad + weightsAfter.reasoningDepth + weightsAfter.complexity;
+        const weightSum = weightsAfter.cognitiveLoad + weightsAfter.reasoningDepth;
         expect(weightSum).toBeCloseTo(1, 5);
 
         // 7. Verify predictions remain consistent (not NaN, not out of bounds)
@@ -655,16 +649,15 @@ describe('QIE Integration', () => {
 
         // weights are still normalized
         const weights = uok.getComplexityTransferWeights();
-        const sum = weights.cognitiveLoad + weights.reasoningDepth + weights.complexity;
+        const sum = weights.cognitiveLoad + weights.reasoningDepth;
         expect(sum).toBeCloseTo(1, 5);
 
         // weights are non-negative
         expect(weights.cognitiveLoad).toBeGreaterThanOrEqual(0);
         expect(weights.reasoningDepth).toBeGreaterThanOrEqual(0);
-        expect(weights.complexity).toBeGreaterThanOrEqual(0);
 
         // predictions are valid (not NaN, in range [0, 1])
-        const p1 = uok.predict('student1', 'q1', { difficulty: 0.5, complexity: 0.5 });
+        const p1 = uok.predict('student1', 'q1', { difficulty: 0.5 });
         expect(p1).toBeGreaterThanOrEqual(0);
         expect(p1).toBeLessThanOrEqual(1);
         expect(Number.isFinite(p1)).toBe(true);
@@ -710,8 +703,8 @@ describe('QIE Integration', () => {
         uok.encodeAnswer('student2', 'complex', true);
 
         // Verify predictions are valid for both students
-        const p1 = uok.predict('student1', 'simple', { difficulty: 0.5, complexity: 0.5 });
-        const p2 = uok.predict('student2', 'simple', { difficulty: 0.5, complexity: 0.5 });
+        const p1 = uok.predict('student1', 'simple', { difficulty: 0.5 });
+        const p2 = uok.predict('student2', 'simple', { difficulty: 0.5 });
 
         expect(p1).toBeGreaterThan(0);
         expect(p1).toBeLessThan(1);
@@ -720,7 +713,7 @@ describe('QIE Integration', () => {
 
         // Verify weights remain normalized
         const weights = uok.getComplexityTransferWeights();
-        const sum = weights.cognitiveLoad + weights.reasoningDepth + weights.complexity;
+        const sum = weights.cognitiveLoad + weights.reasoningDepth;
         expect(sum).toBeCloseTo(1, 5);
       });
     });
@@ -751,7 +744,6 @@ describe('QIE Integration', () => {
         // Weights should be identical (shared)
         expect(weights1.cognitiveLoad).toBe(weights2.cognitiveLoad);
         expect(weights1.reasoningDepth).toBe(weights2.reasoningDepth);
-        expect(weights1.complexity).toBe(weights2.complexity);
       });
 
       it('should allow one students learning to benefit another', () => {
@@ -765,13 +757,11 @@ describe('QIE Integration', () => {
         const state = (uok as any).state;
         state.questions.get('simple').features = {
           difficulty: 0.2,
-          complexity: 0.1,
           cognitiveLoad: 0.1,
           reasoningDepth: 0.1,
         };
         state.questions.get('complex').features = {
           difficulty: 0.5,
-          complexity: 0.5,
           cognitiveLoad: 0.5,
           reasoningDepth: 0.5,
         };
@@ -799,18 +789,17 @@ describe('QIE Integration', () => {
 
         // Weights should have changed after training on complex questions
         // The exact values depend on training, but they should not be identical
-        // to the initial biased prior [0.5, 0.3, 0.2]
-        const initialComplexityWeight = 0.2;
-        expect(weightsAfterComplex.complexity).not.toBe(initialComplexityWeight);
+        // to the initial biased prior [0.6, 0.4]
+        const initialCognitiveLoadWeight = 0.6;
+        expect(weightsAfterComplex.cognitiveLoad).not.toBe(initialCognitiveLoadWeight);
       });
 
       it('should use biased prior weights by default', () => {
         const uok = new UOK();
         const weights = uok.getComplexityTransferWeights();
 
-        expect(weights.cognitiveLoad).toBe(0.5);
-        expect(weights.reasoningDepth).toBe(0.3);
-        expect(weights.complexity).toBe(0.2);
+        expect(weights.cognitiveLoad).toBe(0.6);
+        expect(weights.reasoningDepth).toBe(0.4);
       });
 
       it('should have gateThreshold of 0.55 by default', () => {

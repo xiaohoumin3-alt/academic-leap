@@ -65,8 +65,8 @@ describe('addPracticeRecord', () => {
       timestamp: Date.now()
     });
 
-    const callArgs = mockEvalLua.mock.calls[0][0];
-    expect(parseInt(callArgs.arguments[1] as string)).toBe(30 * 24 * 3600);
+    const callArgs = mockEvalLua.mock.calls[0][0] as unknown as { keys: string[]; arguments: (string | number)[] };
+    expect(parseInt(String(callArgs.arguments[1]))).toBe(30 * 24 * 3600);
   });
 
   it('应该限制窗口大小为20', async () => {

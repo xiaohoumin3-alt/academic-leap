@@ -96,7 +96,7 @@ async function saveAuthState() {
       }
 
       // 检查是否有任何错误提示
-      const anyError = page.locator('.text-error, [role="alert"], text=/错误/').first();
+      const anyError = page.locator('.text-error').or(page.locator('[role="alert"]')).first();
       if (await anyError.count() > 0) {
         const errorText = await anyError.textContent();
         if (errorText?.trim()) {

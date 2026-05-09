@@ -30,6 +30,8 @@ jest.mock('@/lib/api', () => ({
     getRecommendations: jest.fn(() => Promise.resolve(null)),
     getComplexityStats: jest.fn(() => Promise.resolve({
       totalQuestions: 100,
+      questionsWithFeatures: 80,
+      coverage: '0.85',
       distribution: { low: 30, medium: 50, high: 20 },
       averages: { complexity: 0.65, cognitiveLoad: 0.5, reasoningDepth: 0.6 }
     }))
@@ -42,17 +44,24 @@ jest.mock('next/navigation', () => ({
   useSearchParams: jest.fn(() => ({ get: jest.fn(() => null) }))
 }));
 
+// Type assertion for jest-dom matchers (project does not have @testing-library/jest-dom types configured)
+const toBeInTheDocument = () => (value: unknown) => {
+  expect(value).toBeTruthy();
+};
+
 describe('复杂度分析Tab', () => {
   it('应该显示复杂度分析Tab', () => {
     render(<AnalyzePage onBack={() => {}} />);
 
     // 检查是否有复杂度分析相关的UI元素
-    expect(screen.getByText('学情分析')).toBeInTheDocument();
+    toBeInTheDocument()(screen.getByText('学情分析'));
   });
 
   it('应该显示复杂度分布', () => {
     const mockStats = {
       totalQuestions: 100,
+      questionsWithFeatures: 80,
+      coverage: '0.85',
       distribution: { low: 30, medium: 50, high: 20 },
       averages: { complexity: 0.65, cognitiveLoad: 0.5, reasoningDepth: 0.6 }
     };
@@ -60,14 +69,16 @@ describe('复杂度分析Tab', () => {
     render(<ComplexityAnalysisTab stats={mockStats} />);
 
     // 验证显示复杂度分布
-    expect(screen.getByText(/简单.*30%/)).toBeInTheDocument();
-    expect(screen.getByText(/中等.*50%/)).toBeInTheDocument();
-    expect(screen.getByText(/复杂.*20%/)).toBeInTheDocument();
+    toBeInTheDocument()(screen.getByText(/简单.*30%/));
+    toBeInTheDocument()(screen.getByText(/中等.*50%/));
+    toBeInTheDocument()(screen.getByText(/复杂.*20%/));
   });
 
   it('应该支持按复杂度筛选题目', () => {
     const mockStats = {
       totalQuestions: 100,
+      questionsWithFeatures: 80,
+      coverage: '0.85',
       distribution: { low: 30, medium: 50, high: 20 },
       averages: { complexity: 0.65, cognitiveLoad: 0.5, reasoningDepth: 0.6 },
       questions: [
@@ -79,9 +90,9 @@ describe('复杂度分析Tab', () => {
     render(<ComplexityAnalysisTab stats={mockStats} />);
 
     // 验证可以点击筛选按钮
-    expect(screen.getByRole('button', { name: /简单/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /中等/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /复杂/ })).toBeInTheDocument();
+    toBeInTheDocument()(screen.getByRole('button', { name: /简单/ }));
+    toBeInTheDocument()(screen.getByRole('button', { name: /中等/ }));
+    toBeInTheDocument()(screen.getByRole('button', { name: /复杂/ }));
   });
 });
 
@@ -90,7 +101,7 @@ describe('学习路径更新功能', () => {
     render(<AnalyzePage onBack={() => {}} />);
 
     // 学习路径Tab应该包含更新功能
-    expect(screen.getByText('学习路径')).toBeInTheDocument();
+    toBeInTheDocument()(screen.getByText('学习路径'));
   });
 
   it('应该允许用户选择更新模式', () => {

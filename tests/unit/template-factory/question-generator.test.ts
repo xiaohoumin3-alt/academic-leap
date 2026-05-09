@@ -14,7 +14,8 @@ import { QuestionGenerator, QuestionType } from '@/lib/template-factory/question
 // Mock ModelAdapter
 const mockGenerate = jest.fn();
 jest.mock('@/lib/ai/model-adapter', () => ({
-  ModelAdapter: class {
+  ModelAdapter: class MockModelAdapter {
+    config: any;
     constructor(config: any) {
       this.config = config;
     }

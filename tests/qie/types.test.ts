@@ -19,11 +19,9 @@ describe('QIE Types', () => {
   describe('Context', () => {
     it('should create a valid context', () => {
       const ctx: Context = {
-        difficulty: 0.5,
-        complexity: 0.7
+        difficulty: 0.5
       };
       expect(ctx.difficulty).toBe(0.5);
-      expect(ctx.complexity).toBe(0.7);
     });
   });
 
@@ -32,7 +30,6 @@ describe('QIE Types', () => {
       const features: QuestionFeatures = {
         cognitiveLoad: 0.5,
         reasoningDepth: 2,
-        complexity: 0.6,
         difficulty: 0.5
       };
       expect(features.cognitiveLoad).toBe(0.5);
@@ -46,7 +43,6 @@ describe('QIE Types', () => {
       const features: QuestionFeatures = {
         cognitiveLoad: 0.5,
         reasoningDepth: 2,
-        complexity: 0.6,
         difficulty: 0.5
       };
 
@@ -73,7 +69,6 @@ describe('QIE Types', () => {
       const features: QuestionFeatures = {
         cognitiveLoad: 0.5,
         reasoningDepth: 2,
-        complexity: 0.6,
         difficulty: 0.5
       };
 
@@ -171,7 +166,6 @@ describe('QIE Types', () => {
       const features: QuestionFeatures = {
         cognitiveLoad: 0.5,
         reasoningDepth: 2,
-        complexity: 0.6,
         difficulty: 0.5
       };
       const explanation: Explanation = {

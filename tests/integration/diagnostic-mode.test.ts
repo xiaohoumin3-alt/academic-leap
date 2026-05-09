@@ -7,7 +7,7 @@
  * 3. XP 奖励计算
  */
 
-const { describe, it, expect } = require('@jest/globals');
+// Jest globals are provided by ts-jest preset
 
 interface DiagnosticQuestion {
   id: string;

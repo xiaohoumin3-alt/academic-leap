@@ -55,7 +55,7 @@ describe('断点恢复 - PracticeSession', () => {
         questionCount: 20
       });
 
-      expect(session.status).toBe('active');
+      expect((session as any).status).toBe('active');
       expect(prisma.practiceSession.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -121,8 +121,8 @@ describe('断点恢复 - PracticeSession', () => {
       const service = new PracticeSessionService();
       const session = await service.resumeSession('user-1');
 
-      expect(session.status).toBe('active');
-      expect(session.currentQuestionIndex).toBe(10);
+      expect((session as any).status).toBe('active');
+      expect((session as any).currentQuestionIndex).toBe(10);
     });
 
     it('超过24小时的paused会话应提示用户确认', async () => {
@@ -141,7 +141,7 @@ describe('断点恢复 - PracticeSession', () => {
       const session = await service.getActiveSession('user-1');
 
       expect(session).toBeDefined();
-      expect(session.requiresConfirmation).toBe(true);
+      expect((session as any).requiresConfirmation).toBe(true);
     });
   });
 
@@ -160,7 +160,7 @@ describe('断点恢复 - PracticeSession', () => {
         }
       };
 
-      prisma.$transaction.mockImplementation(async (fn) => {
+      prisma.$transaction.mockImplementation(async (fn: (tx: typeof mockTx) => Promise<unknown>) => {
         return await fn(mockTx);
       });
 

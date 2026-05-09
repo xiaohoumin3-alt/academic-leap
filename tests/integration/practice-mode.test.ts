@@ -7,7 +7,8 @@
  * 3. 用户答案的存储
  */
 
-const { describe, it, expect, vi, beforeEach } = require('@jest/globals');
+// Jest globals are provided by ts-jest preset
+import { describe, it, expect, beforeEach } from '@jest/globals';
 
 interface PracticeQuestion {
   id: string;

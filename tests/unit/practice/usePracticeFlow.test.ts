@@ -91,7 +91,7 @@ describe('usePracticeFlow 状态转换逻辑', () => {
     it('单题 answering 状态进度应为 0%', () => {
       const totalQuestions = 1;
       const currentIndex = 0;
-      const state = 'answering';
+      const state: string = 'answering';
       const progress = totalQuestions > 0
         ? ((currentIndex + (state === 'showing_answer' || state === 'completed' ? 1 : 0)) / totalQuestions) * 100
         : 0;
@@ -101,7 +101,7 @@ describe('usePracticeFlow 状态转换逻辑', () => {
     it('单题 showing_answer 状态进度应为 100%', () => {
       const totalQuestions = 1;
       const currentIndex = 0;
-      const state = 'showing_answer';
+      const state: string = 'showing_answer';
       const progress = totalQuestions > 0
         ? ((currentIndex + (state === 'showing_answer' || state === 'completed' ? 1 : 0)) / totalQuestions) * 100
         : 0;
@@ -111,7 +111,7 @@ describe('usePracticeFlow 状态转换逻辑', () => {
     it('多题中间状态进度应正确计算', () => {
       const totalQuestions = 3;
       const currentIndex = 1; // 第二题
-      const state = 'answering';
+      const state: string = 'answering';
       const progress = totalQuestions > 0
         ? ((currentIndex + (state === 'showing_answer' || state === 'completed' ? 1 : 0)) / totalQuestions) * 100
         : 0;
@@ -138,13 +138,13 @@ describe('usePracticeFlow 状态转换逻辑', () => {
   describe('状态转换条件', () => {
     it('answering 状态可以转换为 showing_answer', () => {
       const currentState = 'answering';
-      const canShowAnswer = currentState === 'answering';
+      const canShowAnswer: boolean = (currentState as string) === 'answering';
       expect(canShowAnswer).toBe(true);
     });
 
     it('completed 状态不应再转换', () => {
       const currentState = 'completed';
-      const canShowAnswer = currentState === 'answering';
+      const canShowAnswer: boolean = (currentState as string) === 'answering';
       expect(canShowAnswer).toBe(false);
     });
   });

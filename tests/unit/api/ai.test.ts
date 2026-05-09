@@ -8,7 +8,8 @@ import { NextRequest } from 'next/server';
 
 // Mock ModelAdapter
 jest.mock('@/lib/ai/model-adapter', () => ({
-  ModelAdapter: class {
+  ModelAdapter: class MockModelAdapter {
+    config: any;
     constructor(config: any) {
       this.config = config;
     }

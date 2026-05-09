@@ -169,7 +169,7 @@ describe('useDiagnosticFlow 核心逻辑', () => {
       const correctCount = 5;
       const totalQuestions = 5;
       const baseXP = correctCount * 5;
-      const bonusXP = correctCount === totalQuestions ? 50 : 0;
+      const bonusXP: number = Number(correctCount) === Number(totalQuestions) ? 50 : 0;
       const earnedXP = baseXP + bonusXP;
       expect(earnedXP).toBe(75);
     });
@@ -178,7 +178,7 @@ describe('useDiagnosticFlow 核心逻辑', () => {
       const correctCount = 4;
       const totalQuestions = 5;
       const baseXP = correctCount * 5;
-      const bonusXP = correctCount === totalQuestions ? 50 : 0;
+      const bonusXP: number = Number(correctCount) === Number(totalQuestions) ? 50 : 0;
       const earnedXP = baseXP + bonusXP;
       expect(earnedXP).toBe(20);
     });
@@ -187,7 +187,7 @@ describe('useDiagnosticFlow 核心逻辑', () => {
       const correctCount = 0;
       const totalQuestions = 5;
       const baseXP = correctCount * 5;
-      const bonusXP = correctCount === totalQuestions ? 50 : 0;
+      const bonusXP: number = Number(correctCount) === Number(totalQuestions) ? 50 : 0;
       const earnedXP = baseXP + bonusXP;
       expect(earnedXP).toBe(0);
     });
