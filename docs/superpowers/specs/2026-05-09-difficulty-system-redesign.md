@@ -290,12 +290,103 @@ API: POST /api/assessment/start { retry: true, difficulty: N }
 
 ---
 
-## 七、实施步骤
+## 七、上下游依赖分析
 
-1. **删除** `lib/assessment-utils.ts` 中的 `getGradeDifficultyRange` 和 `getAssessmentStartLevel`
-2. **删除** `prisma/schema.prisma` 中的 `KnowledgePoint.difficultyLevel`
-3. **创建** `lib/difficulty.ts` 新难度计算函数
-4. **修改** `app/api/assessment/start/route.ts` 取题逻辑
-5. **修改** `app/api/assessment/finish/route.ts` 难度判断逻辑
-6. **更新** 相关测试
-7. **验证** 手动测试流程
+### 7.1 删除目标的使用情况
+
+| 删除目标 | 使用位置 | 风险评估 |
+|----------|----------|----------|
+| `KP.difficultyLevel` | **未使用** | ✅ 安全删除 |
+| `getGradeDifficultyRange()` | 仅 `assessment/start/route.ts:101` | ⚠️ 需替换 |
+| `getAssessmentStartLevel()` | 仅 `assessment/start/route.ts:93,99` | ⚠️ 需替换 |
+
+### 7.2 `difficultyLevel` vs `difficulty` 区分
+
+⚠️ **重要区分**：
+
+| 字段 | 类型 | 用途 | 处理 |
+|------|------|------|------|
+| `KP.difficultyLevel` | Prisma字段 | 知识点的难度 | ✅ 删除 |
+| `Question.difficulty` | Prisma字段 | 题目的难度 1-12 | ✅ 保留 |
+| `QuestionProtocol.difficultyLevel` | TypeScript接口 | 题目的难度 | ✅ 保留 |
+| 局部变量 `difficultyLevel` | 变量 | 临时计算 | ✅ 保留 |
+
+### 7.3 其他模块的影响评估
+
+| 模块 | 影响 | 说明 |
+|------|------|------|
+| `lib/recommendation/` | ❌ 无影响 | 使用 `Question.difficulty`，不是 KP 字段 |
+| `lib/question-engine/` | ❌ 无影响 | 使用 `QuestionProtocol.difficultyLevel` |
+| `lib/ai/question-generator/` | ❌ 无影响 | 生成题目时设置 difficulty |
+| `lib/learning-flow/` | ❌ 无影响 | 使用 difficulty 变量 |
+| `app/api/questions/generate/` | ❌ 无影响 | 生成题目，不是测评取题 |
+
+**结论**：删除操作**仅影响** `assessment/start/route.ts`，其他模块无感知。
+
+---
+
+## 八、实施步骤
+
+### Step 1: 创建新的难度计算模块
+
+**文件**: `lib/difficulty.ts`
+
+```typescript
+export const FIRST_ASSESSMENT_RANGE = { min: 4, max: 6 };
+
+export function calculateNextDifficultyRange(currentDifficulty: number, score: number) {
+  // 见第三节 3.4
+}
+
+export function shouldEnterPractice(currentDifficulty: number, score: number) {
+  // 见第三节 3.4
+}
+```
+
+**验证**: `tsc --noEmit` 通过
+
+### Step 2: 修改 assessment/start/route.ts
+
+**修改点**:
+
+1. 替换 import（第4行）
+2. 替换第86-101行的难度计算逻辑
+3. 替换第161-170行的取题难度过滤逻辑
+
+**验证**: `pnpm build` 成功
+
+### Step 3: 删除废弃代码
+
+```bash
+# 删除 lib/assessment-utils.ts 中的两个函数（保留空文件或删除文件）
+# 删除 prisma/schema.prisma 中的 difficultyLevel 字段
+```
+
+**验证**: `prisma generate` 成功
+
+### Step 4: 更新测试
+
+- 更新 `tests/unit/adaptive-difficulty.test.ts` 如存在
+- 运行 E2E 测试验证
+
+**验证**: `npx playwright test e2e/diagnostic-adaptive-flow.spec.ts` 全部通过
+
+### Step 5: 手动验证
+
+1. 清除浏览器缓存
+2. 访问 http://localhost:3000/assessment/diagnostic
+3. 点击"开始诊断"
+4. 验证返回10题（难度4-6）
+5. 完成测评，验证分数判断正确
+
+---
+
+## 九、Bug 预防清单
+
+| 风险 | 预防措施 | 验证方法 |
+|------|----------|----------|
+| 删除 KP.difficultyLevel 后其他代码报错 | 确认无 Prisma 查询使用此字段 | `grep -rn "kp.difficultyLevel\|KP\.difficultyLevel"` 无结果 |
+| 新难度函数返回值格式错误 | 严格类型定义 | TypeScript 编译通过 |
+| 首次测评取不到题目 | 确保难度4-6有足够题目 | 数据库查询验证 |
+| 边界情况处理遗漏 | 明确覆盖难度1、难度12场景 | E2E 测试覆盖 |
+| 变量命名混淆 (difficulty vs difficultyLevel) | 代码审查确认 | PR review |
