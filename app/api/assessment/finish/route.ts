@@ -35,7 +35,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '未登录' }, { status: 401 });
     }
 
-    const { attemptId, answers, questionIds, currentDifficulty = 6 } = await req.json();
+    const { attemptId, answers, questionIds, currentDifficulty = 6, frontendAccuracy, frontendCorrectCount } = await req.json();
+
+    // 调试日志
+    console.log('[Assessment Finish] Request data:', {
+      attemptId,
+      answersCount: answers?.length,
+      questionIdsCount: questionIds?.length,
+      currentDifficulty,
+      frontendAccuracy,
+      frontendCorrectCount,
+      answersSample: answers?.slice(0, 3),
+    });
 
     if (!attemptId) {
       return NextResponse.json({ error: '参数错误：缺少 attemptId' }, { status: 400 });
@@ -69,6 +80,8 @@ export async function POST(req: NextRequest) {
         select: { id: true, knowledgePoints: true, answer: true },
       });
 
+      console.log('[Assessment Finish] Fetched questions:', questions.map(q => ({ id: q.id, kp: q.knowledgePoints })));
+
       const questionMap = new Map(questions.map(q => [q.id, q]));
 
       // 创建临时的 attemptSteps 格式数据
@@ -93,7 +106,19 @@ export async function POST(req: NextRequest) {
     function checkAnswer(userAnswer: string | null, correctAnswer: string): boolean {
       if (!userAnswer) return false;
       if (!correctAnswer) return false;  // 防御：正确答案为空时返回 false
-      return userAnswer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
+
+      // 标准化答案：如果是选择题（格式如 "A. xxx"），提取首字母
+      const normalizeAnswer = (ans: string): string => {
+        const trimmed = ans.trim();
+        // 检查是否是选择题格式（A. B. C. D. 开头）
+        const match = trimmed.match(/^([A-D])[.\s]/);
+        if (match) {
+          return match[1].toUpperCase();
+        }
+        return trimmed;
+      };
+
+      return normalizeAnswer(userAnswer).toLowerCase() === normalizeAnswer(correctAnswer).toLowerCase();
     }
 
     // 获取步骤关联的题目信息（仅当有数据库记录时）
@@ -167,6 +192,7 @@ export async function POST(req: NextRequest) {
 
       // 如果有知识点，将答题结果计入每个知识点
       if (knowledgePointIds.length > 0) {
+        console.log('[Assessment Finish] Processing step with knowledgePoints:', knowledgePointIds);
         for (const kpId of knowledgePointIds) {
           // 优先通过 ID 匹配（题目存储的是 ID）
           let kpInfo = knowledgePoints.find(kp => kp.id === kpId);
@@ -183,13 +209,19 @@ export async function POST(req: NextRequest) {
               isCorrect: step.isCorrect,
               duration: step.duration,
             });
+          } else {
+            console.log('[Assessment Finish] Knowledge point not found in user textbook:', kpId);
           }
         }
+      } else {
+        console.log('[Assessment Finish] Step has no knowledgePoints');
       }
     }
 
     // 如果没有有效答题记录，添加一个"综合"记录避免计算错误
+    console.log('[Assessment Finish] Total answerRecords:', answerRecords.length);
     if (answerRecords.length === 0) {
+      console.log('[Assessment Finish] No valid answerRecords, adding general record');
       answerRecords.push({
         knowledgePointId: 'general',
         knowledgePointName: '综合',
@@ -381,10 +413,34 @@ export async function POST(req: NextRequest) {
     }
 
     // ========== 计算 accuracy 和 adaptiveAction（诊断决策） ==========
-    // 计算正确率
-    const totalQuestions = answers?.length || 0;
-    const correctCount = questionResults.filter((r: any) => r && r.isCorrect).length;
-    const accuracy = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
+    // 优先使用前端传递的 accuracy（避免重复计算导致不一致）
+    let accuracy: number;
+    let correctCount: number;
+    const totalQuestions = answers?.length || attemptSteps.length || 0;
+
+    console.log('[Assessment Finish] Calculating accuracy:', {
+      frontendAccuracy,
+      totalQuestions,
+      attemptStepsLength: attemptSteps.length,
+      questionResultsLength: questionResults.length,
+    });
+
+    if (frontendAccuracy !== undefined) {
+      // 前端已计算，直接使用
+      accuracy = frontendAccuracy;
+      correctCount = frontendCorrectCount ?? Math.round((accuracy * totalQuestions) / 100);
+      console.log('[Assessment Finish] Using frontend accuracy:', accuracy);
+    } else if (questionResults.length > 0) {
+      // 从 questionResults 计算（兼容没有前端 accuracy 的情况）
+      correctCount = questionResults.filter((r: any) => r && r.isCorrect).length;
+      accuracy = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
+      console.log('[Assessment Finish] Calculated from questionResults:', accuracy);
+    } else {
+      // 降级：从 attemptSteps 计算
+      correctCount = attemptSteps.filter((s: any) => s.isCorrect).length;
+      accuracy = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
+      console.log('[Assessment Finish] Calculated from attemptSteps:', accuracy);
+    }
 
     // 计算 adaptiveAction
     const boundary = isDiagnosticBoundaryCase(currentDifficulty, accuracy);

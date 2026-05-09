@@ -19,25 +19,71 @@ export default function TrainingPage() {
   useEffect(() => {
     async function fetchQuestions() {
       try {
-        const response = await fetch('/api/uok/recommend', {
+        const url = '/api/uok/recommend';
+        console.log('Fetching from:', url);
+
+        const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ count: 3 }), // 练习模式3题一组
+          credentials: 'include', // 确保发送 cookies
         });
 
-        if (!response.ok) {
-          throw new Error('获取题目失败');
+        console.log('Response status:', response.status);
+        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+        if (response.status === 401) {
+          // 未登录，跳转登录页
+          router.push('/login');
+          return;
         }
 
         const data = await response.json();
-        const mappedQuestions: PracticeQuestion[] = data.questions.map((q: any) => ({
-          id: q.id,
-          type: q.type,
-          question: typeof q.content === 'string' ? q.content : q.content.question,
-          answer: q.answer,
-          options: q.options,
-          explanation: q.explanation,
-        }));
+
+        // 检查题目不足错误（明确错误提示，拒绝降级）
+        if (data.code === 'INSUFFICIENT_QUESTIONS') {
+          // 显示详细错误信息，包括缺失难度和可用数量
+          const missingDiff = data.missingDifficulty;
+          const available = data.availableCounts || {};
+          const availableList = Object.entries(available)
+            .map(([k, v]) => `难度${k}: ${v}题`)
+            .join(', ');
+
+          setError(
+            `当前缺少难度${missingDiff}的题目，无法进行练习。\n\n` +
+            `可用题目分布：${availableList || '暂无'}\n\n` +
+            `请联系管理员生成难度${missingDiff}的题目后再试。`
+          );
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(data.error || '获取题目失败');
+        }
+
+        // 检查是否需要诊断
+        if (data.needsDiagnostic && data.redirectTo) {
+          setError(data.message || '建议先完成诊断测评以获得个性化推荐');
+          return;
+        }
+
+        if (!data.questions || data.questions.length === 0) {
+          throw new Error(data.error || '获取题目失败');
+        }
+
+        const mappedQuestions: PracticeQuestion[] = data.questions.map((q: any) => {
+          // 解析content字段（可能是JSON字符串或已解析对象）
+          const content = typeof q.content === 'string' ? JSON.parse(q.content) : q.content;
+
+          return {
+            id: q.id,
+            type: q.type,
+            question: content.question,
+            answer: q.answer,
+            options: q.options,
+            explanation: q.explanation,
+          };
+        });
 
         setQuestions(mappedQuestions);
       } catch (err) {
@@ -60,7 +106,7 @@ export default function TrainingPage() {
   // 处理反馈回调
   const handleFeedback = async (questionId: string, remembered: boolean) => {
     try {
-      const response = await fetch('/api/uok/submit-answer', {
+      const response = await fetch('/api/uok/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -72,8 +118,8 @@ export default function TrainingPage() {
       if (response.ok) {
         const data = await response.json();
         return {
-          masteryBefore: data.masteryBefore ?? 0,
-          masteryAfter: data.masteryAfter ?? 0,
+          masteryBefore: data.feedback?.masteryBefore ?? 0,
+          masteryAfter: data.feedback?.masteryAfter ?? 0,
         };
       }
     } catch (err) {

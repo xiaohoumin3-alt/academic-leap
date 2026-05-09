@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
+import { calculateDifficultyAdjustment, type DifficultyAdjustment } from '@/lib/adaptive-difficulty';
 
 export type PracticeState = 'answering' | 'showing_answer' | 'completed' | 'error';
 
@@ -36,9 +37,17 @@ export interface PracticeFlowResult {
   progress: number;
   error?: Error;
 
+  // 难度自适应状态
+  difficultyLevel: number;
+  consecutiveCorrect: number;
+  totalAnswered: number;
+  correctCount: number;      // 新增：正确答题数
+  accuracy: number;          // 新增：正确率百分比 (correctCount / totalAnswered * 100)
+  difficultyAdjustment: DifficultyAdjustment | null;
+
   // 操作
   showAnswer: () => void;
-  handleFeedback: (remembered: boolean) => void;
+  handleFeedback: (remembered: boolean, answerDuration?: number) => void;
   handleAnswerChange: (index: number, value: string) => void;
   reset: () => void;
   retry: () => void;
@@ -47,7 +56,9 @@ export interface PracticeFlowResult {
 export function usePracticeFlow(
   questions: PracticeQuestion[],
   onComplete?: (results: { total: number; correct: number }) => void,
-  onFeedback?: (questionId: string, remembered: boolean) => Promise<{ masteryBefore: number; masteryAfter: number } | null>
+  onFeedback?: (questionId: string, remembered: boolean) => Promise<{ masteryBefore: number; masteryAfter: number } | null>,
+  onQuestionAnswered?: (questionIndex: number, remembered: boolean) => void,
+  initialDifficultyLevel: number = 2
 ): PracticeFlowResult {
   const [state, setState] = useState<PracticeState>('answering');
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -55,6 +66,13 @@ export function usePracticeFlow(
   const [masteryBefore, setMasteryBefore] = useState(0);
   const [masteryAfter, setMasteryAfter] = useState(0);
   const [error, setError] = useState<Error | null>(null);
+
+  // 难度自适应状态
+  const [difficultyLevel, setDifficultyLevel] = useState(initialDifficultyLevel);
+  const [consecutiveCorrect, setConsecutiveCorrect] = useState(0);
+  const [totalAnswered, setTotalAnswered] = useState(0);
+  const [correctCount, setCorrectCount] = useState(0);  // 新增：正确答题数
+  const [difficultyAdjustment, setDifficultyAdjustment] = useState<DifficultyAdjustment | null>(null);
 
   const totalQuestions = questions.length;
   const currentQuestion = questions[currentIndex] || null;
@@ -66,6 +84,9 @@ export function usePracticeFlow(
 
   const masteryChange = masteryAfter - masteryBefore;
 
+  // 计算正确率
+  const accuracy = totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0;
+
   // 显示答案
   const showAnswer = useCallback(() => {
     if (state === 'answering') {
@@ -74,7 +95,7 @@ export function usePracticeFlow(
   }, [state]);
 
   // 处理反馈（记住了/记错了）
-  const handleFeedback = useCallback(async (remembered: boolean) => {
+  const handleFeedback = useCallback(async (remembered: boolean, answerDuration: number = 0) => {
     const currentQ = questions[currentIndex];
     if (!currentQ) return;
 
@@ -87,6 +108,37 @@ export function usePracticeFlow(
           setMasteryAfter(feedback.masteryAfter);
         }
       }
+
+      // 更新难度自适应状态
+      const config = {
+        level: difficultyLevel,
+        consecutiveCorrect,
+        consecutiveWrong: 0, // 简化处理
+        recentAccuracy: totalAnswered > 0 ? (consecutiveCorrect / totalAnswered) : 0,
+        totalAnswered,
+      };
+
+      const adjustment = calculateDifficultyAdjustment(config, remembered);
+
+      // 应用难度调整
+      if (adjustment.shouldAdjust) {
+        setDifficultyLevel(adjustment.newLevel);
+        setDifficultyAdjustment(adjustment);
+      } else {
+        setDifficultyAdjustment(null);
+      }
+
+      // 更新连续正确计数和总答题数
+      if (remembered) {
+        setConsecutiveCorrect(prev => prev + 1);
+        setCorrectCount(prev => prev + 1);
+      } else {
+        setConsecutiveCorrect(0);
+      }
+      setTotalAnswered(prev => prev + 1);
+
+      // 通知每题完成（用于更新XP等）
+      onQuestionAnswered?.(currentIndex, remembered);
 
       // 移动到下一题或完成
       if (currentIndex < totalQuestions - 1) {
@@ -101,7 +153,7 @@ export function usePracticeFlow(
       setError(err as Error);
       setState('error');
     }
-  }, [currentIndex, totalQuestions, questions, onComplete, onFeedback]);
+  }, [currentIndex, totalQuestions, questions, onComplete, onFeedback, difficultyLevel, consecutiveCorrect, totalAnswered]);
 
   // 处理答案变化
   const handleAnswerChange = useCallback((index: number, value: string) => {
@@ -118,7 +170,12 @@ export function usePracticeFlow(
     setMasteryBefore(0);
     setMasteryAfter(0);
     setError(null);
-  }, []);
+    setDifficultyLevel(initialDifficultyLevel);
+    setConsecutiveCorrect(0);
+    setTotalAnswered(0);
+    setCorrectCount(0);
+    setDifficultyAdjustment(null);
+  }, [initialDifficultyLevel]);
 
   // 重试
   const retry = useCallback(() => {
@@ -137,6 +194,12 @@ export function usePracticeFlow(
     masteryChange,
     progress,
     error: error || undefined,
+    difficultyLevel,
+    consecutiveCorrect,
+    totalAnswered,
+    correctCount,
+    accuracy,
+    difficultyAdjustment,
     showAnswer,
     handleFeedback,
     handleAnswerChange,

@@ -2,13 +2,18 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { BookOpen, ClipboardCheck, TrendingUp, Target, ChevronRight } from 'lucide-react';
+import { BookOpen, ClipboardCheck, TrendingUp, Target, ChevronRight, Home } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface TodayStats {
   questionCount: number;
   accuracy: number;
   xpEarned: number;
+  goal?: {
+    target: number;
+    current: number;
+    accuracy: number;
+  };
 }
 
 /**
@@ -30,22 +35,20 @@ function ModeSelectInner() {
   useEffect(() => {
     async function fetchTodayStats() {
       try {
-        // TODO: 替换为实际API调用
-        // const response = await fetch('/api/stats/today');
-        // const data = await response.json();
-        // setStats(data);
-
-        // 临时模拟数据
-        setTimeout(() => {
-          setStats({
-            questionCount: 12,
-            accuracy: 83,
-            xpEarned: 85,
-          });
-          setIsLoading(false);
-        }, 500);
+        const response = await fetch('/api/user/stats/today');
+        if (!response.ok) {
+          throw new Error('Failed to fetch today stats');
+        }
+        const data = await response.json();
+        setStats({
+          questionCount: data.questionCount,
+          accuracy: data.accuracy,
+          xpEarned: data.xpEarned,
+          goal: data.goal,
+        });
       } catch (error) {
         console.error('Failed to fetch today stats:', error);
+      } finally {
         setIsLoading(false);
       }
     }
@@ -56,18 +59,32 @@ function ModeSelectInner() {
   // 根据mode参数直接进入对应模式
   useEffect(() => {
     if (mode === 'training') {
-      router.push('/practice/training');
+      router.replace('/practice/training');
     } else if (mode === 'diagnostic') {
-      router.push('/assessment/diagnostic');
+      router.replace('/assessment/diagnostic');
     }
   }, [mode, router]);
 
-  const handleStartPractice = (mode: 'training' | 'diagnostic') => {
-    router.push(`/practice?mode=${mode}`);
+  const handleStartPractice = (targetMode: 'training' | 'diagnostic') => {
+    // 直接跳转到目标页面
+    if (targetMode === 'training') {
+      router.push('/practice/training');
+    } else {
+      router.push('/assessment/diagnostic');
+    }
   };
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6">
+      {/* 返回首页按钮 */}
+      <button
+        onClick={() => router.push('/')}
+        className="flex items-center gap-2 text-on-surface-variant hover:text-on-surface transition-colors"
+      >
+        <Home className="w-5 h-5" />
+        <span>返回首页</span>
+      </button>
+
       {/* 今日学习统计卡片 */}
       <div className={cn(
         "bg-surface-container rounded-2xl p-6",
@@ -214,17 +231,25 @@ function ModeSelectInner() {
           </div>
           <div className="flex-1">
             <div className="text-sm font-medium text-on-surface">今日目标</div>
-            <div className="text-xs text-on-surface-variant">完成10道练习题，正确率达到80%</div>
+            <div className="text-xs text-on-surface-variant">
+              完成{stats.goal?.target || 10}道练习题，正确率达到{stats.goal?.accuracy || 80}%
+            </div>
           </div>
           <div className="text-right">
-            <div className="text-lg font-bold text-primary">4/10</div>
+            <div className="text-lg font-bold text-primary">
+              {stats.goal?.current || 0}/{stats.goal?.target || 10}
+            </div>
             <div className="text-xs text-on-surface-variant">题目</div>
           </div>
         </div>
         <div className="mt-3 h-2 bg-white/30 rounded-full overflow-hidden">
           <div
             className="h-full bg-primary rounded-full transition-all duration-500"
-            style={{ width: '40%' }}
+            style={{
+              width: `${stats.goal
+                ? Math.min((stats.goal.current / stats.goal.target) * 100, 100)
+                : 0}%`
+            }}
           />
         </div>
       </div>

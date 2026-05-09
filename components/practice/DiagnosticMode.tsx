@@ -12,7 +12,7 @@ import { useDiagnosticFlow, type DiagnosticQuestion, getDiagnosticDecision } fro
 interface DiagnosticModeProps {
   questions: DiagnosticQuestion[];
   attemptId: string;
-  onComplete?: (result: { accuracy: number; adaptiveAction: any; score: number; answers: (string | null)[] }) => void;
+  onComplete?: (result: { accuracy: number; adaptiveAction: any; score: number; answers: (string | null)[]; correctCount?: number }) => void;
   initialDifficulty?: number;
   onDifficultyChange?: (difficulty: number) => void;
 }
@@ -116,13 +116,18 @@ export function DiagnosticMode({ questions, attemptId, onComplete, initialDiffic
             answers: result.answers,
             questionIds: currentQuestions.map(q => q.id),
             currentDifficulty,
+            // 传递前端计算的 accuracy，避免 API 重复计算导致不一致
+            frontendAccuracy: result.accuracy,
+            frontendCorrectCount: result.correctCount,
           }),
         });
 
         const data = await response.json();
         if (data.success && data.data) {
+          // 使用前端计算的 accuracy（API 不再重新计算）
           onComplete?.({
-            accuracy: data.data.accuracy,
+            accuracy: result.accuracy,
+            correctCount: result.correctCount,
             adaptiveAction: data.data.adaptiveAction,
             score: data.data.score,
             answers: result.answers || [],

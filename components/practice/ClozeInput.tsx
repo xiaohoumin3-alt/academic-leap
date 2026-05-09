@@ -140,7 +140,8 @@ export function ClozeInput({
  * 解析答案字符串为数组
  * 支持逗号、中文逗号、中文句号分隔的多个答案
  */
-export function parseAnswers(answerString: string): string[] {
+export function parseAnswers(answerString: string | undefined | null): string[] {
+  if (!answerString) return [];
   return answerString
     .split(/[,，、]/)
     .map(a => a.trim())

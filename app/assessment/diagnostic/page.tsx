@@ -1,63 +1,191 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { DiagnosticMode } from '@/components/practice/DiagnosticMode';
 import type { DiagnosticQuestion } from '@/hooks/useDiagnosticFlow';
 
 /**
  * 诊断测评页面
- * 获取固定难度题目并渲染DiagnosticMode组件
+ * 使用 assessment/start API 获取题目并创建 Attempt 记录
  */
 export default function DiagnosticPage() {
   const router = useRouter();
   const [questions, setQuestions] = useState<DiagnosticQuestion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showRetry, setShowRetry] = useState(false);
+  const attemptIdRef = useRef<string | null>(null);
 
-  // 从UOK推荐API获取诊断题目（固定难度）
+  // 从 assessment/start API 获取诊断题目
   useEffect(() => {
-    async function fetchQuestions() {
+    async function startAssessment() {
       try {
-        const response = await fetch('/api/uok/recommend', {
+        const response = await fetch('/api/assessment/start', {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            count: 10, // 诊断模式10题
-            mode: 'diagnostic', // 诊断模式标识
-          }),
+          body: JSON.stringify({ retry: false }),
         });
 
-        if (!response.ok) {
-          throw new Error('获取题目失败');
+        const data = await response.json().catch(() => null);
+
+        if (response.status === 401) {
+          router.push('/login');
+          return;
         }
 
-        const data = await response.json();
-        const mappedQuestions: DiagnosticQuestion[] = data.questions.map((q: any) => ({
-          id: q.id,
-          type: q.type,
-          question: typeof q.content === 'string' ? q.content : q.content.question,
-          answer: q.answer,
-          options: q.options,
-          explanation: q.explanation,
-        }));
+        // 首先检查是否需要选择教材
+        if (data.requireTextbookSelection) {
+          // 跳转到前台"我的"页面进行设置，而不是后台管理
+          router.push('/me');
+          return;
+        }
+
+        // 检查是否已完成初始测评（独立检查，不管 success 是什么）
+        if (data.data?.alreadyCompleted) {
+          setError('您已完成初始测评（得分：' + (data.data?.score ?? 0) + '分）。如需重新诊断，请点击下方按钮。');
+          setShowRetry(true);
+          setIsLoading(false);
+          return;
+        }
+
+        if (!response.ok || !data.success) {
+          throw new Error(data?.error || '获取题目失败');
+        }
+
+        // 保存 attemptId 用于后续提交
+        if (data.data?.attemptId) {
+          attemptIdRef.current = data.data.attemptId;
+        }
+
+        // 映射题目格式
+        const mappedQuestions: DiagnosticQuestion[] = (data.data?.questions || []).map((q: any) => {
+          // 处理 content 可能是字符串或对象的情况
+          let questionText = '';
+          let options: string[] | undefined;
+          let explanation: string | undefined;
+
+          if (typeof q.content === 'string') {
+            try {
+              const parsed = JSON.parse(q.content);
+              questionText = parsed.question || q.content;
+              options = parsed.options;
+              explanation = parsed.explanation;
+            } catch {
+              questionText = q.content;
+            }
+          } else if (q.content && typeof q.content === 'object') {
+            questionText = q.content.question || '';
+            options = q.content.options;
+            explanation = q.content.explanation;
+          }
+
+          return {
+            id: q.id,
+            type: q.type,
+            question: questionText,
+            answer: q.answer,
+            options: options,
+            explanation: explanation,
+          };
+        });
 
         setQuestions(mappedQuestions);
       } catch (err) {
-        console.error('Failed to fetch questions:', err);
+        console.error('Failed to start assessment:', err);
         setError(err instanceof Error ? err.message : '获取题目失败');
       } finally {
         setIsLoading(false);
       }
     }
 
-    fetchQuestions();
-  }, []);
+    startAssessment();
+  }, [router]);
 
-  // 处理完成回调
-  const handleComplete = (result: { accuracy: number; correctCount: number; wrongCount: number }) => {
-    console.log('Diagnostic completed:', result);
-    // 可以在这里添加完成后的逻辑，如保存诊断结果
+  // 处理重新测评
+  const handleRetry = async () => {
+    setIsLoading(true);
+    setError(null);
+    setShowRetry(false);
+
+    try {
+      const response = await fetch('/api/assessment/start', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ retry: true }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data.success) {
+        throw new Error(data?.error || '获取题目失败');
+      }
+
+      // 保存 attemptId 用于后续提交
+      if (data.data?.attemptId) {
+        attemptIdRef.current = data.data.attemptId;
+      }
+
+      // 映射题目格式
+      const mappedQuestions: DiagnosticQuestion[] = (data.data?.questions || []).map((q: any) => {
+        let questionText = '';
+        let options: string[] | undefined;
+        let explanation: string | undefined;
+
+        if (typeof q.content === 'string') {
+          try {
+            const parsed = JSON.parse(q.content);
+            questionText = parsed.question || q.content;
+            options = parsed.options;
+            explanation = parsed.explanation;
+          } catch {
+            questionText = q.content;
+          }
+        } else if (q.content && typeof q.content === 'object') {
+          questionText = q.content.question || '';
+          options = q.content.options;
+          explanation = q.content.explanation;
+        }
+
+        return {
+          id: q.id,
+          type: q.type,
+          question: questionText,
+          answer: q.answer,
+          options: options,
+          explanation: explanation,
+        };
+      });
+
+      setQuestions(mappedQuestions);
+    } catch (err) {
+      console.error('Failed to start assessment:', err);
+      setError(err instanceof Error ? err.message : '获取题目失败');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  const handleComplete = async (result: { accuracy: number; adaptiveAction: any; score: number; answers: (string | null)[]; correctCount?: number }) => {
+    console.log('Diagnostic completed:', result, 'attemptId:', attemptIdRef.current);
+
+    if (attemptIdRef.current) {
+      // 将 answers 和 questionIds 添加到 URL 参数，避免重新计算导致不一致
+      const answersParam = encodeURIComponent(JSON.stringify(result.answers));
+      const questionIdsParam = encodeURIComponent(JSON.stringify(questions.map(q => q.id)));
+
+      router.push(
+        `/assessment/result?attemptId=${attemptIdRef.current}` +
+        `&difficulty=${result.adaptiveAction?.nextDifficulty || 6}` +
+        `&answers=${answersParam}` +
+        `&questionIds=${questionIdsParam}` +
+        `&accuracy=${result.accuracy}`  // 传递前端计算的 accuracy
+      );
+    } else {
+      // 降级：跳转到首页
+      router.push('/');
+    }
   };
 
   // 加载状态
@@ -77,15 +205,32 @@ export default function DiagnosticPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4 max-w-md mx-auto p-6">
-          <div className="text-4xl">⚠️</div>
-          <h2 className="text-xl font-bold text-on-surface">加载失败</h2>
+          <div className="text-4xl">{showRetry ? '📋' : '⚠️'}</div>
+          <h2 className="text-xl font-bold text-on-surface">{showRetry ? '初始测评已完成' : '加载失败'}</h2>
           <p className="text-on-surface-variant">{error}</p>
-          <button
-            onClick={() => router.push('/assessment')}
-            className="px-6 py-3 bg-secondary text-white rounded-full hover:bg-secondary/90 transition-colors"
-          >
-            返回测评页面
-          </button>
+          {showRetry ? (
+            <div className="space-y-3">
+              <button
+                onClick={handleRetry}
+                className="px-6 py-3 bg-secondary text-white rounded-full hover:bg-secondary/90 transition-colors w-full"
+              >
+                重新诊断测评
+              </button>
+              <button
+                onClick={() => router.push('/assessment/result')}
+                className="px-6 py-3 border border-secondary text-secondary rounded-full hover:bg-secondary/10 transition-colors w-full"
+              >
+                查看测评结果
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => router.push('/')}
+              className="px-6 py-3 bg-secondary text-white rounded-full hover:bg-secondary/90 transition-colors"
+            >
+              返回首页
+            </button>
+          )}
         </div>
       </div>
     );
@@ -99,13 +244,13 @@ export default function DiagnosticPage() {
           <div className="text-4xl">📋</div>
           <h2 className="text-xl font-bold text-on-surface">暂无诊断题目</h2>
           <p className="text-on-surface-variant">
-            当前没有可用的诊断题目，请稍后再试
+            当前没有可用的诊断题目，请先在教材管理中添加知识点并开启诊断测评功能
           </p>
           <button
-            onClick={() => router.push('/assessment')}
+            onClick={() => router.push('/me')}
             className="px-6 py-3 bg-secondary text-white rounded-full hover:bg-secondary/90 transition-colors"
           >
-            返回测评页面
+            去配置教材
           </button>
         </div>
       </div>
@@ -115,6 +260,7 @@ export default function DiagnosticPage() {
   return (
     <DiagnosticMode
       questions={questions}
+      attemptId={attemptIdRef.current || ''}
       onComplete={handleComplete}
     />
   );

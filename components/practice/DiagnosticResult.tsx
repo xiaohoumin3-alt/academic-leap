@@ -1,13 +1,17 @@
 'use client';
 
-import { Check, X, ChevronRight } from 'lucide-react';
+import { Check, X, ChevronRight, RefreshCw, Brain } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { DiagnosticResult as DiagnosticResultType } from '@/hooks/useDiagnosticFlow';
+import type { DiagnosticResult as DiagnosticResultType, AdaptiveAction } from '@/hooks/useDiagnosticFlow';
 
 interface DiagnosticResultProps {
   result: DiagnosticResultType;
   onRestart: () => void;
   onViewAnalysis: () => void;
+  currentDifficulty?: number;
+  adaptiveAction?: AdaptiveAction;
+  onRetryDiagnostic?: (nextDifficulty: number) => void;
+  onEnterPractice?: () => void;
 }
 
 /**
@@ -18,6 +22,10 @@ export function DiagnosticResult({
   result,
   onRestart,
   onViewAnalysis,
+  currentDifficulty,
+  adaptiveAction,
+  onRetryDiagnostic,
+  onEnterPractice,
 }: DiagnosticResultProps) {
   const { accuracy, correctCount, wrongCount, wrongQuestions, earnedXP } = result;
 
@@ -148,30 +156,92 @@ export function DiagnosticResult({
         </div>
       )}
 
-      {/* 操作按钮 */}
+      {/* 操作按钮 - 自适应逻辑 */}
       <div className="flex justify-center gap-4">
-        <button
-          onClick={onRestart}
-          className={cn(
-            'px-6 py-3 rounded-full font-semibold',
-            'bg-surface-container text-on-surface',
-            'hover:bg-surface-container-high transition-colors',
-            'border border-outline'
-          )}
-        >
-          再测一次
-        </button>
-        <button
-          onClick={onViewAnalysis}
-          className={cn(
-            'px-6 py-3 rounded-full font-semibold flex items-center gap-2',
-            'bg-primary text-white',
-            'hover:bg-primary/90 transition-colors'
-          )}
-        >
-          查看完整分析
-          <ChevronRight className="w-4 h-4" />
-        </button>
+        {/* 重新测评按钮（自适应动作） */}
+        {adaptiveAction?.type === 'retry_diagnostic' && onRetryDiagnostic && (
+          <button
+            onClick={() => onRetryDiagnostic(adaptiveAction.nextDifficulty!)}
+            className={cn(
+              'px-8 py-3 rounded-full font-semibold flex items-center gap-2',
+              'bg-tertiary text-white',
+              'hover:bg-tertiary/90 transition-colors'
+            )}
+          >
+            <RefreshCw className="w-4 h-4" />
+            重新测评
+            {currentDifficulty && adaptiveAction.nextDifficulty && (
+              <span className="text-sm font-normal opacity-80">
+                (难度 {currentDifficulty} → {adaptiveAction.nextDifficulty})
+              </span>
+            )}
+            {adaptiveAction.reason && (
+              <span className="text-xs opacity-80">({adaptiveAction.reason})</span>
+            )}
+          </button>
+        )}
+
+        {/* 进入练习按钮（自适应动作） */}
+        {adaptiveAction?.type === 'enter_practice' && onEnterPractice && (
+          <button
+            onClick={onEnterPractice}
+            className={cn(
+              'px-8 py-3 rounded-full font-semibold flex items-center gap-2',
+              'bg-success text-white',
+              'hover:bg-success/90 transition-colors'
+            )}
+          >
+            <Brain className="w-4 h-4" />
+            开始查漏补缺
+            {adaptiveAction.reason && (
+              <span className="text-xs opacity-80">({adaptiveAction.reason})</span>
+            )}
+          </button>
+        )}
+
+        {/* 默认按钮（无自适应动作时） */}
+        {!adaptiveAction && (
+          <>
+            <button
+              onClick={onRestart}
+              className={cn(
+                'px-6 py-3 rounded-full font-semibold',
+                'bg-surface-container text-on-surface',
+                'hover:bg-surface-container-high transition-colors',
+                'border border-outline'
+              )}
+            >
+              再测一次
+            </button>
+            <button
+              onClick={onViewAnalysis}
+              className={cn(
+                'px-6 py-3 rounded-full font-semibold flex items-center gap-2',
+                'bg-primary text-white',
+                'hover:bg-primary/90 transition-colors'
+              )}
+            >
+              查看完整分析
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </>
+        )}
+
+        {/* 查看分析按钮（始终显示） */}
+        {adaptiveAction && (
+          <button
+            onClick={onViewAnalysis}
+            className={cn(
+              'px-6 py-3 rounded-full font-semibold flex items-center gap-2',
+              'bg-surface-container text-on-surface',
+              'hover:bg-surface-container-high transition-colors',
+              'border border-outline'
+            )}
+          >
+            查看分析
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </div>
   );

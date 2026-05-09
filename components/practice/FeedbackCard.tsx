@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { Check, X, ChevronRight } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 
 interface FeedbackCardProps {
   correctAnswer: string | string[];
@@ -14,8 +14,8 @@ interface FeedbackCardProps {
 }
 
 /**
- * 反馈卡片
- * 显示正确答案、解释、掌握度变化，并提供"记住了"/"记错了"按钮
+ * 反馈卡片 - 简化版
+ * 只显示核心信息：正确答案 + 掌握度变化
  */
 export function FeedbackCard({
   correctAnswer,
@@ -28,105 +28,80 @@ export function FeedbackCard({
 }: FeedbackCardProps) {
   const masteryChange = masteryAfter - masteryBefore;
   const changePercent = Math.round(masteryChange * 100);
-  const beforePercent = Math.round(masteryBefore * 100);
-  const afterPercent = Math.round(masteryAfter * 100);
+  const isImprovement = masteryChange >= 0;
 
   return (
-    <div className="space-y-4">
-      {/* 正确答案 */}
-      <div className={cn(
-        'p-6 rounded-2xl border-2',
-        'bg-success-container/20 border-success'
-      )}>
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-8 h-8 rounded-xl bg-success flex items-center justify-center">
-            <Check className="w-5 h-5 text-white" />
-          </div>
-          <span className="text-sm font-bold text-success uppercase tracking-wide">
-            正确答案
-          </span>
-        </div>
-        <div className="text-xl font-semibold text-on-surface">
+    <div className="space-y-5">
+      {/* 正确答案 - 大字体显示 */}
+      <div className="text-center py-4">
+        <p className="text-sm text-on-surface-variant mb-2">正确答案</p>
+        <p className="text-2xl font-bold text-on-surface">
           {Array.isArray(correctAnswer) ? correctAnswer[0] : correctAnswer}
+        </p>
+      </div>
+
+      {/* 掌握度变化 - 简化为一个小标签 */}
+      <div className="flex justify-center">
+        <div className={cn(
+          'inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold',
+          isImprovement
+            ? 'bg-primary-container text-on-primary-container'
+            : 'bg-error-container text-on-error-container'
+        )}>
+          <span>
+            {isImprovement ? '+' : ''}{changePercent}%
+          </span>
+          <span className="text-xs opacity-80">
+            {isImprovement ? '掌握度提升' : '需要加强'}
+          </span>
         </div>
       </div>
 
-      {/* 解释 */}
+      {/* 解释 - 可折叠显示，默认收起 */}
       {explanation && (
-        <div className="p-6 rounded-2xl bg-surface-container border border-outline/30">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-xl bg-secondary-container flex items-center justify-center">
-              <span className="text-sm font-bold text-on-secondary-container">i</span>
-            </div>
-            <span className="text-sm font-bold text-secondary uppercase tracking-wide">
-              解释
-            </span>
-          </div>
-          <div className="text-sm leading-relaxed text-on-surface-variant">
+        <details className="group">
+          <summary className="cursor-pointer text-sm text-on-surface-variant hover:text-on-surface transition-colors list-none flex items-center gap-1">
+            <span className="group-open:rotate-90 transition-transform">▶</span>
+            查看解释
+          </summary>
+          <p className="mt-2 text-sm text-on-surface-variant pl-5 leading-relaxed">
             {explanation}
-          </div>
-        </div>
+          </p>
+        </details>
       )}
 
-      {/* 掌握度变化 */}
-      <div className={cn(
-        'p-6 rounded-2xl text-center',
-        masteryAfter >= masteryBefore
-          ? 'bg-primary-container/20 border-2 border-primary'
-          : 'bg-error-container/20 border-2 border-error'
-      )}>
-        <div className="flex items-center justify-center gap-3 mb-2">
-          <span className="text-2xl font-bold text-on-surface-variant">
-            {beforePercent}%
-          </span>
-          <ChevronRight className="w-5 h-5 text-on-surface-variant" />
-          <span className={cn(
-            'text-3xl font-bold',
-            masteryAfter >= masteryBefore ? 'text-primary' : 'text-error'
-          )}>
-            {afterPercent}%
-          </span>
-        </div>
-        <div className={cn(
-          'text-base font-semibold',
-          masteryAfter >= masteryBefore ? 'text-primary' : 'text-error'
-        )}>
-          {masteryAfter >= masteryBefore ? '+' : ''}{changePercent}% 掌握度{changePercent >= 0 ? '提升' : '下降'}
-        </div>
-      </div>
-
-      {/* 操作按钮 */}
-      <div className="flex gap-4">
-        {/* 记错了按钮 */}
+      {/* 操作按钮 - 简化样式，更大更清晰 */}
+      <div className="flex gap-3 pt-2">
+        {/* 记错了按钮 - 灰色样式 */}
         <button
           onClick={onForgot}
           disabled={isLoading}
           className={cn(
-            'flex-1 flex items-center justify-center gap-2 p-4 rounded-2xl',
-            'bg-error-container text-error font-semibold',
-            'hover:bg-error/20 transition-colors',
+            'flex-1 flex flex-col items-center gap-1 p-4 rounded-xl',
+            'bg-surface-container text-on-surface font-semibold',
+            'hover:bg-surface-container-high transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         >
-          <X className="w-5 h-5" />
+          <X className="w-6 h-6" />
           <span>记错了</span>
-          <span className="text-sm font-normal opacity-80">(+2 XP)</span>
+          <span className="text-xs text-on-surface-variant">+2 XP</span>
         </button>
 
-        {/* 记住了按钮 */}
+        {/* 记住了按钮 - 强调样式，深色文字 */}
         <button
           onClick={onRemembered}
           disabled={isLoading}
           className={cn(
-            'flex-1 flex items-center justify-center gap-2 p-4 rounded-2xl',
-            'bg-success text-white font-semibold',
-            'hover:bg-success/90 transition-colors',
+            'flex-1 flex flex-col items-center gap-1 p-4 rounded-xl',
+            'bg-primary text-on-primary font-bold',
+            'hover:bg-primary/90 transition-colors shadow-md',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         >
-          <Check className="w-5 h-5" />
+          <Check className="w-6 h-6" />
           <span>记住了</span>
-          <span className="text-sm font-normal opacity-90">(+10 XP)</span>
+          <span className="text-xs opacity-80">+10 XP</span>
         </button>
       </div>
     </div>

@@ -20,7 +20,7 @@ export interface HelpUsage {
 }
 
 export interface DifficultyConfig {
-  level: number;        // 当前难度等级 1-5
+  level: number;        // 当前难度等级 1-12
   consecutiveCorrect: number;  // 连续正确次数
   consecutiveWrong: number;    // 连续错误次数
   recentAccuracy: number;      // 最近准确率
@@ -49,6 +49,13 @@ const DIFFICULTY_RULES = {
     maxRecentAccuracy: 0.4,    // 最近准确率低于40%
     minTotalAnswered: 5,       // 至少答5题
   },
+  // 诊断测评专用规则
+  diagnostic: {
+    MIN: 1,
+    MAX: 12,
+    TARGET_MIN: 60,  // 目标区间下限（百分比）
+    TARGET_MAX: 89,  // 目标区间上限
+  },
 };
 
 /**
@@ -73,7 +80,7 @@ export function calculateDifficultyAdjustment(
 
   // 检查是否应该提升难度
   if (
-    level < 5 &&
+    level < 12 &&
     newConsecutiveCorrect >= DIFFICULTY_RULES.promote.minConsecutiveCorrect &&
     newRecentAccuracy >= DIFFICULTY_RULES.promote.minRecentAccuracy &&
     newTotalAnswered >= DIFFICULTY_RULES.promote.minTotalAnswered
@@ -111,14 +118,21 @@ export function calculateDifficultyAdjustment(
  * 获取难度描述
  */
 export function getDifficultyDescription(level: number): string {
-  const descriptions = {
+  const descriptions: Record<number, string> = {
     1: '入门 - 基础练习',
     2: '简单 - 逐步提升',
     3: '中等 - 正式挑战',
     4: '困难 - 综合运用',
     5: '专家 - 极限挑战',
+    6: '进阶1',
+    7: '进阶2',
+    8: '进阶3',
+    9: '高阶1',
+    10: '高阶2',
+    11: '高阶3',
+    12: '大师',
   };
-  return descriptions[level as keyof typeof descriptions] || '中等';
+  return descriptions[level] || '中等';
 }
 
 /**
@@ -191,7 +205,7 @@ export function createAdaptiveDifficultySystem(
   initialState: Partial<AdaptiveDifficultyState> = {}
 ) {
   const state: AdaptiveDifficultyState = {
-    level: initialState.level ?? 2,
+    level: initialState.level ?? 6,
     consecutiveCorrect: initialState.consecutiveCorrect ?? 0,
     consecutiveWrong: initialState.consecutiveWrong ?? 0,
     recentAccuracy: initialState.recentAccuracy ?? 0.5,
@@ -203,9 +217,15 @@ export function createAdaptiveDifficultySystem(
     getState: () => state,
 
     recordAnswer: (isCorrect: boolean, duration: number) => {
-      const adjustment = calculateDifficultyAdjustment(state, isCorrect);
+      // 创建答题前状态快照（用于难度计算）
+      const beforeState = {
+        consecutiveCorrect: state.consecutiveCorrect,
+        consecutiveWrong: state.consecutiveWrong,
+        totalAnswered: state.totalAnswered,
+        recentAccuracy: state.recentAccuracy,
+      };
 
-      // 更新状态
+      // 更新答题后状态
       if (isCorrect) {
         state.consecutiveCorrect++;
         state.consecutiveWrong = 0;
@@ -213,9 +233,17 @@ export function createAdaptiveDifficultySystem(
         state.consecutiveWrong++;
         state.consecutiveCorrect = 0;
       }
-
       state.totalAnswered++;
-      state.recentAccuracy = (state.recentAccuracy * (state.totalAnswered - 1) + (isCorrect ? 1 : 0)) / state.totalAnswered;
+      state.recentAccuracy = (beforeState.recentAccuracy * beforeState.totalAnswered + (isCorrect ? 1 : 0)) / state.totalAnswered;
+
+      // 基于答题前状态计算难度调整
+      const adjustment = calculateDifficultyAdjustment({
+        level: state.level,
+        consecutiveCorrect: beforeState.consecutiveCorrect,
+        consecutiveWrong: beforeState.consecutiveWrong,
+        recentAccuracy: beforeState.recentAccuracy,
+        totalAnswered: beforeState.totalAnswered,
+      }, isCorrect);
 
       // 应用难度调整
       if (adjustment.shouldAdjust) {
@@ -238,7 +266,7 @@ export function createAdaptiveDifficultySystem(
     },
 
     reset: () => {
-      state.level = 2;
+      state.level = 6;
       state.consecutiveCorrect = 0;
       state.consecutiveWrong = 0;
       state.recentAccuracy = 0.5;
@@ -247,7 +275,7 @@ export function createAdaptiveDifficultySystem(
     },
 
     setLevel: (newLevel: number) => {
-      if (newLevel >= 1 && newLevel <= 5) {
+      if (newLevel >= 1 && newLevel <= 12) {
         state.level = newLevel;
       }
     },
@@ -333,4 +361,64 @@ export function getIndependenceDescription(level: HelpLevel): string {
     'L2': '需要步骤辅助，建议回顾基础知识',
   };
   return descriptions[level];
+}
+
+// ==================== 诊断测评专用函数 ====================
+
+/**
+ * 根据测评分数计算下一轮难度（1-12级）
+ * @param currentDifficulty 当前难度（1-12）
+ * @param accuracy 测评正确率（0-100）
+ * @returns 下一轮难度（1-12）
+ */
+export function calculateNextDiagnosticDifficulty(
+  currentDifficulty: number,
+  accuracy: number
+): number {
+  const { MIN, MAX, TARGET_MIN } = DIFFICULTY_RULES.diagnostic;
+
+  // 目标区间内：不调整
+  if (accuracy >= TARGET_MIN && accuracy < 90) {
+    return currentDifficulty;
+  }
+
+  let adjustment = 0;
+
+  if (accuracy < 50) {
+    adjustment = -3;  // 远超能力
+  } else if (accuracy < TARGET_MIN) {
+    adjustment = -1;  // 略超能力
+  } else if (accuracy >= 90 && accuracy < 95) {
+    adjustment = +1;  // 略低能力
+  } else if (accuracy >= 95) {
+    adjustment = +2;  // 远低能力
+  }
+
+  return Math.max(MIN, Math.min(MAX, currentDifficulty + adjustment));
+}
+
+/**
+ * 判断是否应该进入练习模式
+ * @param accuracy 测评正确率（0-100）
+ * @returns true=进入练习, false=重新测评
+ */
+export function shouldEnterPracticeMode(accuracy: number): boolean {
+  const { TARGET_MIN } = DIFFICULTY_RULES.diagnostic;
+  return accuracy >= TARGET_MIN && accuracy < 90;
+}
+
+/**
+ * 检查是否为边界情况（最低/最高难度）
+ */
+export function isDiagnosticBoundaryCase(
+  currentDifficulty: number,
+  accuracy: number
+): { isBoundary: boolean; reason?: string } {
+  if (accuracy < 60 && currentDifficulty === DIFFICULTY_RULES.diagnostic.MIN) {
+    return { isBoundary: true, reason: '最低难度' };
+  }
+  if (accuracy >= 90 && currentDifficulty === DIFFICULTY_RULES.diagnostic.MAX) {
+    return { isBoundary: true, reason: '最高难度' };
+  }
+  return { isBoundary: false };
 }

@@ -60,11 +60,22 @@ async function registerAndLogin(page: Page) {
 
   // 提交登录
   await page.click('button[type="submit"]');
-  await page.waitForTimeout(3000);
 
-  // 验证登录成功
+  // 等待登录重定向到首页（成功）或停留在登录页（失败）
+  try {
+    await page.waitForURL(/\/($|\?)/, { timeout: 5000 });
+  } catch {
+    // URL没变化，继续
+  }
+
+  // 验证登录成功 - URL应该不再是/login
   const currentUrl = page.url();
   console.log('登录后URL:', currentUrl);
+
+  // 如果还在登录页，说明登录失败
+  if (currentUrl.includes('/login') && !currentUrl.includes('/?')) {
+    throw new Error('登录失败 - 仍在登录页面');
+  }
 
   return { email: testEmail, password: testPassword };
 }

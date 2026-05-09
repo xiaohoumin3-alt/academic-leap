@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { MixedText } from './MathRenderer';
 
 export interface QuestionData {
   id: string;
@@ -56,7 +57,7 @@ export function QuestionRenderer({
         <div className="text-lg leading-relaxed text-on-surface">
           {questionText.split(/_{3,}/).map((part, i, arr) => (
             <span key={i}>
-              {part}
+              <MixedText text={part} />
               {i < arr.length - 1 && (
                 <input
                   type="text"
@@ -88,17 +89,23 @@ export function QuestionRenderer({
 
   // 渲染选择题
   const renderMultipleChoice = () => {
+    // 去掉选项文本中的 A. B. C. D. 前缀，避免重复显示
+    const cleanOptions = options?.map((option) => {
+      return option.replace(/^[A-D]\.\s*/, '');
+    });
+
     return (
       <div className="space-y-3">
-        {options?.map((option, i) => {
+        {cleanOptions?.map((option, i) => {
           const optionLetter = String.fromCharCode(65 + i); // A, B, C, D
-          const correct = isCorrect(option);
-          const isSelected = typeof userAnswer === 'string' && userAnswer === option;
+          // 使用单个字母作为答案（与数据库 answer 字段格式一致）
+          const correct = isCorrect(optionLetter);
+          const isSelected = typeof userAnswer === 'string' && userAnswer === optionLetter;
 
           return (
             <button
               key={i}
-              onClick={() => !disabled && onAnswerChange?.(option)}
+              onClick={() => !disabled && onAnswerChange?.(optionLetter)}
               disabled={disabled}
               className={cn(
                 'w-full p-4 rounded-2xl border-2 text-left transition-all',
@@ -122,7 +129,7 @@ export function QuestionRenderer({
               )}>
                 {optionLetter}
               </div>
-              <span className="flex-1 text-on-surface">{option}</span>
+              <span className="flex-1 text-on-surface"><MixedText text={option} /></span>
             </button>
           );
         })}
@@ -149,7 +156,7 @@ export function QuestionRenderer({
         {showResult && (
           <div className="p-4 bg-surface-container rounded-2xl border border-outline/30">
             <div className="text-xs text-on-surface-variant uppercase font-bold mb-2">参考答案</div>
-            <div className="text-on-surface">{Array.isArray(answer) ? answer[0] : answer}</div>
+            <div className="text-on-surface"><MixedText text={Array.isArray(answer) ? answer[0] : answer} /></div>
           </div>
         )}
       </div>
@@ -168,16 +175,25 @@ export function QuestionRenderer({
         </span>
       </div>
 
-      {/* 题目内容 */}
-      <p className="text-xl leading-relaxed text-on-surface font-medium">
-        {questionText}
-      </p>
-
       {/* 答题区域 */}
       <div className="p-4 bg-surface-container-low rounded-2xl">
         {type === 'fill_blank' && renderFillBlank()}
-        {type === 'multiple_choice' && renderMultipleChoice()}
-        {type === 'short_answer' && renderShortAnswer()}
+        {type === 'multiple_choice' && (
+          <>
+            <p className="text-xl leading-relaxed text-on-surface font-medium mb-4">
+              <MixedText text={questionText} />
+            </p>
+            {renderMultipleChoice()}
+          </>
+        )}
+        {type === 'short_answer' && (
+          <>
+            <p className="text-xl leading-relaxed text-on-surface font-medium mb-4">
+              <MixedText text={questionText} />
+            </p>
+            {renderShortAnswer()}
+          </>
+        )}
       </div>
     </div>
   );

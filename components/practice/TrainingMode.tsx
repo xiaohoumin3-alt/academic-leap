@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, BookOpen, Lightbulb } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -9,6 +9,8 @@ import { ProgressIndicator } from './ProgressIndicator';
 import { FeedbackCard } from './FeedbackCard';
 import { QuestionRenderer, type QuestionData } from './QuestionRenderer';
 import { usePracticeFlow, type PracticeQuestion } from '@/hooks/usePracticeFlow';
+import { BehaviorBadge, FeedbackPopup, DifficultyChange, useDifficultyNotification, type BehaviorTag } from '@/components/BehaviorFeedback';
+import { calculateBehaviorTag } from '@/lib/adaptive-difficulty';
 
 // XP奖励常量
 const XP_REWARDS = {
@@ -16,13 +18,17 @@ const XP_REWARDS = {
   FORGOT: 2,
 };
 
+// 行为反馈显示时长（毫秒）
+const BEHAVIOR_FEEDBACK_DURATION = 2000;
+
 interface TrainingModeProps {
   questions: PracticeQuestion[];
   onComplete?: (results: { total: number; correct: number; xpEarned: number }) => void;
   onFeedback?: (questionId: string, remembered: boolean) => Promise<{ masteryBefore: number; masteryAfter: number } | null>;
+  onDifficultyChange?: (newLevel: number) => void;
 }
 
-export function TrainingMode({ questions, onComplete, onFeedback }: TrainingModeProps) {
+export function TrainingMode({ questions, onComplete, onFeedback, onDifficultyChange }: TrainingModeProps) {
   const router = useRouter();
   const [xpEarned, setXpEarned] = useState(0);
   const [feedbackState, setFeedbackState] = useState<{
@@ -31,6 +37,16 @@ export function TrainingMode({ questions, onComplete, onFeedback }: TrainingMode
     correctAnswer: string;
     explanation?: string;
   } | null>(null);
+
+  // 行为反馈状态
+  const [currentBehavior, setCurrentBehavior] = useState<BehaviorTag | null>(null);
+  const [showBehaviorPopup, setShowBehaviorPopup] = useState(false);
+
+  // 答题开始时间
+  const answerStartTimeRef = useRef<number>(0);
+
+  // 难度变更通知
+  const { notification: difficultyNotification, showNotification, closeNotification, NotificationComponent: DifficultyNotificationComponent } = useDifficultyNotification();
 
   const flow = usePracticeFlow(questions, async (results) => {
     const xp = results.correct * XP_REWARDS.REMEMBERED + (results.total - results.correct) * XP_REWARDS.FORGOT;
@@ -51,11 +67,64 @@ export function TrainingMode({ questions, onComplete, onFeedback }: TrainingMode
       return result;
     }
     return null;
+  }, (questionIndex, remembered) => {
+    // 每答完一题就更新XP
+    const xpToAdd = remembered ? XP_REWARDS.REMEMBERED : XP_REWARDS.FORGOT;
+    setXpEarned(prev => prev + xpToAdd);
   });
 
+  // 监听难度变化并通知父组件
+  useEffect(() => {
+    if (flow.difficultyAdjustment?.shouldAdjust) {
+      onDifficultyChange?.(flow.difficultyLevel);
+      showNotification(
+        flow.difficultyAdjustment.newLevel > flow.difficultyLevel ? 'up' : 'down',
+        flow.difficultyAdjustment.reason
+      );
+    }
+  }, [flow.difficultyAdjustment, flow.difficultyLevel, onDifficultyChange, showNotification]);
+
+  // 开始答题时记录时间
+  const handleStartAnswer = useCallback(() => {
+    answerStartTimeRef.current = Date.now();
+  }, []);
+
+  // 监听题目切换，自动记录答题开始时间
+  useEffect(() => {
+    if (flow.state === 'answering' && flow.currentQuestion) {
+      handleStartAnswer();
+    }
+  }, [flow.currentIndex, flow.state, flow.currentQuestion, handleStartAnswer]);
+
   const handleGoBack = () => {
-    router.push('/practice');
+    router.push('/');
   };
+
+  // 处理记住/忘记按钮
+  const handleRemembered = useCallback(() => {
+    console.log('[TrainingMode] handleRemembered called');
+    const duration = Date.now() - answerStartTimeRef.current;
+    const behavior = calculateBehaviorTag(duration, true) as BehaviorTag;
+    setCurrentBehavior(behavior);
+    setShowBehaviorPopup(true);
+
+    // 显示行为标签后自动关闭
+    setTimeout(() => setShowBehaviorPopup(false), BEHAVIOR_FEEDBACK_DURATION);
+
+    flow.handleFeedback(true, duration);
+  }, [flow]);
+
+  const handleForgot = useCallback(() => {
+    const duration = Date.now() - answerStartTimeRef.current;
+    const behavior = calculateBehaviorTag(duration, false) as BehaviorTag;
+    setCurrentBehavior(behavior);
+    setShowBehaviorPopup(true);
+
+    // 显示行为标签后自动关闭
+    setTimeout(() => setShowBehaviorPopup(false), BEHAVIOR_FEEDBACK_DURATION);
+
+    flow.handleFeedback(false, duration);
+  }, [flow]);
 
   // 渲染答题状态
   const renderAnsweringState = () => {
@@ -80,24 +149,28 @@ export function TrainingMode({ questions, onComplete, onFeedback }: TrainingMode
         {/* 题目内容 */}
         <div className={cn(
           'p-6 rounded-2xl bg-surface-container',
-          'border border-outline/20'
+          'border border-outline/20',
+          'relative' // 用于定位 BehaviorBadge
         )}>
+          {/* 行为标签 - 秒数显示 */}
+          {currentBehavior && (
+            <BehaviorBadge
+              tag={currentBehavior}
+              show={flow.state === 'answering'}
+              position="top-right"
+            />
+          )}
+
           {question.type === 'fill_blank' ? (
-            <div className="space-y-4">
-              <p className="text-lg text-on-surface leading-relaxed">
-                {question.question}
-              </p>
-              <div className="p-4 bg-surface-container-low rounded-2xl">
-                <ClozeInput
-                  question={question.question}
-                  answers={parsedAnswers}
-                  userAnswers={flow.userAnswers}
-                  onAnswerChange={(index, value) => {
-                    const newAnswers = [...flow.userAnswers];
-                    newAnswers[index] = value;
-                  }}
-                />
-              </div>
+            <div className="p-4 bg-surface-container-low rounded-2xl">
+              <ClozeInput
+                question={question.question}
+                answers={parsedAnswers}
+                userAnswers={flow.userAnswers}
+                onAnswerChange={(index, value) => {
+                  flow.handleAnswerChange(index, value);
+                }}
+              />
             </div>
           ) : (
             <QuestionRenderer
@@ -113,7 +186,10 @@ export function TrainingMode({ questions, onComplete, onFeedback }: TrainingMode
         {/* 显示答案按钮 */}
         <div className="flex justify-center">
           <button
-            onClick={flow.showAnswer}
+            onClick={() => {
+              handleStartAnswer();
+              flow.showAnswer();
+            }}
             className={cn(
               'px-8 py-3 rounded-full font-semibold',
               'bg-primary text-white',
@@ -131,16 +207,16 @@ export function TrainingMode({ questions, onComplete, onFeedback }: TrainingMode
   // 渲染反馈状态
   const renderShowingAnswerState = () => {
     const question = flow.currentQuestion;
-    if (!question || !feedbackState) return null;
+    if (!question) return null;
 
     return (
       <FeedbackCard
-        correctAnswer={feedbackState.correctAnswer}
-        explanation={feedbackState.explanation}
-        masteryBefore={feedbackState.masteryBefore}
-        masteryAfter={feedbackState.masteryAfter}
-        onRemembered={() => flow.handleFeedback(true)}
-        onForgot={() => flow.handleFeedback(false)}
+        correctAnswer={feedbackState?.correctAnswer || (Array.isArray(question.answer) ? question.answer[0] : question.answer) || ''}
+        explanation={feedbackState?.explanation || question.explanation}
+        masteryBefore={feedbackState?.masteryBefore ?? 0}
+        masteryAfter={feedbackState?.masteryAfter ?? 0}
+        onRemembered={handleRemembered}
+        onForgot={handleForgot}
       />
     );
   };
@@ -149,6 +225,37 @@ export function TrainingMode({ questions, onComplete, onFeedback }: TrainingMode
   const renderCompletedState = () => {
     return (
       <div className="text-center space-y-6 py-8">
+        {/* 再测评提示（满足条件时显示） */}
+        {flow.totalAnswered >= 10 && flow.accuracy >= 90 && (
+          <div className={cn(
+            'p-6 rounded-2xl bg-gradient-to-r from-green-50 to-emerald-50',
+            'border-2 border-green-500 text-left'
+          )}>
+            <div className="flex items-center gap-4">
+              <div className="text-4xl">🏆</div>
+              <div className="flex-1">
+                <div className="font-bold text-green-800">掌握度达标！</div>
+                <div className="text-sm text-green-700">
+                  已完成{flow.totalAnswered}题，正确率{flow.accuracy}%
+                </div>
+                <div className="text-xs text-green-600 mt-1">
+                  建议重新测评验证学习成果
+                </div>
+              </div>
+              <button
+                onClick={() => router.push('/assessment/diagnostic')}
+                className={cn(
+                  'px-4 py-2 rounded-full font-semibold',
+                  'bg-green-600 text-white',
+                  'hover:bg-green-700 transition-colors'
+                )}
+              >
+                重新测评
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="w-16 h-16 rounded-full bg-success-container flex items-center justify-center mx-auto">
           <BookOpen className="w-8 h-8 text-success" />
         </div>
@@ -219,10 +326,25 @@ export function TrainingMode({ questions, onComplete, onFeedback }: TrainingMode
         </div>
         <div>
           <h1 className="text-lg font-semibold text-on-surface">练习模式</h1>
-          <p className="text-xs text-on-surface-variant">即时反馈，深入理解</p>
+          <p className="text-xs text-on-surface-variant">
+            即时反馈，深入理解
+            {/* 难度等级 */}
+            <span className="ml-2 text-primary">
+              Lv.{flow.difficultyLevel}
+            </span>
+          </p>
         </div>
         {/* XP显示 */}
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          {/* 连续正确提示 */}
+          {flow.consecutiveCorrect > 0 && (
+            <span className={cn(
+              'px-2 py-1 rounded-full text-xs font-bold',
+              'bg-success-container text-on-success-container'
+            )}>
+              {flow.consecutiveCorrect}连
+            </span>
+          )}
           <span className={cn(
             'px-3 py-1 rounded-full text-sm font-bold',
             'bg-tertiary-container text-on-tertiary-container'
@@ -246,6 +368,18 @@ export function TrainingMode({ questions, onComplete, onFeedback }: TrainingMode
       {flow.state === 'showing_answer' && renderShowingAnswerState()}
       {flow.state === 'completed' && renderCompletedState()}
       {flow.state === 'error' && renderErrorState()}
+
+      {/* 行为反馈弹窗 */}
+      {showBehaviorPopup && currentBehavior && (
+        <FeedbackPopup
+          behavior={currentBehavior}
+          duration={BEHAVIOR_FEEDBACK_DURATION}
+          onClose={() => setShowBehaviorPopup(false)}
+        />
+      )}
+
+      {/* 难度变更通知 */}
+      {DifficultyNotificationComponent}
     </div>
   );
 }

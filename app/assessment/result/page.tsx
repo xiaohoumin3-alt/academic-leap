@@ -4,39 +4,19 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import MaterialIcon from '@/components/MaterialIcon';
 
-interface GuidanceData {
-  level: 1 | 2 | 3 | 4 | 5;
-  diagnosis: string;
-  title: string;
-  message: string;
-  nextActions: Array<{
-    type: string;
-    title: string;
-    description: string;
-    action: string;
-  }>;
-  practiceConfig: {
-    difficulty: number;
-    hintEnabled: boolean;
-    encouragementMode: boolean;
-  };
-  primaryButton: {
-    label: string;
-    action: string;
-    style: 'primary' | 'success' | 'warning';
-  };
-}
-
-interface TargetStrategy {
-  status: string;
-  message: string;
-  dailyTarget?: number;
-  estimatedDays?: number;
+interface AdaptiveAction {
+  type: 'enter_practice' | 'retry_diagnostic';
+  nextDifficulty?: number;
+  reason?: string;
 }
 
 interface AssessmentResultData {
   assessmentId?: string;  // 用于学习路径生成
   attemptId?: string;
+  // 诊断决策
+  accuracy?: number;
+  adaptiveAction?: AdaptiveAction;
+  // 等效分相关
   score: number;
   range?: string;
   rangeLow?: number;
@@ -47,13 +27,8 @@ interface AssessmentResultData {
   masteredKnowledgePoints?: string[];
   untestedKnowledgePoints?: string[];  // 新增：未测试的知识点
   recommendedDifficulty?: number;
-  message?: string;
-  guidance?: GuidanceData;
-  targetStrategy?: TargetStrategy;
-  // ExerciseResult 兼容字段
-  correctCount?: number;
-  totalCount?: number;
-  difficultyLevel?: number;
+  // 题目详情
+  questionResults?: any[];
 }
 
 const AssessmentResultContent: React.FC = () => {
@@ -64,14 +39,19 @@ const AssessmentResultContent: React.FC = () => {
   const [fetchingAnalysis, setFetchingAnalysis] = useState(false);
   const [generatingPath, setGeneratingPath] = useState(false);
   const [pathGenerated, setPathGenerated] = useState(false);
+  const [showQuestionDetails, setShowQuestionDetails] = useState(false);
+  const [questionDetails, setQuestionDetails] = useState<any>(null);
+  const [fetchingDetails, setFetchingDetails] = useState(false);
   const isRetry = searchParams.get('retry') === 'true';
   const initialDifficulty = parseInt(searchParams.get('difficulty') || '3', 10);
   const attemptId = searchParams.get('attemptId');
 
   // 判断是否适合生成学习路径 (60-89分)
-  const canGeneratePath = result && result.score >= 60 && result.score < 90 && result.guidance;
-  // 判断是否需要重新测评
-  const needsRetyAssessment = result && (result.score < 60 || result.score >= 90);
+  const canGeneratePath = result && result.score >= 60 && result.score < 90;
+  // 判断是否需要重新测评（根据 adaptiveAction）
+  const needsRetry = result?.adaptiveAction?.type === 'retry_diagnostic';
+  // 判断是否适合进入练习
+  const canEnterPractice = result?.adaptiveAction?.type === 'enter_practice';
 
   useEffect(() => {
     const loadAssessmentResult = async () => {
@@ -79,12 +59,35 @@ const AssessmentResultContent: React.FC = () => {
       if (attemptId) {
         try {
           setFetchingAnalysis(true);
+
+          // 从 URL 参数获取答案数据（诊断测评时通过 URL 传递）
+          const answersParam = searchParams.get('answers');
+          const questionIdsParam = searchParams.get('questionIds');
+          const currentDifficultyParam = parseInt(searchParams.get('difficulty') || '6', 10);
+          const frontendAccuracy = searchParams.get('accuracy') ? parseInt(searchParams.get('accuracy')!, 10) : undefined;
+
+          let answers: (string | null)[] = [];
+          let questionIds: string[] = [];
+
+          if (answersParam && questionIdsParam) {
+            try {
+              answers = JSON.parse(decodeURIComponent(answersParam));
+              questionIds = JSON.parse(decodeURIComponent(questionIdsParam));
+            } catch (e) {
+              console.error('解析答案数据失败:', e);
+            }
+          }
+
           const response = await fetch('/api/assessment/finish', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               attemptId,
-              answers: [] // 答题记录已在服务端通过 practiceApi.submit 保存
+              answers,
+              questionIds,
+              currentDifficulty: currentDifficultyParam,
+              // 传递前端计算的 accuracy，避免重复计算导致不一致
+              frontendAccuracy,
             }),
           });
           const data = await response.json();
@@ -92,36 +95,44 @@ const AssessmentResultContent: React.FC = () => {
             setResult(data.data);
           } else {
             console.error('获取测评分析失败:', data.error);
-            // 降级：使用URL传递的数据
-            loadFallbackData();
           }
         } catch (e) {
           console.error('调用测评分析API失败:', e);
-          loadFallbackData();
         } finally {
           setLoading(false);
           setFetchingAnalysis(false);
         }
       } else {
-        // 降级：使用URL传递的数据
-        loadFallbackData();
+        setLoading(false);
       }
-    };
-
-    const loadFallbackData = () => {
-      const data = searchParams.get('data');
-      if (data) {
-        try {
-          setResult(JSON.parse(decodeURIComponent(data)));
-        } catch (e) {
-          console.error('解析结果失败:', e);
-        }
-      }
-      setLoading(false);
     };
 
     loadAssessmentResult();
   }, [searchParams, router, attemptId]);
+
+  // 获取详细的答题记录
+  const fetchQuestionDetails = async () => {
+    if (!attemptId || showQuestionDetails) return;
+
+    setFetchingDetails(true);
+    try {
+      const response = await fetch(`/api/assessment/details?attemptId=${attemptId}`);
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        setQuestionDetails(data.data);
+        setShowQuestionDetails(true);
+      } else {
+        console.error('获取题目详情失败:', data.error);
+        alert('获取题目详情失败');
+      }
+    } catch (error) {
+      console.error('调用题目详情API失败:', error);
+      alert('网络错误，请检查网络连接后重试');
+    } finally {
+      setFetchingDetails(false);
+    }
+  };
 
   // 生成学习路径并跳转到AI建议页面
   const handleGenerateLearningPath = async () => {
@@ -173,20 +184,28 @@ const AssessmentResultContent: React.FC = () => {
 
   const getScoreLabel = (score: number) => {
     if (isRetry) {
-      if (score >= 90) return 'Level 7 挑战成功';
-      if (score >= 75) return 'Level 6 挑战成功';
-      if (score >= 60) return 'Level 5 稳步提升';
-      if (score >= 40) return 'Level 4 需继续努力';
-      return 'Level 3 重新出发';
+      if (score >= 90) return '挑战成功';
+      if (score >= 75) return '表现优秀';
+      if (score >= 60) return '稳步提升';
+      if (score >= 40) return '继续努力';
+      return '重新出发';
     }
-    if (score >= 90) return '天才挑战者';
+    if (score >= 90) return '表现优秀';
     if (score >= 75) return '进阶能手';
     if (score >= 60) return '稳步提升';
     if (score >= 40) return '需要努力';
     return '重新出发';
   };
 
-  const { bg, badge } = getLevelColor(result.guidance?.level);
+  // 根据正确率获取颜色
+  const getAccuracyColor = (accuracy: number) => {
+    if (accuracy >= 80) return { bg: 'from-green-500 to-emerald-600', badge: 'bg-green-100 text-green-700' };
+    if (accuracy >= 60) return { bg: 'from-primary to-primary-container', badge: 'bg-primary-container text-on-primary-container' };
+    if (accuracy >= 40) return { bg: 'from-yellow-500 to-orange-500', badge: 'bg-yellow-100 text-yellow-700' };
+    return { bg: 'from-orange-500 to-red-500', badge: 'bg-orange-100 text-orange-700' };
+  };
+
+  const accuracyColor = getAccuracyColor(result.accuracy || 0);
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-b from-primary/5 to-background">
@@ -199,69 +218,59 @@ const AssessmentResultContent: React.FC = () => {
 
       <div className="flex-1 px-6 py-4 overflow-y-auto">
         <div className="text-center mb-6">
-          <div className={`inline-flex items-center justify-center w-36 h-36 rounded-full bg-gradient-to-br ${bg} shadow-xl mb-4`}>
+          {/* 正确率圆环 */}
+          <div className={`inline-flex items-center justify-center w-36 h-36 rounded-full bg-gradient-to-br ${accuracyColor.bg} shadow-xl mb-4`}>
             <div className="text-center">
-              <p className="text-5xl font-black text-white">{result.score}</p>
-              <p className="text-xs text-white/70">分</p>
+              <p className="text-5xl font-black text-white">{result.accuracy || 0}</p>
+              <p className="text-xs text-white/70">%正确率</p>
             </div>
           </div>
-
-          {result.guidance && (
-            <span className={`inline-block px-4 py-1 rounded-full text-sm font-bold mb-3 ${badge}`}>
-              {result.guidance.title}
-            </span>
-          )}
 
           <h2 className="text-2xl font-bold text-on-surface mb-1">
             {getScoreLabel(result.score)}
           </h2>
           <p className="text-sm text-on-surface-variant">
-            波动区间：{result.range} 分
+            等效分：{result.score} 分（波动区间：{result.range}）
           </p>
 
-          {result.guidance && (
-            <p className="text-sm text-on-surface-variant mt-3 max-w-xs mx-auto">
-              {result.guidance.diagnosis}
-            </p>
+          {/* 诊断决策提示 */}
+          {result.adaptiveAction && (
+            <div className={`mt-3 px-4 py-2 rounded-full text-sm font-medium inline-block ${
+              result.adaptiveAction.type === 'enter_practice'
+                ? 'bg-green-100 text-green-700'
+                : 'bg-warning/10 text-warning'
+            }`}>
+              {result.adaptiveAction.type === 'enter_practice'
+                ? `难度合适，进入练习${result.adaptiveAction.reason ? `（${result.adaptiveAction.reason}）` : ''}`
+                : `建议重新测评，难度调整为 ${result.adaptiveAction.nextDifficulty} 级`
+              }
+            </div>
           )}
         </div>
 
-        {result.targetStrategy && result.targetStrategy.status !== 'achieved' && (
-          <div className="bg-surface-container-low rounded-2xl p-4 mb-4">
+        {/* 诊断决策卡片 */}
+        {result.adaptiveAction && (
+          <div className={`rounded-2xl p-4 mb-4 ${
+            result.adaptiveAction.type === 'enter_practice'
+              ? 'bg-green-50 border-2 border-green-200'
+              : 'bg-warning/10 border-2 border-warning/20'
+          }`}>
             <div className="flex items-center gap-2 mb-2">
-              <MaterialIcon icon="flag" className="text-primary" style={{ fontSize: '20px' }} />
-              <span className="font-bold text-on-surface">目标进度</span>
+              <MaterialIcon
+                icon={result.adaptiveAction.type === 'enter_practice' ? 'check_circle' : 'refresh'}
+                className={result.adaptiveAction.type === 'enter_practice' ? 'text-green-600' : 'text-warning'}
+                style={{ fontSize: '24px' }}
+              />
+              <span className="font-bold text-lg text-on-surface">
+                {result.adaptiveAction.type === 'enter_practice' ? '适合进入练习' : '建议重新测评'}
+              </span>
             </div>
-            <p className="text-sm text-on-surface-variant">{result.targetStrategy.message}</p>
-            {result.targetStrategy.estimatedDays && (
-              <p className="text-xs text-on-surface-variant mt-1">
-                预计 {result.targetStrategy.estimatedDays} 天达成
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* 只在降级模式下（没有完整guidance数据）才显示练习统计 */}
-        {!result.guidance && (
-          <div className="bg-surface-container-low rounded-2xl p-4 mb-4">
-            <h3 className="font-bold text-on-surface mb-3 flex items-center gap-2">
-              <MaterialIcon icon="school" className="text-primary" style={{ fontSize: '20px' }} />
-              练习统计
-            </h3>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between py-2">
-                <span className="text-sm text-on-surface">正确率</span>
-                <span className="text-sm font-bold text-primary">
-                  {result.correctCount || 0}/{result.totalCount || 0}
-                </span>
-              </div>
-              <div className="flex items-center justify-between py-2">
-                <span className="text-sm text-on-surface">难度</span>
-                <span className="text-sm font-bold text-secondary">
-                  Level {result.difficultyLevel || initialDifficulty}
-                </span>
-              </div>
-            </div>
+            <p className="text-sm text-on-surface-variant">
+              {result.adaptiveAction.type === 'enter_practice'
+                ? `当前正确率 ${result.accuracy}% 处于目标区间 [60%, 90%)，可以开始针对性练习。${result.adaptiveAction.reason || ''}`
+                : `当前正确率 ${result.accuracy}% 不在目标区间，建议调整难度后重新测评。${result.adaptiveAction.nextDifficulty ? `新难度：${result.adaptiveAction.nextDifficulty}级` : ''}`
+              }
+            </p>
           </div>
         )}
 
@@ -317,6 +326,179 @@ const AssessmentResultContent: React.FC = () => {
           </div>
         )}
 
+        {/* 显示答题详情按钮 - 仅练习模式有详细记录，诊断测评不保存 */}
+        {/* 诊断模式不保存AttemptStep，所以暂时隐藏此功能 */}
+
+        {/* 每道题的判题结果 */}
+        {showQuestionDetails && questionDetails && questionDetails.questionResults && (
+          <div className="bg-surface-container-low rounded-2xl p-4 mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-on-surface flex items-center gap-2">
+                <MaterialIcon icon="quiz" className="text-primary" style={{ fontSize: '20px' }} />
+                题目详情
+              </h3>
+              <button
+                onClick={() => setShowQuestionDetails(false)}
+                className="text-sm text-primary hover:text-primary-dark"
+              >
+                收起
+              </button>
+            </div>
+
+            {/* 总览统计 */}
+            <div className="bg-surface rounded-xl p-3 mb-4">
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-2xl font-bold text-on-surface">{questionDetails.summary.totalQuestions}</p>
+                  <p className="text-xs text-on-surface-variant">总题数</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-success">{questionDetails.summary.correctCount}</p>
+                  <p className="text-xs text-on-surface-variant">正确</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-error">{questionDetails.summary.incorrectCount}</p>
+                  <p className="text-xs text-on-surface-variant">错误</p>
+                </div>
+              </div>
+              <div className="mt-3 text-center">
+                <span className="text-lg font-bold text-primary">
+                  正确率：{questionDetails.summary.correctRate}
+                </span>
+              </div>
+            </div>
+
+            {/* 题目列表 */}
+            <div className="space-y-3">
+              {questionDetails.questionResults.map((qr: any, index: number) => (
+                <div
+                  key={qr.id}
+                  className={`p-3 rounded-xl ${
+                    qr.isCorrect
+                      ? 'bg-success/10 border border-success/20'
+                      : 'bg-error/10 border border-error/20'
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <span className="text-xs text-on-surface-variant">第 {index + 1} 题</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-bold ${
+                        qr.isCorrect ? 'text-success' : 'text-error'
+                      }`}>
+                        {qr.isCorrect ? '正确' : '错误'}
+                      </span>
+                      {qr.duration > 0 && (
+                        <span className="text-xs text-on-surface-variant">
+                          用时: {(qr.duration / 1000).toFixed(1)}秒
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-sm text-on-surface mb-2">{qr.content}</p>
+
+                  {/* 选择题选项 */}
+                  {qr.options && qr.options.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-xs text-on-surface-variant mb-1">选项：</p>
+                      <div className="space-y-1">
+                        {qr.options.map((option: string, i: number) => {
+                          const isUserAnswer = qr.userAnswer === String.fromCharCode(65 + i); // A, B, C, D
+                          const isCorrectAnswer = qr.correctAnswer === String.fromCharCode(65 + i);
+                          return (
+                            <div
+                              key={i}
+                              className={`text-xs p-2 rounded ${
+                                isUserAnswer && isCorrectAnswer
+                                  ? 'bg-success/20 border border-success/30'
+                                  : isUserAnswer
+                                  ? 'bg-error/20 border border-error/30'
+                                  : isCorrectAnswer
+                                  ? 'bg-success/10 border border-success/20'
+                                  : 'bg-surface/50'
+                              }`}
+                            >
+                              <span className="font-medium mr-2">
+                                {String.fromCharCode(65 + i)}.
+                              </span>
+                              {option}
+                              {isUserAnswer && (
+                                <span className="ml-2 text-xs">
+                                  {isCorrectAnswer ? '✓ 你的答案' : '✗ 你的答案'}
+                                </span>
+                              )}
+                              {isCorrectAnswer && !isUserAnswer && (
+                                <span className="ml-2 text-xs text-success">✓ 正确答案</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 填空题答案 */}
+                  {(!qr.options || qr.options.length === 0) && (
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-on-surface-variant">你的答案：</span>
+                        <span className={qr.isCorrect ? 'text-success' : 'text-error'}>
+                          {qr.userAnswer || '(未作答)'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-on-surface-variant">正确答案：</span>
+                        <span className="text-success">{qr.correctAnswer}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {qr.knowledgePoints.length > 0 && (
+                    <div className="mt-2">
+                      <span className="text-xs text-on-surface-variant">知识点：</span>
+                      {qr.knowledgePoints.map((kp: string, i: number) => (
+                        <span key={i} className="text-xs bg-surface-container text-on-surface-variant px-2 py-0.5 rounded ml-1">
+                          {kp}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* 知识点统计 */}
+            {Object.keys(questionDetails.knowledgeStats).length > 0 && (
+              <div className="mt-4 pt-4 border-t border-surface-variant/20">
+                <h4 className="text-sm font-bold text-on-surface mb-2">知识点掌握情况</h4>
+                <div className="space-y-2">
+                  {Object.entries(questionDetails.knowledgeStats).map(([kp, stats]: [string, any]) => (
+                    <div key={kp} className="flex items-center justify-between text-xs">
+                      <span className="text-on-surface-variant">{kp}</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-20 bg-surface/50 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full ${
+                              stats.rate >= 80 ? 'bg-success' :
+                              stats.rate >= 60 ? 'bg-warning' : 'bg-error'
+                            }`}
+                            style={{ width: `${stats.rate}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-bold ${
+                          stats.rate >= 80 ? 'text-success' :
+                          stats.rate >= 60 ? 'text-warning' : 'text-error'
+                        }">
+                          {stats.rate}%
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 学习路径生成引导 (60-89分) */}
         {canGeneratePath && !pathGenerated && (
           <div className="bg-surface-container-low rounded-2xl p-4 mb-4">
@@ -369,68 +551,31 @@ const AssessmentResultContent: React.FC = () => {
           </div>
         )}
 
-        {/* 需要重新测评提示 (<60 或 >=90分) */}
-        {needsRetyAssessment && (
-          <div className="bg-warning/10 rounded-2xl p-4 mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <MaterialIcon icon="info" className="text-warning" style={{ fontSize: '20px' }} />
-              <h3 className="font-bold text-on-surface">测评结果说明</h3>
-            </div>
-            <p className="text-sm text-on-surface-variant">
-              {result.score < 60
-                ? '当前测评难度偏高，建议降低难度后重新测评，以获得更准确的学习路径推荐。'
-                : '当前测评难度偏低，建议提高难度后重新测评，挑战更高水平！'}
-            </p>
-          </div>
-        )}
-
-        {result.guidance && result.guidance.nextActions.length > 0 && (
-          <div className="bg-surface-container-low rounded-2xl p-4 mb-4">
-            <h3 className="font-bold text-on-surface mb-3 flex items-center gap-2">
-              <MaterialIcon icon="lightbulb" className="text-primary" style={{ fontSize: '20px' }} />
-              推荐下一步
-            </h3>
-            <div className="space-y-3">
-              {result.guidance.nextActions.slice(0, 2).map((action, idx) => (
-                <div key={idx} className="flex items-start gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                    result.guidance!.level >= 4 ? 'bg-green-100' :
-                    result.guidance!.level >= 3 ? 'bg-blue-100' : 'bg-yellow-100'
-                  }`}>
-                    <MaterialIcon
-                      icon={action.type === 'challenge' ? 'rocket' : action.type === 'preview' ? 'school' : 'play_arrow'}
-                      className={result.guidance!.level >= 4 ? 'text-green-600' : result.guidance!.level >= 3 ? 'text-blue-600' : 'text-yellow-600'}
-                      style={{ fontSize: '16px' }}
-                    />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-on-surface">{action.title}</p>
-                    <p className="text-xs text-on-surface-variant mt-0.5">{action.description}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {result.guidance && (
-          <div className={`rounded-2xl p-4 ${
-            result.guidance.level >= 4 ? 'bg-green-50' :
-            result.guidance.level >= 3 ? 'bg-blue-50' : 'bg-yellow-50'
-          }`}>
-            <p className="text-sm text-center text-on-surface">{result.guidance.message}</p>
-          </div>
-        )}
       </div>
 
-      <div className="px-6 py-4 bg-surface-container-highest border-t border-surface-variant/20">
+      {/* 底部操作按钮 */}
+      <div className="px-6 py-4 bg-surface-container-highest border-t border-surface-variant/20 space-y-3">
+        {/* 重新测评按钮 */}
+        {needsRetry && (
+          <button
+            onClick={() => router.push(`/assessment/diagnostic?retry=true&difficulty=${result.adaptiveAction?.nextDifficulty || initialDifficulty}`)}
+            className="w-full bg-gradient-to-r from-warning to-orange-500 text-white rounded-full py-4 px-6 flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 transition-all shadow-lg"
+          >
+            <MaterialIcon icon="refresh" className="fill-white" style={{ fontSize: '24px' }} />
+            <span className="font-display font-bold text-lg">
+              重新测评（新难度：{result.adaptiveAction?.nextDifficulty}级）
+            </span>
+          </button>
+        )}
+
+        {/* 开始练习按钮 */}
         <button
           onClick={() => router.push('/practice')}
           className="w-full bg-gradient-to-r from-primary to-primary-container text-on-primary rounded-full py-4 px-6 flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 transition-all shadow-lg"
         >
           <MaterialIcon icon="play_arrow" className="fill-on-primary" style={{ fontSize: '24px' }} />
           <span className="font-display font-bold text-lg">
-            {result.guidance?.primaryButton?.label || '开始练习'}
+            {canEnterPractice ? '开始练习' : '开始练习'}
           </span>
         </button>
       </div>
