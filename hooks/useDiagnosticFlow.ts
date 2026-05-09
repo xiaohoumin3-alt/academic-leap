@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { calculateNextDiagnosticDifficulty, shouldEnterPracticeMode, isDiagnosticBoundaryCase } from '@/lib/adaptive-difficulty';
 
-export type DiagnosticState = 'answering' | 'submitting' | 'result' | 'error';
+export type DiagnosticState = 'answering' | 'submitting' | 'result' | 'loading' | 'error';
 
 export interface DiagnosticQuestion {
   id: string;
@@ -24,6 +25,23 @@ export interface DiagnosticResult {
   wrongCount: number;
   wrongQuestions: DiagnosticWrongQuestion[];
   earnedXP: number;
+  answers?: (string | null)[]; // 添加答案数组
+}
+
+// 新增：诊断动作类型
+export type DiagnosticAction = 'enter_practice' | 'retry_diagnostic';
+
+// 新增：自适应动作
+export interface AdaptiveAction {
+  type: DiagnosticAction;
+  nextDifficulty?: number;
+  reason?: string;  // 边界情况原因
+}
+
+// 新增：扩展选项
+export interface DiagnosticFlowOptions {
+  currentDifficulty?: number;
+  onDifficultyChange?: (newDifficulty: number) => void;
 }
 
 export interface DiagnosticFlowResult {
@@ -36,6 +54,7 @@ export interface DiagnosticFlowResult {
   result: DiagnosticResult | null;
   progress: number;
   error?: Error;
+  adaptiveAction?: AdaptiveAction;  // 新增：自适应动作
 
   // 操作
   handleAnswer: (answer: string) => void;
@@ -43,21 +62,45 @@ export interface DiagnosticFlowResult {
   handleSubmit: () => Promise<void>;
   handleRestart: () => void;
   retry: () => void;
+  handleDiagnosticComplete: (result: DiagnosticResult) => AdaptiveAction;  // 新增：处理测评完成
 
   // 辅助
   isLastQuestion: boolean;
   hasAnswered: boolean;
 }
 
+// 新增：诊断决策函数（独立于hook）
+export function getDiagnosticDecision(
+  currentDifficulty: number,
+  accuracy: number
+): AdaptiveAction {
+  // 检查边界情况
+  const boundary = isDiagnosticBoundaryCase(currentDifficulty, accuracy);
+  if (boundary.isBoundary) {
+    return { type: 'enter_practice', reason: boundary.reason };
+  }
+
+  // 判断是否进入练习
+  if (shouldEnterPracticeMode(accuracy)) {
+    return { type: 'enter_practice' };
+  }
+
+  // 计算新难度并返回重新测评动作
+  const nextDifficulty = calculateNextDiagnosticDifficulty(currentDifficulty, accuracy);
+  return { type: 'retry_diagnostic', nextDifficulty };
+}
+
 export function useDiagnosticFlow(
   questions: DiagnosticQuestion[],
-  onComplete?: (result: DiagnosticResult) => void
+  onComplete?: (result: DiagnosticResult) => void,
+  options: DiagnosticFlowOptions = {}
 ): DiagnosticFlowResult {
   const [answers, setAnswers] = useState<(string | null)[]>(new Array(questions.length).fill(null));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [state, setState] = useState<DiagnosticState>('answering');
   const [result, setResult] = useState<DiagnosticResult | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const [adaptiveAction, setAdaptiveAction] = useState<AdaptiveAction | undefined>(undefined);
 
   const totalQuestions = questions.length;
   const currentQuestion = questions[currentIndex] || null;
@@ -81,19 +124,31 @@ export function useDiagnosticFlow(
     }
   }, [currentIndex, totalQuestions]);
 
+  // 标准化答案：如果是选择题（格式如 "A. xxx"），提取首字母
+  const normalizeAnswer = (ans: string): string => {
+    if (!ans) return '';
+    const trimmed = ans.trim();
+    // 检查是否是选择题格式（A. B. C. D. 开头）
+    const match = trimmed.match(/^([A-D])[.\s]/);
+    if (match) {
+      return match[1].toUpperCase();
+    }
+    return trimmed;
+  };
+
   // 检查答案是否正确
   const checkAnswer = (userAnswer: string | null, correctAnswer: string | string[]): boolean => {
     if (userAnswer === null) return false;
 
     if (Array.isArray(correctAnswer)) {
       if (typeof userAnswer === 'string') {
-        const normalizedUserAnswer = userAnswer.toLowerCase().trim();
-        return correctAnswer.some(ans => normalizedUserAnswer === ans.toLowerCase().trim());
+        const normalizedUserAnswer = normalizeAnswer(userAnswer).toLowerCase();
+        return correctAnswer.some(ans => normalizeAnswer(ans).toLowerCase() === normalizedUserAnswer);
       }
       return false;
     }
 
-    return userAnswer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
+    return normalizeAnswer(userAnswer).toLowerCase() === normalizeAnswer(correctAnswer).toLowerCase();
   };
 
   // 提交全部答案
@@ -108,6 +163,13 @@ export function useDiagnosticFlow(
       questions.forEach((q, i) => {
         const userAnswer = answers[i];
         const isCorrect = checkAnswer(userAnswer, q.answer);
+
+        // 调试：记录每道题的检查结果（清晰格式）
+        const normalizedUser = normalizeAnswer(userAnswer || '');
+        const correctAnswer = Array.isArray(q.answer) ? q.answer[0] : q.answer;
+        const normalizedCorrect = normalizeAnswer(correctAnswer);
+        console.log(`[useDiagnosticFlow] Q${i + 1}: user="${userAnswer}" → "${normalizedUser}" | correct="${correctAnswer}" → "${normalizedCorrect}" | ${isCorrect ? '✓正确' : '✗错误'}`);
+
 
         if (isCorrect) {
           correctCount++;
@@ -127,7 +189,10 @@ export function useDiagnosticFlow(
         wrongCount: totalQuestions - correctCount,
         wrongQuestions,
         earnedXP,
+        answers, // 添加答案数组
       };
+
+      console.log('[useDiagnosticFlow] Final result: accuracy=' + finalResult.accuracy + '%, correct=' + correctCount + '/' + totalQuestions);
 
       setResult(finalResult);
       setState('result');
@@ -153,6 +218,26 @@ export function useDiagnosticFlow(
     setState('answering');
   }, []);
 
+  // 新增：处理测评完成后的决策
+  const handleDiagnosticComplete = useCallback((diagResult: DiagnosticResult): AdaptiveAction => {
+    const currentDifficulty = options.currentDifficulty ?? 6;
+    const { accuracy } = diagResult;
+
+    // 使用决策函数
+    const action = getDiagnosticDecision(currentDifficulty, accuracy);
+
+    // 触发难度变化回调
+    if (action.type === 'retry_diagnostic' && action.nextDifficulty !== undefined) {
+      options.onDifficultyChange?.(action.nextDifficulty);
+    } else if (action.type === 'enter_practice') {
+      options.onDifficultyChange?.(currentDifficulty);
+    }
+
+    // 更新自适应动作状态
+    setAdaptiveAction(action);
+    return action;
+  }, [options]);
+
   return {
     state,
     currentIndex,
@@ -162,11 +247,13 @@ export function useDiagnosticFlow(
     result,
     progress,
     error: error || undefined,
+    adaptiveAction,  // 新增
     handleAnswer,
     handleNext,
     handleSubmit,
     handleRestart,
     retry,
+    handleDiagnosticComplete,  // 新增
     isLastQuestion: currentIndex === totalQuestions - 1,
     hasAnswered: answers[currentIndex] !== null,
   };
