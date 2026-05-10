@@ -150,6 +150,13 @@ export interface QuestionTemplate {
    */
   knowledgePoint: string;
 
+  /**
+   * 模板被选中的权重（相对于同知识点下的其他模板）
+   * 权重越高，被选中的概率越大
+   * 默认值为 1
+   */
+  weight?: number;
+
   // 1. 参数生成器（难度控制的关键）
   generateParams: (level: number) => Record<string, number>;
 

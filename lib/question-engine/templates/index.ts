@@ -66,7 +66,7 @@ export const TEMPLATE_REGISTRY: Record<string, QuestionTemplate> = {
   quadratic_factorize: QuadraticFactorizeTemplate,
   quadratic_growth: QuadraticGrowthTemplate,
   quadratic_area: QuadraticAreaTemplate,
-  quadratic_word_problem: QuadraticWordProblemTemplate,
+  quadratic_word_problem: QuadraticWordProblemTemplate, // 场景化应用题，权重较高
 
   // 数据分析（第20章）
   central_tendency: CentralTendencyTemplate,
@@ -180,7 +180,7 @@ export async function getTemplateIdsByKnowledgePointId(
 }
 
 /**
- * 根据知识点获取一个随机模板KEY
+ * 根据知识点获取一个随机模板KEY（加权随机）
  */
 export async function getTemplateIdByKnowledgePointId(
   knowledgePointId: string
@@ -189,7 +189,29 @@ export async function getTemplateIdByKnowledgePointId(
   if (templateKeys.length === 0) {
     return null;
   }
-  return templateKeys[Math.floor(Math.random() * templateKeys.length)];
+
+  // 加权随机选择：权重越高的模板被选中的概率越大
+  const weights: number[] = [];
+  let totalWeight = 0;
+
+  for (const key of templateKeys) {
+    const template = TEMPLATE_REGISTRY[key];
+    const w = template?.weight ?? 1;
+    weights.push(w);
+    totalWeight += w;
+  }
+
+  // 随机选择（基于权重）
+  let random = Math.random() * totalWeight;
+  for (let i = 0; i < templateKeys.length; i++) {
+    random -= weights[i];
+    if (random <= 0) {
+      return templateKeys[i];
+    }
+  }
+
+  // 兜底：返回第一个
+  return templateKeys[0];
 }
 
 /**

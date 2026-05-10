@@ -23,6 +23,7 @@ type WordProblemType = 'projectile_motion' | 'area_optimization' | 'max_profit' 
 export const QuadraticWordProblemTemplate: QuestionTemplate = {
   id: 'quadratic_word_problem',
   knowledgePoint: 'quadratic_word_problem',
+  weight: 3, // 场景化题目权重更高，提高覆盖率
 
   generateParams: (level: number) => {
     const config = DIFFICULTY_CONFIG.quadratic_word_problem[level] ||
@@ -226,12 +227,16 @@ export const QuadraticWordProblemTemplate: QuestionTemplate = {
         const outRate = b;
         context = `水箱以每分钟 ${inRate} 升的速度注水，同时以每分钟 ${outRate} 升的速度排水。求水箱中水量的净变化速度（结果保留两位小数，正数表示增加）`;
         break;
+      default:
+        // 兜底（理论上不会到达）
+        title = '应用题';
+        context = '请根据题意计算';
     }
 
     return {
-      title,
+      title: title!,
       description: '一元二次方程实际应用',
-      context,
+      context: context!,
     };
   },
 };
