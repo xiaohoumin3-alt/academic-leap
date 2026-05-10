@@ -1031,8 +1031,29 @@ export const DIFFICULTY_CONFIG: Record<string, Record<number, DifficultyLevelCon
       b: { type: 'int', min: 10, max: 25 },
     },
   },
+  quadratic_word_problem: {
+    1: {
+      a: { type: 'int', min: 3, max: 5 },
+      b: { type: 'int', min: 4, max: 6 },
+    },
+    2: {
+      a: { type: 'int', min: 4, max: 8 },
+      b: { type: 'int', min: 5, max: 10 },
+    },
+    3: {
+      a: { type: 'int', min: 5, max: 12 },
+      b: { type: 'int', min: 6, max: 15 },
+    },
+    4: {
+      a: { type: 'int', min: 6, max: 15 },
+      b: { type: 'int', min: 8, max: 20 },
+    },
+    5: {
+      a: { type: 'int', min: 8, max: 20 },
+      b: { type: 'int', min: 10, max: 25 },
+    },
+  },
 };
-
 /**
  * 根据约束生成随机参数
  */
