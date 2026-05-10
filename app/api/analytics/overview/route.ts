@@ -83,17 +83,37 @@ export async function GET(req: NextRequest) {
       take: 1000, // Limit for performance
     });
 
-    // 按知识点聚合
+    // 按知识点聚合 - 先预加载所有相关 KnowledgePoint 获取中文名称
+    const uniqueKpIds = new Set<string>();
+    for (const step of trainingKnowledgeMastery) {
+      const kpJson = step.questionStep?.question?.knowledgePoints || '[]';
+      try {
+        const kpIds: string[] = JSON.parse(kpJson);
+        kpIds.forEach(id => uniqueKpIds.add(id));
+      } catch {
+        // Skip invalid JSON
+      }
+    }
+
+    // 批量查询 KnowledgePoint 获取中文名称映射
+    const knowledgePoints = await prisma.knowledgePoint.findMany({
+      where: { id: { in: Array.from(uniqueKpIds) } },
+      select: { id: true, name: true },
+    });
+    const kpNameMap = new Map(knowledgePoints.map(kp => [kp.id, kp.name]));
+
+    // 聚合数据，使用中文名称而非ID
     const trainingKpMap = new Map<string, { correct: number; total: number; name: string }>();
     for (const step of trainingKnowledgeMastery) {
       const kpJson = step.questionStep?.question?.knowledgePoints || '[]';
       try {
         const kpIds: string[] = JSON.parse(kpJson);
         for (const kpId of kpIds) {
-          const existing = trainingKpMap.get(kpId) || { correct: 0, total: 0, name: kpId };
+          const displayName = kpNameMap.get(kpId) || kpId; // 回退到ID如果未找到
+          const existing = trainingKpMap.get(displayName) || { correct: 0, total: 0, name: displayName };
           existing.total += 1;
           if (step.isCorrect) existing.correct += 1;
-          trainingKpMap.set(kpId, existing);
+          trainingKpMap.set(displayName, existing);
         }
       } catch {
         // Skip invalid JSON
