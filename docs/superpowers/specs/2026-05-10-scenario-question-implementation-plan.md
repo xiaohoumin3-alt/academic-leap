@@ -1,8 +1,8 @@
-# 实施计划：一元二次方程场景化应用题模板（MVP）
+# 实施计划：一元二次方程场景化应用题模板（MVP - 修订版）
 
-**版本**: v1.0  
+**版本**: v1.1（修订版）  
 **日期**: 2026-05-10  
-**预计时间**: 3-4 小时（开发 + 验证）
+**预计时间**: 2.75 小时（开发 + 验证）
 
 ---
 
@@ -21,76 +21,57 @@
 
 | Step | Action | Verification Gate |
 |------|--------|-------------------|
-| 1.1 | 复制模板文件 | `test -f lib/question-engine/templates/chapter19/quadratic_word_problem.ts` → exit 0 |
-| 1.2 | 修改文件头注释 | `head -5 lib/question-engine/templates/chapter19/quadratic_word_problem.ts \| grep -q "一元二次方程应用题"` → exit 0 |
-| 1.3 | 修改类型定义（5个场景） | `grep -E "projectile_motion\|area_optimization\|max_profit\|bridge_design\|water_flow" lib/question-engine/templates/chapter19/quadratic_word_problem.ts \| wc -l` → ≥ 5 |
-| 1.4 | 修改模板 ID | `grep "quadratic_word_problem" lib/question-engine/templates/chapter19/quadratic_word_problem.ts \| grep -E "id:\|knowledgePoint:" \| wc -l` → 2 |
-| 1.5 | 修改场景配置 | `grep -A 1 "type:" lib/question-engine/templates/chapter19/quadratic_word_problem.ts \| grep -E "projectile_motion\|area_optimization\|max_profit\|bridge_design\|water_flow" \| wc -l` → 5 |
-| 1.6 | 修改难度配置引用 | `grep "DIFFICULTY_CONFIG.quadratic_word_problem" lib/question-engine/templates/chapter19/quadratic_word_problem.ts \| wc -l` → ≥ 1 |
-| 1.7 | 重写场景逻辑函数 | `grep -E "抛物运动\|面积优化\|最大利润\|桥梁设计\|水流问题" lib/question-engine/templates/chapter19/quadratic_word_problem.ts \| wc -l` → 5 |
-| 1.8 | 重写渲染函数 | `grep -E "抛物运动\|面积优化\|最大利润\|桥梁设计\|水流问题" lib/question-engine/templates/chapter19/quadratic_word_problem.ts \| wc -l` → ≥ 5 |
+| 1.1 | 复制模板文件 `cp lib/question-engine/templates/chapter17/pythagoras_word_problem.ts lib/question-engine/templates/chapter19/quadratic_word_problem.ts` | `test -f lib/question-engine/templates/chapter19/quadratic_word_problem.ts` → exit 0 |
+| 1.2 | 修改文件头注释为"一元二次方程应用题模板" | `head -5 lib/question-engine/templates/chapter19/quadratic_word_problem.ts \| grep -q "一元二次方程应用题"` → exit 0 |
+| 1.3 | 修改类型定义：`WordProblemType = 'projectile_motion' \| 'area_optimization' \| 'max_profit' \| 'bridge_design' \| 'water_flow'` | `grep -E "projectile_motion\|area_optimization\|max_profit\|bridge_design\|water_flow" lib/question-engine/templates/chapter19/quadratic_word_problem.ts \| wc -l` → ≥ 5 |
+| 1.4 | 修改模板 ID：`id: 'quadratic_word_problem'` 和 `knowledgePoint: 'quadratic_word_problem'` | `grep "quadratic_word_problem" lib/question-engine/templates/chapter19/quadratic_word_problem.ts \| grep -E "id:\|knowledgePoint:" \| wc -l` → 2 |
+| 1.5 | 修改 WORD_PROBLEM_TYPES 配置为 5 个新场景 | `grep -A 1 "type:" lib/question-engine/templates/chapter19/quadratic_word_problem.ts \| grep -E "projectile_motion\|area_optimization\|max_profit\|bridge_design\|water_flow" \| wc -l` → 5 |
+| 1.6 | 修改难度配置引用：`DIFFICULTY_CONFIG.quadratic_word_problem`（如果配置不存在，先添加到 `difficulty.ts`） | `grep "DIFFICULTY_CONFIG.quadratic_word_problem" lib/question-engine/templates/chapter19/quadratic_word_problem.ts \| wc -l` → ≥ 1 |
+| 1.7 | 重写 generateWordProblemData 函数的 5 个场景逻辑 | `grep -E "抛物运动\|面积优化\|最大利润\|桥梁设计\|水流问题" lib/question-engine/templates/chapter19/quadratic_word_problem.ts \| wc -l` → 5 |
+| 1.8 | 重写 render 函数的场景描述文本 | `grep -E "抛物运动\|面积优化\|最大利润\|桥梁设计\|水流问题" lib/question-engine/templates/chapter19/quadratic_word_problem.ts \| wc -l` → ≥ 5 |
 | 1.9 | TypeScript 编译检查 | `npx tsc --noEmit 2>&1 \| grep -i "quadratic_word_problem" \| wc -l` → 0 |
 
 ---
 
-## Phase 2: 添加难度配置（5 分钟）
+## Phase 2: 注册模板（5 分钟）
 
 | Step | Action | Verification Gate |
 |------|--------|-------------------|
-| 2.1 | 添加难度配置到 `difficulty.ts` | `grep -A 20 "quadratic_word_problem:" lib/question-engine/difficulty.ts \| grep "min:\|max:" \| wc -l` → ≥ 10 |
-| 2.2 | TypeScript 编译检查 | `npx tsc --noEmit 2>&1 \| grep -i "error" \| wc -l` → 0 |
+| 2.1 | 在 `lib/question-engine/templates/index.ts` 添加导入：`import { QuadraticWordProblemTemplate } from './chapter19/quadratic_word_problem';` | `grep "QuadraticWordProblemTemplate" lib/question-engine/templates/index.ts \| wc -l` → 1 |
+| 2.2 | 在 TEMPLATE_REGISTRY 中添加：`quadratic_word_problem: QuadraticWordProblemTemplate,` | `grep "quadratic_word_problem:" lib/question-engine/templates/index.ts \| wc -l` → 1 |
+| 2.3 | TypeScript 编译检查 | `npx tsc --noEmit 2>&1 \| grep -i "error" \| wc -l` → 0 |
 
 ---
 
-## Phase 3: 注册模板（5 分钟）
+## Phase 3: API 验证（15 分钟）
 
 | Step | Action | Verification Gate |
 |------|--------|-------------------|
-| 3.1 | 添加导入语句 | `grep "QuadraticWordProblemTemplate" lib/question-engine/templates/index.ts \| wc -l` → 1 |
-| 3.2 | 注册到 TEMPLATE_REGISTRY | `grep "quadratic_word_problem:" lib/question-engine/templates/index.ts \| wc -l` → 1 |
-| 3.3 | TypeScript 编译检查 | `npx tsc --noEmit 2>&1 \| grep -i "error" \| wc -l` → 0 |
+| 3.1 | 启动开发服务器 `npm run dev`（后台运行） | `sleep 5 && curl -s http://localhost:3000/api/health \| head -1` → 返回 HTTP 200 |
+| 3.2 | 调用生成 API | `curl -s -X POST http://localhost:3000/api/questions/generate -H "Content-Type: application/json" -d '{"knowledgePoint":"quadratic_function","difficulty":3,"count":5,"renderStyle":"standard"}' \| jq '.success'` → `true` |
+| 3.3 | 验证返回 5 道题目 | `curl -s -X POST http://localhost:3000/api/questions/generate -H "Content-Type: application/json" -d '{"knowledgePoint":"quadratic_function","difficulty":3,"count":5,"renderStyle":"standard"}' \| jq '.questions \| length'` → `5` |
+| 3.4 | 验证模板 ID | `curl -s -X POST http://localhost:3000/api/questions/generate -H "Content-Type: application/json" -d '{"knowledgePoint":"quadratic_function","difficulty":3,"count":1,"renderStyle":"standard"}' \| jq '.questions[0].templateId'` → `"quadratic_word_problem"` |
+| 3.5 | 验证场景化覆盖率 ≥ 60% | `curl -s -X POST http://localhost:3000/api/questions/generate -H "Content-Type: application/json" -d '{"knowledgePoint":"quadratic_function","difficulty":3,"count":5,"renderStyle":"standard"}' \| jq '[.questions[].content.context] \| map(select(. != null and (. \| test("抛物\\|面积\\|利润\\|桥梁\\|水流")))) \| length'` → ≥ 3 |
+| 3.6 | 验证题目内容长度 | `curl -s -X POST http://localhost:3000/api/questions/generate -H "Content-Type: application/json" -d '{"knowledgePoint":"quadratic_function","difficulty":3,"count":1,"renderStyle":"standard"}' \| jq '.questions[0].content.context' \| wc -c` → ≥ 50 |
 
 ---
 
-## Phase 4: 数据库注册（5 分钟）
+## Phase 4: 回归测试（5 分钟）
 
 | Step | Action | Verification Gate |
 |------|--------|-------------------|
-| 4.1 | 创建数据库记录 | `echo "SELECT id FROM Template WHERE templateKey = 'quadratic_word_problem';" \| sqlite3 prisma/dev.db` → 返回 1 行 |
-| 4.2 | 验证知识点关联 | `echo "SELECT k.name FROM KnowledgePoint k JOIN Template t ON t.knowledgeId = k.id WHERE t.templateKey = 'quadratic_word_problem';" \| sqlite3 prisma/dev.db` → 包含"一元二次方程"或"quadratic" |
+| 4.1 | 验证勾股定理模板仍正常工作 | `curl -s -X POST http://localhost:3000/api/questions/generate -H "Content-Type: application/json" -d '{"knowledgePoint":"pythagoras","difficulty":2,"count":1}' \| jq '.success'` → `true` |
+| 4.2 | 验证模板总数 ≥ 50 | `grep -c ":" lib/question-engine/templates/index.ts` → ≥ 50 |
 
 ---
 
-## Phase 5: API 验证（15 分钟）
+## Phase 5: 用户反馈收集（持续）
 
 | Step | Action | Verification Gate |
 |------|--------|-------------------|
-| 5.1 | 启动开发服务器 | `sleep 5 && curl -s http://localhost:3000/api/health \| head -1` → HTTP 200 |
-| 5.2 | 调用生成 API | `curl -s -X POST http://localhost:3000/api/questions/generate -H "Content-Type: application/json" -d '{"knowledgePoint":"quadratic_function","difficulty":3,"count":5}' \| jq '.success'` → `true` |
-| 5.3 | 验证返回 5 道题目 | `curl -s ... \| jq '.questions \| length'` → `5` |
-| 5.4 | 验证模板 ID | `curl -s ... \| jq '.questions[0].templateId'` → `"quadratic_word_problem"` |
-| 5.5 | 验证场景化覆盖率 ≥ 60% | `curl -s ... \| jq '[.questions[].content.context] \| map(select(. != null and (. \| test("抛物\\|面积\\|利润\\|桥梁\\|水流")))) \| length'` → ≥ 3 |
-| 5.6 | 验证题目内容长度 | `curl -s ... \| jq '.questions[0].content.context' \| wc -c` → ≥ 50 |
-
----
-
-## Phase 6: 回归测试（10 分钟）
-
-| Step | Action | Verification Gate |
-|------|--------|-------------------|
-| 6.1 | 验证勾股定理模板 | `curl -s -X POST http://localhost:3000/api/questions/generate -H "Content-Type: application/json" -d '{"knowledgePoint":"pythagoras","difficulty":2,"count":1}' \| jq '.success'` → `true` |
-| 6.2 | 验证其他二次函数模板 | `curl -s -X POST http://localhost:3000/api/questions/generate -H "Content-Type: application/json" -d '{"knowledgePoint":"quadratic_vertex","difficulty":2,"count":1}' \| jq '.success'` → `true` |
-| 6.3 | 验证模板总数 | `grep -c ":" lib/question-engine/templates/index.ts` → ≥ 50 |
-
----
-
-## Phase 7: 用户反馈收集（持续）
-
-| Step | Action | Verification Gate |
-|------|--------|-------------------|
-| 7.1 | 创建验证脚本 | `test -f scripts/verify-quadratic-template.sh` → exit 0 |
-| 7.2 | 运行验证脚本 | `bash scripts/verify-quadratic-template.sh` → exit 0 |
-| 7.3 | 生成样本题目 | `curl -s ... \| jq '.questions\[]' > /tmp/quadratic_samples.json` → file created |
+| 5.1 | 创建验证脚本 `scripts/verify-quadratic-template.sh` | `test -f scripts/verify-quadratic-template.sh` → exit 0 |
+| 5.2 | 运行验证脚本 | `bash scripts/verify-quadratic-template.sh` → exit 0 |
+| 5.3 | 生成样本题目 | `curl -s -X POST http://localhost:3000/api/questions/generate -H "Content-Type: application/json" -d '{"knowledgePoint":"quadratic_function","difficulty":3,"count":5,"renderStyle":"standard"}' \| jq '.questions\[] \| {id, templateId, context: .content.context}' > /tmp/quadratic_samples.json` → file created |
 
 ---
 
@@ -175,8 +156,7 @@ fi
 
 | 风险 | 概率 | 影响 | 缓解措施 |
 |------|------|------|----------|
-| 模板注册错误 | 中 | 高 | Phase 3 验证 TypeScript 编译 |
-| 数据库记录缺失 | 中 | 高 | Phase 4 专门验证数据库 |
+| 模板注册错误 | 中 | 高 | Phase 2 验证 TypeScript 编译 |
 | 场景化数学模型不准确 | 低 | 中 | 使用标准二次函数应用题模型 |
 | 用户反馈仍"幼稚" | 中 | 低 | 收集反馈后再决定是否调整 |
 
@@ -188,7 +168,6 @@ fi
 - [ ] TypeScript 编译无错误
 - [ ] 新模板文件创建成功
 - [ ] TEMPLATE_REGISTRY 包含新模板
-- [ ] 数据库中存在模板记录
 
 ### 功能验证
 - [ ] API 返回 `success: true`
@@ -198,19 +177,19 @@ fi
 
 ### 回归验证
 - [ ] 现有勾股定理模板正常
-- [ ] 其他二次函数模板正常
 - [ ] 模板总数 ≥ 50
 
 ---
 
-## 下一步
+## 修订说明
 
-**Phase 1-6 完成后**：
-- ✅ 开发完成
-- ✅ 功能验证通过
-- ✅ 回归测试通过
+**v1.1（修订版）变更**：
+- ❌ 删除 Phase 4（数据库注册）- 实际验证表明不需要
+- ✅ 简化 Phase 2（合并到 Phase 1）- 避免过度实施
+- ✅ 简化 Phase 6（从 3 个测试减少到 2 个）- 聚焦核心验证
+- ⏱️ 总时间：3.5小时 → 2.75小时
 
-**Phase 7（用户反馈）**：
-- 收集用户反馈
-- 如果评分 ≥ 4.0：扩展到其他知识点
-- 如果评分 < 4.0：调整场景内容
+**符合设计方案的要点**：
+- ✅ 只添加新模板，不修改数据库
+- ✅ 复制已验证的模式，不过度设计
+- ✅ 快速验证，收集用户反馈
