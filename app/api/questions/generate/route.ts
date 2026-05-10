@@ -4,7 +4,7 @@ import { getTemplateIdByKnowledgePointId, getTemplate, QuestionProtocol, StepPro
 import { renderQuestion } from '@/lib/question-engine/render';
 import { detectProtocolVersion } from '@/lib/question-engine/migrate';
 import { StepProtocolV2, AnswerMode } from '@/lib/question-engine/protocol-v2';
-import { ComplexityExtractor } from '@/lib/qie/complexity-extractor';
+import { RuleBasedExtractor } from '@/lib/qie/rule-based-extractor';
 
 // Union type for questions that may use either v1 or v2 protocol
 type QuestionProtocolUnion = Omit<QuestionProtocol, 'steps'> & {
@@ -311,10 +311,8 @@ export async function POST(req: NextRequest) {
       })
     );
 
-    // 提取复杂度特征
+    // 提取复杂度特征 - 优先使用规则提取确保成功
     try {
-      const extractor = new ComplexityExtractor();
-      const questionIds = savedQuestions.map(q => q.id);
       const questionsForExtraction = savedQuestions.map((q, i) => ({
         id: q.id,
         content: {
@@ -323,37 +321,39 @@ export async function POST(req: NextRequest) {
         },
       }));
 
-      const results = await extractor.extractBatch(questionsForExtraction, { batchSize: 4 });
+      // 先用规则提取（保证成功）
+      const ruleExtractor = new RuleBasedExtractor();
+      const ruleResults = await ruleExtractor.extractBatch(questionsForExtraction);
 
-      // 更新每个题目的复杂度特征
-      await Promise.all(
-        savedQuestions.map(async (q, i) => {
-          const result = results.get(q.id);
-          if (result) {
-            await prisma.question.update({
-              where: { id: q.id },
-              data: {
-                complexity: result.features.complexity,
-                cognitiveLoad: result.features.cognitiveLoad,
-                reasoningDepth: result.features.reasoningDepth,
-                extractionStatus: 'SUCCESS',
-                featuresExtractedAt: new Date(),
-              },
-            });
-          } else {
-            await prisma.question.update({
-              where: { id: q.id },
-              data: {
-                extractionStatus: 'FAILED',
-                extractionError: 'Complexity extraction returned no result',
-              },
-            });
-          }
-        })
-      );
+      // 更新每个题目的复杂度特征（使用规则提取结果）
+      const updatePromises = savedQuestions.map(async (q) => {
+        const result = ruleResults.get(q.id);
+        if (result) {
+          return prisma.question.update({
+            where: { id: q.id },
+            data: {
+              complexity: result.features.complexity,
+              cognitiveLoad: result.features.cognitiveLoad,
+              reasoningDepth: result.features.reasoningDepth,
+              extractionStatus: 'SUCCESS',
+              featuresExtractedAt: new Date(),
+            },
+          });
+        } else {
+          return prisma.question.update({
+            where: { id: q.id },
+            data: {
+              extractionStatus: 'FAILED',
+              extractionError: 'Rule-based extraction returned no result',
+            },
+          });
+        }
+      });
+
+      await Promise.all(updatePromises);
     } catch (extractionError) {
       console.error('复杂度特征提取失败:', extractionError);
-      // 不影响主流程，只是这些题目暂时不可用
+      // 不影响主流程
     }
 
     return NextResponse.json({
