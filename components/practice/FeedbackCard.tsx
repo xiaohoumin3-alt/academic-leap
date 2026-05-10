@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils';
 import { Check, X } from 'lucide-react';
+import MathRenderer from './MathRenderer';
 
 interface FeedbackCardProps {
   correctAnswer: string | string[];
@@ -30,14 +31,18 @@ export function FeedbackCard({
   const changePercent = Math.round(masteryChange * 100);
   const isImprovement = masteryChange >= 0;
 
+  // 处理多答案情况，取第一个用于显示
+  const displayAnswer = Array.isArray(correctAnswer) ? correctAnswer[0] : correctAnswer;
+
   return (
     <div className="space-y-5">
-      {/* 正确答案 - 大字体显示 */}
+      {/* 正确答案 - 大字体显示，渲染 LaTeX */}
       <div className="text-center py-4">
         <p className="text-sm text-on-surface-variant mb-2">正确答案</p>
-        <p className="text-2xl font-bold text-on-surface">
-          {Array.isArray(correctAnswer) ? correctAnswer[0] : correctAnswer}
-        </p>
+        <MathRenderer
+          text={displayAnswer || ''}
+          className="text-2xl font-bold text-on-surface [&>span]:text-2xl [&>span]:font-bold [&>span]:text-on-surface"
+        />
       </div>
 
       {/* 掌握度变化 - 简化为一个小标签 */}

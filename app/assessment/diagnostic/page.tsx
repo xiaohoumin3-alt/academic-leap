@@ -1,16 +1,16 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState, useEffect, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { DiagnosticMode } from '@/components/practice/DiagnosticMode';
 import type { DiagnosticQuestion } from '@/hooks/useDiagnosticFlow';
 
 /**
- * 诊断测评页面
- * 使用 assessment/start API 获取题目并创建 Attempt 记录
+ * 诊断测评内容组件（需要 Suspense 因为使用 useSearchParams）
  */
-export default function DiagnosticPage() {
+function DiagnosticContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [questions, setQuestions] = useState<DiagnosticQuestion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,11 +21,21 @@ export default function DiagnosticPage() {
   useEffect(() => {
     async function startAssessment() {
       try {
+        // 从 URL 读取 retry 和 difficulty 参数
+        const isRetry = searchParams.get('retry') === 'true';
+        const difficultyParam = searchParams.get('difficulty');
+        const requestedDifficulty = difficultyParam ? parseInt(difficultyParam, 10) : null;
+
+        const requestBody: { retry: boolean; difficulty?: number } = { retry: isRetry };
+        if (isRetry && requestedDifficulty !== null && !isNaN(requestedDifficulty)) {
+          requestBody.difficulty = requestedDifficulty;
+        }
+
         const response = await fetch('/api/assessment/start', {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ retry: false }),
+          body: JSON.stringify(requestBody),
         });
 
         const data = await response.json().catch(() => null);
@@ -37,12 +47,11 @@ export default function DiagnosticPage() {
 
         // 首先检查是否需要选择教材
         if (data.requireTextbookSelection) {
-          // 跳转到前台"我的"页面进行设置，而不是后台管理
           router.push('/me');
           return;
         }
 
-        // 检查是否已完成初始测评（独立检查，不管 success 是什么）
+        // 检查是否已完成初始测评
         if (data.data?.alreadyCompleted) {
           setError('您已完成初始测评（得分：' + (data.data?.score ?? 0) + '分）。如需重新诊断，请点击下方按钮。');
           setShowRetry(true);
@@ -61,7 +70,6 @@ export default function DiagnosticPage() {
 
         // 映射题目格式
         const mappedQuestions: DiagnosticQuestion[] = (data.data?.questions || []).map((q: any) => {
-          // 处理 content 可能是字符串或对象的情况
           let questionText = '';
           let options: string[] | undefined;
           let explanation: string | undefined;
@@ -101,7 +109,7 @@ export default function DiagnosticPage() {
     }
 
     startAssessment();
-  }, [router]);
+  }, [router, searchParams]);
 
   // 处理重新测评
   const handleRetry = async () => {
@@ -110,11 +118,20 @@ export default function DiagnosticPage() {
     setShowRetry(false);
 
     try {
+      // 从 URL 读取 difficulty 参数
+      const difficultyParam = searchParams.get('difficulty');
+      const requestedDifficulty = difficultyParam ? parseInt(difficultyParam, 10) : null;
+
+      const requestBody: { retry: boolean; difficulty?: number } = { retry: true };
+      if (requestedDifficulty !== null && !isNaN(requestedDifficulty)) {
+        requestBody.difficulty = requestedDifficulty;
+      }
+
       const response = await fetch('/api/assessment/start', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ retry: true }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json().catch(() => null);
@@ -123,12 +140,10 @@ export default function DiagnosticPage() {
         throw new Error(data?.error || '获取题目失败');
       }
 
-      // 保存 attemptId 用于后续提交
       if (data.data?.attemptId) {
         attemptIdRef.current = data.data.attemptId;
       }
 
-      // 映射题目格式
       const mappedQuestions: DiagnosticQuestion[] = (data.data?.questions || []).map((q: any) => {
         let questionText = '';
         let options: string[] | undefined;
@@ -167,11 +182,11 @@ export default function DiagnosticPage() {
       setIsLoading(false);
     }
   };
+
   const handleComplete = async (result: { accuracy: number; adaptiveAction: any; score: number; answers: (string | null)[]; correctCount?: number }) => {
     console.log('Diagnostic completed:', result, 'attemptId:', attemptIdRef.current);
 
     if (attemptIdRef.current) {
-      // 将 answers 和 questionIds 添加到 URL 参数，避免重新计算导致不一致
       const answersParam = encodeURIComponent(JSON.stringify(result.answers));
       const questionIdsParam = encodeURIComponent(JSON.stringify(questions.map(q => q.id)));
 
@@ -180,10 +195,9 @@ export default function DiagnosticPage() {
         `&difficulty=${result.adaptiveAction?.nextDifficulty || 6}` +
         `&answers=${answersParam}` +
         `&questionIds=${questionIdsParam}` +
-        `&accuracy=${result.accuracy}`  // 传递前端计算的 accuracy
+        `&accuracy=${result.accuracy}`
       );
     } else {
-      // 降级：跳转到首页
       router.push('/');
     }
   };
@@ -263,5 +277,24 @@ export default function DiagnosticPage() {
       attemptId={attemptIdRef.current || ''}
       onComplete={handleComplete}
     />
+  );
+}
+
+/**
+ * 诊断测评页面
+ * 使用 Suspense wrapper 因为 useSearchParams 需要动态渲染
+ */
+export default function DiagnosticPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 border-4 border-secondary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-on-surface-variant">正在加载...</p>
+        </div>
+      </div>
+    }>
+      <DiagnosticContent />
+    </Suspense>
   );
 }

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { getGradeDifficultyRange, getAssessmentStartLevel } from '@/lib/assessment-utils';
 import { generateAndSaveCards } from '@/lib/ai/generation';
 import type { QuestionType } from '@/lib/ai/generation';
 
@@ -79,26 +78,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 根据年级计算难度范围和起始难度
-    const userGrade = user.grade || 7;
-    const targetScore = user.targetScore || 80;
-
-    // 计算起始难度：优先使用传入的 difficulty，否则按原有逻辑计算
-    let startDifficulty: number;
-    if (requestedDifficulty !== null) {
-      // 传入的难度必须验证范围 1-12
-      startDifficulty = Math.max(1, Math.min(12, requestedDifficulty));
-    } else if (retry) {
-      // retry模式：根据上次的分数计算新难度
-      startDifficulty = getAssessmentStartLevel(userGrade, targetScore);
-      if ((user.initialAssessmentScore ?? 0) >= 90) {
-        startDifficulty = Math.min(startDifficulty + 2, 10);
-      }
-    } else {
-      // 首次测评
-      startDifficulty = getAssessmentStartLevel(userGrade, targetScore);
-    }
-    const { min: minDifficulty, max: maxDifficulty } = getGradeDifficultyRange(userGrade);
+    // 目标难度：首次测评固定5，retry模式使用传入参数
+    const targetDifficulty = requestedDifficulty ?? 5;
 
     // 获取参与测评的知识点（限制在用户选择的教材范围内）
     const knowledgePointWhere: any = {
@@ -124,17 +105,8 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // 限制测评知识点数量（最多7个知识点）- 随机选择避免重复
-    const maxKnowledgePoints = 7;
-    // Fisher-Yates 洗牌算法打乱知识点顺序
-    const shuffledKnowledgePoints = [...knowledgePoints];
-    for (let i = shuffledKnowledgePoints.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffledKnowledgePoints[i], shuffledKnowledgePoints[j]] = [shuffledKnowledgePoints[j], shuffledKnowledgePoints[i]];
-    }
-    const selectedKnowledgePoints = shuffledKnowledgePoints.slice(0, maxKnowledgePoints);
-
-    if (selectedKnowledgePoints.length === 0) {
+    // 验证有可用的测评知识点
+    if (knowledgePoints.length === 0) {
       return NextResponse.json({ success: false, error: '没有可用的测评知识点' }, { status: 400 });
     }
 
@@ -146,28 +118,32 @@ export async function POST(req: NextRequest) {
       content: any;
       knowledgePoint: string;
       stepCount: number;
-      answer: string;  // 添加 answer 字段
+      answer: string;
     }> = [];
 
-    // 第一步：轮询取题（每知识点每轮取1道，确保均匀分布）
+    // 全局轮询取题（确保覆盖多个知识点）
     const targetCount = 10;  // 目标题目数
     const usedQuestionIds = new Set<string>();
-    const maxRounds = Math.ceil(targetCount / selectedKnowledgePoints.length);
+    const minDiff = retry ? Math.max(1, targetDifficulty - 1) : 4;
+    const maxDiff = retry ? Math.min(12, targetDifficulty + 1) : 6;
 
-    for (let round = 0; round < maxRounds && questions.length < targetCount; round++) {
-      for (const kp of selectedKnowledgePoints) {
+    // 轮询所有知识点取题（最多20轮确保取够题目）
+    const kpIds = knowledgePoints.map(kp => kp.id);
+    const kpMap = new Map(knowledgePoints.map(kp => [kp.id, kp]));
+
+    for (let round = 0; round < 20 && questions.length < targetCount; round++) {
+      for (const kpId of kpIds) {
         if (questions.length >= targetCount) break;
-
-        const queryDifficulty = retry ? startDifficulty : minDifficulty;
 
         const question = await prisma.question.findFirst({
           where: {
-            knowledgePoints: { contains: kp.id },
+            knowledgePoints: { contains: kpId },
             id: { notIn: Array.from(usedQuestionIds) },
             difficulty: {
-              gte: queryDifficulty,
-              lte: retry ? queryDifficulty + 1 : maxDifficulty,
+              gte: minDiff,
+              lte: maxDiff,
             },
+            type: 'multiple_choice',  // 诊断测评只出选择题
           },
           select: {
             id: true,
@@ -194,10 +170,11 @@ export async function POST(req: NextRequest) {
             content = { question: '题目解析失败' };
           }
 
+          const kp = kpMap.get(kpId)!;
           questions.push({
             id: question.id,
             type: question.type,
-            difficulty: startDifficulty,
+            difficulty: targetDifficulty,
             content,
             knowledgePoint: kp.name,
             stepCount: question.steps?.length ?? 1,
@@ -212,7 +189,7 @@ export async function POST(req: NextRequest) {
     if (questions.length < targetCount) {
       // 获取知识点详情（用于 AI 生成）
       const kpDetails = await prisma.knowledgePoint.findMany({
-        where: { id: { in: selectedKnowledgePoints.map(kp => kp.id) } },
+        where: { id: { in: knowledgePoints.map(kp => kp.id) } },
         include: {
           concept: true,
           chapter: {
@@ -239,11 +216,11 @@ export async function POST(req: NextRequest) {
         contentParts.push(`教材: ${textbook.name} (${textbook.grade}年级)`);
       }
 
-      const generationContent = contentParts.join('\n\n') || `生成关于 ${selectedKnowledgePoints[0]?.name} 的题目`;
+      const generationContent = contentParts.join('\n\n') || `生成关于 ${knowledgePoints[0]?.name} 的题目`;
 
       // 如果没有可用内容，使用知识点名称作为后备
-      if (generationContent === `生成关于 ${selectedKnowledgePoints[0]?.name} 的题目`) {
-        console.warn(`[Assessment Start] 知识点 "${selectedKnowledgePoints[0]?.name}" 没有详细描述，仅使用名称生成`);
+      if (generationContent === `生成关于 ${knowledgePoints[0]?.name} 的题目`) {
+        console.warn(`[Assessment Start] 知识点 "${knowledgePoints[0]?.name}" 没有详细描述，仅使用名称生成`);
       }
 
       try {
@@ -253,11 +230,11 @@ export async function POST(req: NextRequest) {
         const timeout = parseInt(process.env.AI_GENERATION_TIMEOUT || '15000', 10);
 
         const generatePromise = generateAndSaveCards({
-          knowledgePointId: selectedKnowledgePoints[0]?.id || '',
+          knowledgePointId: knowledgePoints[0]?.id || '',
           content: generationContent,
-          types: ['fill_blank', 'multiple_choice'] as QuestionType[],
+          types: ['multiple_choice'] as QuestionType[],  // 诊断测评只生成选择题
           count: targetCount - questions.length,
-          difficulty: startDifficulty,
+          difficulty: targetDifficulty,
           onProgress: (batch, total, cards) => {
             console.log(`[Assessment Start] AI 生成进度: ${batch}/${total}, 生成了 ${cards.length} 道`);
           }
@@ -281,13 +258,13 @@ export async function POST(req: NextRequest) {
           return {
             id: q.id,
             type: q.type || q.question_type || 'fill_blank',
-            difficulty: q.difficulty || startDifficulty,
+            difficulty: q.difficulty || targetDifficulty,
             content: {
               question: parsedContent.question || '',
               options: parsedContent.options || [],
               explanation: parsedContent.explanation || ''
             },
-            knowledgePoint: selectedKnowledgePoints[0]?.name || 'AI生成',
+            knowledgePoint: knowledgePoints[0]?.name || 'AI生成',
             stepCount: 1,
             answer: q.answer || '',
             isAI: true,  // 标记为 AI 生成
@@ -348,7 +325,7 @@ export async function POST(req: NextRequest) {
       data: {
         attemptId: assessment.id,
         questions: finalQuestions,
-        knowledgePoints: selectedKnowledgePoints.map(kp => ({
+        knowledgePoints: knowledgePoints.map(kp => ({
           id: kp.id,
           name: kp.name,
           weight: kp.weight,
@@ -356,10 +333,10 @@ export async function POST(req: NextRequest) {
         totalCount: finalQuestions.length,
         // 返回诊断信息供结果页使用
         diagnostic: {
-          userGrade,
-          targetScore,
-          difficultyRange: { min: minDifficulty, max: maxDifficulty },
-          startDifficulty,
+          difficultyRange: retry
+            ? { min: Math.max(1, targetDifficulty - 1), max: Math.min(12, targetDifficulty + 1) }
+            : { min: 4, max: 6 },
+          targetDifficulty,
         },
       },
     });

@@ -99,21 +99,9 @@ const PredictionBadge: React.FC<PredictionBadgeProps> = ({
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const loadPrediction = useCallback(async () => {
-    // 取消之前的请求
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    abortControllerRef.current = new AbortController();
-
-    setIsLoading(true);
-    try {
-      const result = await fetchPrediction(studentId, questionDifficulty, knowledgeNodes);
-      setPrediction(result);
-    } catch {
-      // 请求被取消或出错
-    } finally {
-      setIsLoading(false);
-    }
+    // 预测服务已弃用 - UOK使用本地计算
+    setIsLoading(false);
+    setPrediction(null);
   }, [studentId, questionDifficulty, knowledgeNodes]);
 
   useEffect(() => {

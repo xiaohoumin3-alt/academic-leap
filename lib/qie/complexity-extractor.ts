@@ -1,10 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-const MODEL_NAME = 'claude-haiku-4-20250514';  // MiniMax routes to internal model
-
 function getAnthropicClient() {
   const apiKey = process.env.MINIMAX_API_KEY;
   const baseURL = process.env.MINIMAX_BASE_URL;
+  const modelName = process.env.MINIMAX_MODEL || 'mimo-v2.5-pro';
 
   if (!apiKey) {
     throw new Error('MINIMAX_API_KEY not configured');
@@ -15,6 +14,8 @@ function getAnthropicClient() {
 
   return new Anthropic({ apiKey, baseURL });
 }
+
+const MODEL_NAME = process.env.MINIMAX_MODEL || 'mimo-v2.5-pro';  // Use configured model or default
 
 const DEFAULT_BATCH_SIZE = 8;
 

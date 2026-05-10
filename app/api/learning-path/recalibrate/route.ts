@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
     const shouldIncludeStale = includeStale ?? user.includeStale;
 
     for (const kp of knowledgePoints) {
-      const mastery = await getUserMastery(session.user.id, kp.id);
+      const mastery = await getUserMastery(prisma, session.user.id, kp.id);
 
       // Skip fully mastered points unless including stale
       if (mastery >= 0.9 && !shouldIncludeStale) {

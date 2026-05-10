@@ -131,7 +131,7 @@ function sleep(ms: number): Promise<void> {
 // ============================================================
 
 /**
- * 调用 MiniMax API (OpenAI 兼容格式)
+ * 调用 MiniMax API (Anthropic 兼容格式)
  */
 export async function callMimoAPI(prompt: string): Promise<string> {
   const config = getAIConfig()
@@ -142,7 +142,8 @@ export async function callMimoAPI(prompt: string): Promise<string> {
       const timeoutId = setTimeout(() => controller.abort(), config.timeout)
 
       try {
-        const response = await fetch(`${config.baseURL}/chat/completions`, {
+        // 使用 Anthropic Messages API 格式
+        const response = await fetch(`${config.baseURL}/v1/messages`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -163,18 +164,26 @@ export async function callMimoAPI(prompt: string): Promise<string> {
 
         const data = (await response.json()) as {
           error?: { message: string }
-          choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>
+          content?: Array<{ type: string; text?: string; thinking?: string }>
         }
 
         if (data.error) {
           throw new Error(`Mimo API error: ${data.error.message}`)
         }
 
-        // 支持两种响应格式：content 或 reasoning_content
-        const message = data.choices?.[0]?.message
-        const content = message?.content || message?.reasoning_content || ''
-        if (!content) {
+        // Anthropic API 格式：content 数组
+        if (!data.content || data.content.length === 0) {
           throw new Error('Mimo API: no content in response')
+        }
+
+        // 提取文本内容（支持 text 和 thinking 两种类型）
+        const textBlocks = data.content
+          .filter((block) => block.type === 'text' && block.text)
+          .map((block) => block.text || '')
+
+        const content = textBlocks.join('')
+        if (!content) {
+          throw new Error('Mimo API: no text content in response')
         }
 
         return content

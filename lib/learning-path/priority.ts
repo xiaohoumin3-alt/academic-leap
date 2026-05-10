@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import type { PriorityFactorsInput, PriorityResult } from './types';
 
 const STALE_DAYS_THRESHOLD = 14;
@@ -64,8 +65,12 @@ export function generatePriorityReasons(input: PriorityFactorsInput): string[] {
   return reasons.length > 0 ? reasons : ['常规学习'];
 }
 
-export async function getUserMastery(userId: string, knowledgePointId: string): Promise<number> {
-  const userKnowledge = await prisma.userKnowledge.findUnique({
+export async function getUserMastery(
+  db: Prisma.TransactionClient | typeof prisma,
+  userId: string,
+  knowledgePointId: string
+): Promise<number> {
+  const userKnowledge = await db.userKnowledge.findUnique({
     where: {
       userId_knowledgePointId: {
         userId,
@@ -81,7 +86,7 @@ export async function getUserMastery(userId: string, knowledgePointId: string): 
     return userKnowledge.mastery;
   }
 
-  const latestAssessment = await prisma.assessment.findFirst({
+  const latestAssessment = await db.assessment.findFirst({
     where: { userId },
     orderBy: { completedAt: 'desc' },
     take: 1,
@@ -105,8 +110,12 @@ export async function getUserMastery(userId: string, knowledgePointId: string): 
   return 0;
 }
 
-export async function getDaysSincePractice(userId: string, knowledgePointId: string): Promise<number> {
-  const userKnowledge = await prisma.userKnowledge.findUnique({
+export async function getDaysSincePractice(
+  db: Prisma.TransactionClient | typeof prisma,
+  userId: string,
+  knowledgePointId: string
+): Promise<number> {
+  const userKnowledge = await db.userKnowledge.findUnique({
     where: {
       userId_knowledgePointId: {
         userId,
@@ -126,6 +135,7 @@ export async function getDaysSincePractice(userId: string, knowledgePointId: str
 }
 
 export async function getRecentFailureRate(
+  db: Prisma.TransactionClient | typeof prisma,
   userId: string,
   knowledgePointId: string,
   days: number
@@ -134,7 +144,7 @@ export async function getRecentFailureRate(
   since.setDate(since.getDate() - days);
 
   // Fix N+1 query: Filter at database level and use correct Prisma relationships
-  const recentSteps = await prisma.attemptStep.findMany({
+  const recentSteps = await db.attemptStep.findMany({
     where: {
       attempt: {
         userId

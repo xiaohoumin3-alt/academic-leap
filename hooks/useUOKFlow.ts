@@ -121,7 +121,7 @@ export function useUOKFlow() {
     setState(prev => ({ ...prev, isSubmittingAnswer: true, error: null }));
 
     try {
-      const res = await fetch('/api/uok/recommend', {
+      const res = await fetch('/api/uok/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ questionId, isCorrect }),

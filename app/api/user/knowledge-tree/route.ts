@@ -93,14 +93,11 @@ export async function GET(req: NextRequest) {
     });
     const enabledIds = new Set(enabledKnowledge.map(k => k.nodeId));
 
-    // 获取章节 - 只获取叶子章节（有sectionName的），不包括父章节容器
+    // 获取章节 - 获取有知识点的章节（支持sectionName为空的情况）
     let chapters = await prisma.chapter.findMany({
       where: {
         textbookId: user.selectedTextbookId,
-        // 只获取有sectionName的章节（叶子节点），不包括父章节容器
-        sectionName: { not: null },
       },
-      orderBy: [{ chapterNumber: 'asc' }, { sort: 'asc' }],
       include: {
         knowledgePoints: {
           where: {
@@ -115,6 +112,11 @@ export async function GET(req: NextRequest) {
         },
       },
     });
+
+    // 过滤掉没有有效知识点的章节，并按顺序排序
+    chapters = chapters
+      .filter(chapter => chapter.knowledgePoints.length > 0)
+      .sort((a, b) => a.chapterNumber - b.chapterNumber || a.sort - b.sort);
 
     // 如果不展开，按进度裁剪（progress=0时显示所有章节，避免只显示空章节）
     if (!expand && user.studyProgress !== undefined && user.studyProgress > 0 && user.studyProgress < 100) {

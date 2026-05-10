@@ -13,6 +13,7 @@ interface AdaptiveAction {
 interface AssessmentResultData {
   assessmentId?: string;  // 用于学习路径生成
   attemptId?: string;
+  learningPathId?: string | null;  // 自动生成的学习路径 ID（60-89分时）
   // 诊断决策
   accuracy?: number;
   adaptiveAction?: AdaptiveAction;
@@ -38,7 +39,6 @@ const AssessmentResultContent: React.FC = () => {
   const [result, setResult] = useState<AssessmentResultData | null>(null);
   const [fetchingAnalysis, setFetchingAnalysis] = useState(false);
   const [generatingPath, setGeneratingPath] = useState(false);
-  const [pathGenerated, setPathGenerated] = useState(false);
   const [showQuestionDetails, setShowQuestionDetails] = useState(false);
   const [questionDetails, setQuestionDetails] = useState<any>(null);
   const [fetchingDetails, setFetchingDetails] = useState(false);
@@ -134,7 +134,7 @@ const AssessmentResultContent: React.FC = () => {
     }
   };
 
-  // 生成学习路径并跳转到AI建议页面
+  // 生成学习路径并跳转到学习路径页面
   const handleGenerateLearningPath = async () => {
     setGeneratingPath(true);
     try {
@@ -146,8 +146,8 @@ const AssessmentResultContent: React.FC = () => {
       const data = await res.json();
 
       if (data.success) {
-        // 生成成功，跳转到学情解析-成长分析页面（AI建议）
-        router.push('/analyze?tab=growth');
+        // 生成成功，跳转到学情解析-学习路径页面
+        router.push('/analyze?tab=path');
       } else {
         const errorMsg = data.error || data.details || '生成学习路径失败，请重试';
         alert(errorMsg);
@@ -499,8 +499,27 @@ const AssessmentResultContent: React.FC = () => {
           </div>
         )}
 
-        {/* 学习路径生成引导 (60-89分) */}
-        {canGeneratePath && !pathGenerated && (
+        {/* 学习路径相关卡片 (60-89分) */}
+        {result.learningPathId ? (
+          // 已自动生成：显示"查看学习路径"
+          <div className="bg-success/10 rounded-2xl p-4 mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <MaterialIcon icon="check_circle" className="text-success" style={{ fontSize: '20px' }} />
+              <h3 className="font-bold text-on-surface">学习路径已生成</h3>
+            </div>
+            <p className="text-sm text-on-surface-variant mb-3">
+              系统已根据你的测评结果生成了个性化学习路径。
+            </p>
+            <button
+              onClick={() => router.push('/analyze?tab=path')}
+              className="w-full py-3 rounded-xl font-medium bg-success text-on-success transition-colors flex items-center justify-center gap-2"
+            >
+              <MaterialIcon icon="route" style={{ fontSize: '20px' }} />
+              查看学习路径
+            </button>
+          </div>
+        ) : canGeneratePath ? (
+          // 应该生成但失败：显示"生成学习路径"（救济措施）
           <div className="bg-surface-container-low rounded-2xl p-4 mb-4">
             <h3 className="font-bold text-on-surface mb-3 flex items-center gap-2">
               <MaterialIcon icon="route" className="text-primary" style={{ fontSize: '20px' }} />
@@ -527,29 +546,7 @@ const AssessmentResultContent: React.FC = () => {
               )}
             </button>
           </div>
-        )}
-
-        {/* 学习路径生成成功 */}
-        {canGeneratePath && pathGenerated && (
-          <div className="bg-success/10 rounded-2xl p-4 mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <MaterialIcon icon="check_circle" className="text-success" style={{ fontSize: '20px' }} />
-              <h3 className="font-bold text-on-surface">学习路径已生成</h3>
-            </div>
-            <p className="text-sm text-on-surface-variant mb-3">
-              系统已根据你的测评结果生成了个性化学习路径。
-            </p>
-            <button
-              onClick={() => {
-                router.push('/analyze?tab=path'); // 跳转到学习路径页签
-              }}
-              className="w-full py-3 rounded-xl font-medium bg-success text-on-success transition-colors flex items-center justify-center gap-2"
-            >
-              <MaterialIcon icon="route" style={{ fontSize: '20px' }} />
-              查看学习路径
-            </button>
-          </div>
-        )}
+        ) : null}
 
       </div>
 

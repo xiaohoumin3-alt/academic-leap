@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import MathRenderer from './MathRenderer';
 
 interface ClozeInputProps {
   question: string;
@@ -120,14 +121,15 @@ export function ClozeInput({
       {showResult && (
         <div className="p-4 bg-surface-container-low rounded-2xl border border-outline/30">
           <div className="text-xs text-on-surface-variant uppercase font-bold mb-2">正确答案</div>
-          <div className="text-sm text-on-surface flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             {answers.map((answer, i) => (
-              <span
+              <div
                 key={i}
-                className="px-2 py-1 bg-primary-container/30 rounded-lg text-primary font-medium"
+                className="px-3 py-2 bg-primary-container/30 rounded-lg"
               >
-                {i + 1}. {answer}
-              </span>
+                <span className="text-xs text-primary font-medium mr-1">{i + 1}.</span>
+                <MathRenderer text={answer} />
+              </div>
             ))}
           </div>
         </div>

@@ -220,3 +220,6 @@ export function MixedText({ text, className = '' }: MixedRendererProps) {
     </span>
   );
 }
+
+// 默认导出，兼容 import MathRenderer from './MathRenderer'
+export default MixedText;

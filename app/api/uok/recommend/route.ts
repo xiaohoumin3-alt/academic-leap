@@ -2,11 +2,12 @@
  * UOK Flow API - Complete recommendation + learning + feedback loop
  *
  * GET  /api/uok/recommend - Get next question with ML prediction
- * POST /api/uok/answer    - Submit answer and get feedback
+ * POST /api/uok/recommend - Get multiple questions for practice
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import { getUOKFlowService } from '@/lib/qie/uok-flow-service';
 
 /**
@@ -54,9 +55,9 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST /api/uok/answer
+ * POST /api/uok/recommend
  *
- * Submit answer and get feedback with before/after comparison
+ * Get multiple questions for practice mode
  */
 export async function POST(req: NextRequest) {
   try {
@@ -66,30 +67,93 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { questionId, isCorrect } = body;
+    const count = typeof body.count === 'number' ? body.count : 3;
+    const excludeIds = Array.isArray(body.excludeIds) ? body.excludeIds : [];
 
-    if (!questionId || typeof isCorrect !== 'boolean') {
+    const service = getUOKFlowService();
+    console.log('[UOK Recommend POST] userId:', session.user.id, 'count:', count);
+
+    // 检查用户是否已完成诊断测评
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { initialAssessmentCompleted: true },
+    });
+
+    if (!user?.initialAssessmentCompleted) {
+      return NextResponse.json({
+        success: false,
+        code: 'NEEDS_DIAGNOSTIC',
+        error: '请先完成诊断测评',
+        message: '在开始练习之前，需要先完成诊断测评以确定您的学习起点',
+      }, { status: 400 });
+    }
+
+    // 检查是否有活跃的学习路径
+    const activePath = await prisma.learningPath.findFirst({
+      where: {
+        userId: session.user.id,
+        status: 'active',
+      },
+      select: { id: true },
+    });
+
+    if (!activePath) {
+      return NextResponse.json({
+        success: false,
+        code: 'NO_LEARNING_PATH',
+        error: '未找到活跃的学习路径',
+        message: '请先完成诊断测评（60-89分）以生成学习路径',
+      }, { status: 400 });
+    }
+
+    // 添加详细调试：检查UOK状态
+    const { UOK } = await import('@/lib/qie/uok');
+    const uok = new UOK();
+    await uok.getOrCreateStudentWithState(session.user.id);
+    const action = uok.act('next_question', session.user.id);
+    console.log('[UOK Recommend POST] action.type:', action.type);
+    console.log('[UOK Recommend POST] action:', JSON.stringify(action));
+
+    const questions: any[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const recommendation = await service.getRecommendation(
+        session.user.id,
+        excludeIds
+      );
+
+      console.log('[UOK Recommend POST] recommendation', i, ':', recommendation ? 'found' : 'null');
+      if (recommendation) {
+        questions.push({
+          id: recommendation.questionId,
+          type: recommendation.questionData.type,
+          content: recommendation.questionData.content,
+          answer: recommendation.questionData.answer,
+          options: recommendation.questionData.options,
+          explanation: recommendation.questionData.explanation,
+          difficulty: recommendation.questionData.difficulty,
+          rationale: recommendation.rationale,
+          beforeProbability: recommendation.beforeProbability,
+        });
+        excludeIds.push(recommendation.questionId);
+      }
+    }
+
+    if (questions.length === 0) {
       return NextResponse.json(
-        { error: '缺少必要参数' },
-        { status: 400 }
+        { error: '没有可用的推荐题目' },
+        { status: 404 }
       );
     }
 
-    const service = getUOKFlowService();
-    const feedback = await service.submitAnswer(
-      session.user.id,
-      questionId,
-      isCorrect
-    );
-
     return NextResponse.json({
       success: true,
-      feedback,
+      questions,
     });
   } catch (error) {
-    console.error('UOK answer error:', error);
+    console.error('UOK recommend POST error:', error);
     return NextResponse.json(
-      { error: '提交答案失败' },
+      { error: '获取推荐失败' },
       { status: 500 }
     );
   }

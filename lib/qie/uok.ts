@@ -609,15 +609,29 @@ export class UOK {
   }
 
   private findWeakestTopic(student: StudentState): string | null {
-    let weakest: string | null = null;
+    // Find minimum mastery value
     let minMastery = 1;
-    for (const [topic, mastery] of student.knowledge) {
+    for (const [, mastery] of student.knowledge) {
       if (mastery < minMastery) {
         minMastery = mastery;
-        weakest = topic;
       }
     }
-    return weakest;
+
+    // If no weak topics (< 0.6), find minimum mastery anyway
+    // Collect ALL topics with minimum mastery
+    const candidates: string[] = [];
+    for (const [topic, mastery] of student.knowledge) {
+      if (mastery === minMastery) {
+        candidates.push(topic);
+      }
+    }
+
+    if (candidates.length === 0) return null;
+
+    // Random selection among candidates with same minimum mastery
+    // This ensures variety when multiple topics have same lowest mastery
+    const selected = candidates[Math.floor(Math.random() * candidates.length)];
+    return selected;
   }
 
   private findGaps(student: StudentState): Gap[] {
@@ -823,40 +837,46 @@ private sigmoid(z: number): number {
 
   /**
    * Load student state from database
+   * Reads from UserKnowledge table (written by diagnostic assessment flow)
    */
   async loadStudentState(studentId: string): Promise<StudentState | null> {
     const { PrismaClient } = await import('@prisma/client');
     const prisma = new PrismaClient();
 
     try {
-      const record = await prisma.uOKState.findUnique({
-        where: { studentId },
+      // Load from UserKnowledge table (written by diagnostic assessment)
+      const userKnowledgeRecords = await prisma.userKnowledge.findMany({
+        where: { userId: studentId },
+        select: {
+          knowledgePointId: true,
+          mastery: true,
+        },
       });
 
-      if (!record) return null;
+      if (userKnowledgeRecords.length === 0) return null;
 
-      const knowledge = JSON.parse(record.knowledge);
       const knowledgeMap = new Map<string, number>();
-      for (const [topic, mastery] of Object.entries(knowledge)) {
-        knowledgeMap.set(topic, mastery as number);
+      let totalAttempts = 0;
+      let totalCorrect = 0;
+
+      for (const record of userKnowledgeRecords) {
+        knowledgeMap.set(record.knowledgePointId, record.mastery);
+        // Estimate attempts/correct from mastery
+        // Use mastery as proxy: if mastery >= 0.6, student has shown competence
+        if (record.mastery > 0) {
+          totalAttempts += 1;
+          if (record.mastery >= 0.5) totalCorrect += 1;
+        }
       }
 
       const student: StudentState = {
         id: studentId,
         knowledge: knowledgeMap,
-        attemptCount: record.attemptCount,
-        correctCount: record.correctCount,
+        attemptCount: totalAttempts,
+        correctCount: totalCorrect,
       };
 
       this.state.students.set(studentId, student);
-
-      // Load embedding if available
-      if (record.embedding) {
-        const buffer = Buffer.from(record.embedding, 'base64');
-        const floats = new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 4);
-        this.state._ml.embeddings.students.set(studentId, floats);
-      }
-
       return student;
     } finally {
       await prisma.$disconnect();

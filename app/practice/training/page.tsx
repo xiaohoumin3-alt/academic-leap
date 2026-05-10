@@ -1,9 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { TrainingMode } from '@/components/practice/TrainingMode';
 import type { PracticeQuestion } from '@/hooks/usePracticeFlow';
+
+interface StepResult {
+  questionId: string;
+  isCorrect: boolean;
+  userAnswer: string;
+  duration: number;
+}
 
 /**
  * 练习模式页面
@@ -14,6 +21,11 @@ export default function TrainingPage() {
   const [questions, setQuestions] = useState<PracticeQuestion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // 追踪答题结果用于最终保存
+  const stepResultsRef = useRef<StepResult[]>([]);
+  const practiceStartTimeRef = useRef<number>(Date.now());
+  const totalCorrectRef = useRef<number>(0);
 
   // 从UOK推荐API获取题目
   useEffect(() => {
@@ -57,6 +69,12 @@ export default function TrainingPage() {
           return;
         }
 
+        // 检查是否有学习路径
+        if (data.code === 'NO_LEARNING_PATH') {
+          setError(data.message || '未找到活跃的学习路径，请先完成诊断测评（60-89分）');
+          return;
+        }
+
         if (!response.ok) {
           throw new Error(data.error || '获取题目失败');
         }
@@ -86,6 +104,11 @@ export default function TrainingPage() {
         });
 
         setQuestions(mappedQuestions);
+
+        // 重置练习追踪数据
+        stepResultsRef.current = [];
+        practiceStartTimeRef.current = Date.now();
+        totalCorrectRef.current = 0;
       } catch (err) {
         console.error('Failed to fetch questions:', err);
         setError(err instanceof Error ? err.message : '获取题目失败');
@@ -97,14 +120,59 @@ export default function TrainingPage() {
     fetchQuestions();
   }, []);
 
-  // 处理完成回调
-  const handleComplete = (results: { total: number; correct: number; xpEarned: number }) => {
+  // 处理完成回调 - 保存练习结果到数据库
+  const handleComplete = async (results: { total: number; correct: number; xpEarned: number }) => {
     console.log('Practice completed:', results);
-    // 可以在这里添加完成后的逻辑，如更新用户统计数据
+
+    const totalDuration = Date.now() - practiceStartTimeRef.current;
+
+    // 调用 UOK finish API 保存练习记录
+    try {
+      const response = await fetch('/api/uok/finish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          steps: stepResultsRef.current,
+          totalQuestions: results.total,
+          correctCount: results.correct,
+          duration: totalDuration,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Practice saved:', data);
+      } else {
+        console.error('Failed to save practice:', await response.text());
+      }
+    } catch (err) {
+      console.error('Failed to save practice:', err);
+    }
   };
 
-  // 处理反馈回调
+  // 处理反馈回调 - 同时追踪答题结果
   const handleFeedback = async (questionId: string, remembered: boolean) => {
+    // 追踪答题结果
+    const question = questions.find(q => q.id === questionId);
+    const userAnswer = remembered
+      ? (Array.isArray(question?.answer) ? question!.answer[0] : question?.answer || '')
+      : '';
+    const duration = Date.now() - practiceStartTimeRef.current;
+
+    stepResultsRef.current.push({
+      questionId,
+      isCorrect: remembered,
+      userAnswer,
+      duration,
+    });
+
+    if (remembered) {
+      totalCorrectRef.current += 1;
+    }
+
+    // 重置计时器为下一题准备
+    practiceStartTimeRef.current = Date.now();
+
     try {
       const response = await fetch('/api/uok/answer', {
         method: 'POST',
@@ -142,6 +210,12 @@ export default function TrainingPage() {
 
   // 错误状态
   if (error) {
+    // 根据错误类型决定操作按钮
+    const isNoLearningPath = error.includes('学习路径');
+    const primaryAction = isNoLearningPath
+      ? { label: '去做诊断测评', path: '/assessment' }
+      : { label: '返回首页', path: '/' };
+
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4 max-w-md mx-auto p-6">
@@ -149,10 +223,10 @@ export default function TrainingPage() {
           <h2 className="text-xl font-bold text-on-surface">加载失败</h2>
           <p className="text-on-surface-variant">{error}</p>
           <button
-            onClick={() => router.push('/practice')}
+            onClick={() => router.push(primaryAction.path)}
             className="px-6 py-3 bg-primary text-white rounded-full hover:bg-primary/90 transition-colors"
           >
-            返回练习页面
+            {primaryAction.label}
           </button>
         </div>
       </div>

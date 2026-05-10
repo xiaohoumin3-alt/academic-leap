@@ -204,9 +204,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const masteryData = await Promise.all(
       enabledKnowledgePoints.map(async (kp) => {
         const [mastery, daysSincePractice, recentFailureRate] = await Promise.all([
-          getUserMastery(userId, kp.id),
-          getDaysSincePractice(userId, kp.id),
-          getRecentFailureRate(userId, kp.id, 7),
+          getUserMastery(prisma, userId, kp.id),
+          getDaysSincePractice(prisma, userId, kp.id),
+          getRecentFailureRate(prisma, userId, kp.id, 7),
         ]);
 
         return {
@@ -283,9 +283,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           }
 
           const [mastery, daysSincePractice, recentFailureRate] = await Promise.all([
-            getUserMastery(userId, kp.id),
-            getDaysSincePractice(userId, kp.id),
-            getRecentFailureRate(userId, kp.id, 7),
+            getUserMastery(prisma, userId, kp.id),
+            getDaysSincePractice(prisma, userId, kp.id),
+            getRecentFailureRate(prisma, userId, kp.id, 7),
           ]);
 
           return {

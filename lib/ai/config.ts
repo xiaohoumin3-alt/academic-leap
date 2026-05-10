@@ -7,7 +7,7 @@ export const AI_CONFIG = {
   baseURL: process.env.MINIMAX_BASE_URL || 'https://token-plan-cn.xiaomimimo.com/anthropic',
   apiKey: process.env.MINIMAX_API_KEY,
   model: process.env.MINIMAX_MODEL || 'claude-haiku-4-20250514',
-  maxTokens: 196608,
+  maxTokens: 131072, // API支持的最大值
   timeout: 360000, // 6 minutes
   complexityBatchSize: parseInt(process.env.COMPLEXITY_BATCH_SIZE || '8', 10),
   retryConfig: {

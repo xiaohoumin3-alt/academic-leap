@@ -263,9 +263,6 @@ export class UOKFlowService {
   ): Promise<any | null> {
     const where: any = {
       extractionStatus: 'SUCCESS',
-      complexity: { not: null },
-      cognitiveLoad: { not: null },
-      reasoningDepth: { not: null },
     };
 
     if (excludeIds.length > 0) {
@@ -278,12 +275,14 @@ export class UOKFlowService {
         id: true,
         content: true,
         difficulty: true,
+        type: true,
+        answer: true,
         knowledgePoints: true,
         cognitiveLoad: true,
         reasoningDepth: true,
         complexity: true,
       },
-      take: 50,
+      take: 100,
     });
 
     // Filter by topic
@@ -293,14 +292,23 @@ export class UOKFlowService {
     });
 
     if (filtered.length === 0) {
-      return questions[0] ?? null;
+      // Fallback: find any question with matching knowledge points
+      const kpMatch = questions.find(q => {
+        const kpList = this.parseKnowledgePoints(q.knowledgePoints);
+        return kpList.length > 0;
+      });
+      return kpMatch ?? null;
     }
 
-    // Find best match by complexity
-    const scored = filtered.map(q => ({
-      question: q,
-      gap: Math.abs((q.complexity ?? 0.5) - targetComplexity),
-    }));
+    // Find best match by complexity (or difficulty if complexity is null)
+    const scored = filtered.map(q => {
+      // Use complexity if available, otherwise use difficulty/10 as proxy
+      const effectiveComplexity = q.complexity ?? (q.difficulty ? q.difficulty / 10 : 0.5);
+      return {
+        question: q,
+        gap: Math.abs(effectiveComplexity - targetComplexity),
+      };
+    });
 
     scored.sort((a, b) => a.gap - b.gap);
 
