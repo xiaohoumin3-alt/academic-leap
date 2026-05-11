@@ -55,20 +55,31 @@ export class UOKFlowService {
       return null;
     }
 
-    const topic = action.type === 'recommend_question' ? action.topic : action.topic;
-
     // Get student mastery for this topic
     const explanation = this.uok.explain({ studentId });
     if (explanation.type !== 'student') {
       return null;
     }
 
-    const topicMastery = explanation.weakTopics.find(t => t.topic === topic)?.mastery ?? 0.5;
-    const targetComplexity = 0.3 + (topicMastery * 0.5);
+    // FIX Layer2: Iterate through weak topics until finding one with available questions.
+    // This prevents returning null when the top-weakest topic has no SUCCESS questions.
+    const weakTopicsRanked = explanation.weakTopics;
 
-    // Find matching question from database
-    const question = await this.findQuestionByTopic(topic, targetComplexity, excludeIds);
-    if (!question) {
+    let selectedTopic: string | null = null;
+    let topicMastery = 0.5;
+    let question: any | null = null;
+
+    for (const wt of weakTopicsRanked) {
+      const targetComplexity = 0.3 + (wt.mastery * 0.5);
+      question = await this.findQuestionByTopic(wt.topic, targetComplexity, excludeIds);
+      if (question) {
+        selectedTopic = wt.topic;
+        topicMastery = wt.mastery;
+        break;
+      }
+    }
+
+    if (!question || !selectedTopic) {
       return null;
     }
 
@@ -78,14 +89,12 @@ export class UOKFlowService {
     return {
       questionId: question.id,
       questionData: question,
-      topic,
+      topic: selectedTopic,
       rationale: {
         currentMastery: topicMastery,
-        targetComplexity,
-        complexityGap: Math.abs((question.complexity ?? 0.5) - targetComplexity),
-        reason: action.type === 'recommend_question'
-          ? action.rationale.reason
-          : `最弱知识点 "${topic}" → 复杂度匹配`,
+        targetComplexity: 0.3 + (topicMastery * 0.5),
+        complexityGap: Math.abs((question.complexity ?? 0.5) - (0.3 + topicMastery * 0.5)),
+        reason: `最弱知识点 "${selectedTopic}" → 复杂度匹配`,
       },
       beforeProbability,
     };
@@ -261,10 +270,12 @@ export class UOKFlowService {
     targetComplexity: number,
     excludeIds: string[]
   ): Promise<any | null> {
-    const where: any = {
-      extractionStatus: 'SUCCESS',
-    };
-
+    // FIX Layer1: Do NOT use take:N + JS filter.
+    // take:N samples N rows randomly; if the topic's questions are not among
+    // those rows, the result is empty even though questions exist.
+    // FIX: Query ALL SUCCESS questions, then filter by topic in JavaScript.
+    // With ~1000 SUCCESS questions this is acceptable (<10ms in SQLite).
+    const where: any = { extractionStatus: 'SUCCESS' };
     if (excludeIds.length > 0) {
       where.id = { notIn: excludeIds };
     }
@@ -282,27 +293,21 @@ export class UOKFlowService {
         reasoningDepth: true,
         complexity: true,
       },
-      take: 100,
+      orderBy: { id: 'asc' },
     });
 
-    // Filter by topic
+    // Filter by topic in JavaScript (not SQL) to guarantee correctness
     const filtered = questions.filter(q => {
       const kpList = this.parseKnowledgePoints(q.knowledgePoints);
       return kpList.some(kp => kp.includes(topic) || topic.includes(kp));
     });
 
     if (filtered.length === 0) {
-      // Fallback: find any question with matching knowledge points
-      const kpMatch = questions.find(q => {
-        const kpList = this.parseKnowledgePoints(q.knowledgePoints);
-        return kpList.length > 0;
-      });
-      return kpMatch ?? null;
+      return null;
     }
 
-    // Find best match by complexity (or difficulty if complexity is null)
+    // Find best match by complexity
     const scored = filtered.map(q => {
-      // Use complexity if available, otherwise use difficulty/10 as proxy
       const effectiveComplexity = q.complexity ?? (q.difficulty ? q.difficulty / 10 : 0.5);
       return {
         question: q,
