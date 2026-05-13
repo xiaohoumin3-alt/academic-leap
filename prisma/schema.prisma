@@ -87,6 +87,9 @@ model Question {
   @@index([extractionStatus])
   @@index([templateId])
   @@index([generatedFrom])
+
+  // 关联到知识点的多对多关系（用于基于 ID 的推荐查询）
+  questionKnowledgePoints QuestionKnowledgePoint[]
 }
 
 // UOK State Persistence - stores student and question learning state
@@ -315,6 +318,20 @@ model KnowledgePoint {
   histories     KnowledgePointHistory[]
   userKnowledge UserKnowledge[]
   coverage      KnowledgeCoverage?
+  questions     QuestionKnowledgePoint[]
+}
+
+// Question 到 KnowledgePoint 的多对多关联表（用于基于 ID 的推荐查询）
+model QuestionKnowledgePoint {
+  questionId        String
+  knowledgePointId  String
+
+  question         Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  knowledgePoint  KnowledgePoint   @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, knowledgePointId])
+  @@index([knowledgePointId])
+  @@index([questionId])
 }
 
 model KnowledgePointHistory {
