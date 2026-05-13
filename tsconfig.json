@@ -46,6 +46,7 @@
     "lib/rl/health/__tests__",
     "lib/rl/fallback/__tests__",
     "apps",
+    "lib/deprecated",
     "scripts"
   ]
 }

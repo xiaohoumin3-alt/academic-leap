@@ -270,18 +270,43 @@ function findBestMatch(
 }
 
 /**
- * Parse knowledge points from JSON string or array
+ * Parse knowledge points from JSON string, array, or object (Json type)
  */
-function parseKnowledgePoints(kp: string | null): string[] {
+function parseKnowledgePoints(kp: unknown): string[] {
   if (!kp) return [];
 
-  try {
-    const parsed = JSON.parse(kp);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    // Might be a comma-separated string
-    return kp.split(',').map(s => s.trim()).filter(Boolean);
+  if (Array.isArray(kp)) {
+    return kp.map(item => {
+      if (typeof item === 'string') return item;
+      if (typeof item === 'object' && item !== null) {
+        return (item as { id?: string; name?: string }).id || (item as { id?: string; name?: string }).name || '';
+      }
+      return String(item);
+    }).filter(Boolean);
   }
+
+  if (typeof kp === 'string') {
+    try {
+      const parsed = JSON.parse(kp);
+      if (Array.isArray(parsed)) {
+        return parsed.map(item => {
+          if (typeof item === 'string') return item;
+          if (typeof item === 'object' && item !== null) {
+            return (item as { id?: string; name?: string }).id || (item as { id?: string; name?: string }).name || '';
+          }
+          return String(item);
+        }).filter(Boolean);
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (typeof kp === 'object' && kp !== null) {
+    // Single object - return its id or name
+    const obj = kp as { id?: string; name?: string };
+    return [obj.id || obj.name || ''].filter(Boolean);
+  }
+
+  return [];
 }
 
 /**

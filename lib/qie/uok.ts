@@ -801,38 +801,33 @@ private sigmoid(z: number): number {
    * Save student state to database
    */
   async saveStudentState(studentId: string): Promise<void> {
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient();
+    const { prisma } = await import('@/lib/prisma');
 
-    try {
-      const student = this.state.students.get(studentId);
-      if (!student) return;
+    const student = this.state.students.get(studentId);
+    if (!student) return;
 
-      const embedding = this.state._ml.embeddings.students.get(studentId);
-      const embeddingBase64 = embedding
-        ? Buffer.from(embedding.buffer).toString('base64')
-        : null;
+    const embedding = this.state._ml.embeddings.students.get(studentId);
+    const embeddingBase64 = embedding
+      ? Buffer.from(embedding.buffer).toString('base64')
+      : null;
 
-      await prisma.uOKState.upsert({
-        where: { studentId },
-        create: {
-          studentId,
-          knowledge: JSON.stringify(Object.fromEntries(student.knowledge)),
-          attemptCount: student.attemptCount,
-          correctCount: student.correctCount,
-          embedding: embeddingBase64,
-        },
-        update: {
-          knowledge: JSON.stringify(Object.fromEntries(student.knowledge)),
-          attemptCount: student.attemptCount,
-          correctCount: student.correctCount,
-          embedding: embeddingBase64,
-          lastUpdated: new Date(),
-        },
-      });
-    } finally {
-      await prisma.$disconnect();
-    }
+    await prisma.uOKState.upsert({
+      where: { studentId },
+      create: {
+        studentId,
+        knowledge: JSON.stringify(Object.fromEntries(student.knowledge)),
+        attemptCount: student.attemptCount,
+        correctCount: student.correctCount,
+        embedding: embeddingBase64,
+      },
+      update: {
+        knowledge: JSON.stringify(Object.fromEntries(student.knowledge)),
+        attemptCount: student.attemptCount,
+        correctCount: student.correctCount,
+        embedding: embeddingBase64,
+        lastUpdated: new Date(),
+      },
+    });
   }
 
   /**
@@ -840,11 +835,8 @@ private sigmoid(z: number): number {
    * Reads from UserKnowledge table (written by diagnostic assessment flow)
    */
   async loadStudentState(studentId: string): Promise<StudentState | null> {
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient();
-
-    try {
-      // Load from UserKnowledge table (written by diagnostic assessment)
+    // Load from UserKnowledge table (written by diagnostic assessment)
+      const { prisma } = await import('@/lib/prisma');
       const userKnowledgeRecords = await prisma.userKnowledge.findMany({
         where: { userId: studentId },
         select: {
@@ -878,47 +870,39 @@ private sigmoid(z: number): number {
 
       this.state.students.set(studentId, student);
       return student;
-    } finally {
-      await prisma.$disconnect();
-    }
   }
 
   /**
    * Save question state to database
    */
   async saveQuestionState(questionId: string): Promise<void> {
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient();
+    const { prisma } = await import('@/lib/prisma');
 
-    try {
-      const question = this.state.questions.get(questionId);
-      if (!question) return;
+    const question = this.state.questions.get(questionId);
+    if (!question) return;
 
-      const embedding = this.state._ml.embeddings.questions.get(questionId);
-      const embeddingBase64 = embedding
-        ? Buffer.from(embedding.buffer).toString('base64')
-        : null;
+    const embedding = this.state._ml.embeddings.questions.get(questionId);
+    const embeddingBase64 = embedding
+      ? Buffer.from(embedding.buffer).toString('base64')
+      : null;
 
-      await prisma.uOKQuestionState.upsert({
-        where: { questionId },
-        create: {
-          questionId,
-          topic: question.topics[0] || null,
-          attemptCount: question.attemptCount,
-          correctCount: question.correctCount,
-          embedding: embeddingBase64,
-        },
-        update: {
-          topic: question.topics[0] || null,
-          attemptCount: question.attemptCount,
-          correctCount: question.correctCount,
-          embedding: embeddingBase64,
-          lastUpdated: new Date(),
-        },
-      });
-    } finally {
-      await prisma.$disconnect();
-    }
+    await prisma.uOKQuestionState.upsert({
+      where: { questionId },
+      create: {
+        questionId,
+        topic: question.topics[0] || null,
+        attemptCount: question.attemptCount,
+        correctCount: question.correctCount,
+        embedding: embeddingBase64,
+      },
+      update: {
+        topic: question.topics[0] || null,
+        attemptCount: question.attemptCount,
+        correctCount: question.correctCount,
+        embedding: embeddingBase64,
+        lastUpdated: new Date(),
+      },
+    });
   }
 
   /**

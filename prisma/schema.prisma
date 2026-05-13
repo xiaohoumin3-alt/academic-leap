@@ -51,18 +51,22 @@ model Question {
   id              String   @id @default(cuid())
   type            String
   difficulty      Int
-  content         String   @default("{}")
+  content         Json     @default("{}")
   answer          String
   hint            String?
-  knowledgePoints String   @default("[]")
+  knowledgePoints Json     @default("[]")
   createdBy       String?
   isAI            Boolean  @default(false)
   createdAt       DateTime @default(now())
-  params          String?  @default("{}")
-  stepTypes       String?  @default("[]")
+  params          Json?    @default("{}")
+  stepTypes       Json?    @default("[]")
   templateId      String?
   generatedFrom   String? // Reference to GeneratedQuestion.id
-  complexitySpec  String?  @default("{}") // Complexity spec from generation
+  complexitySpec  Json?    @default("{}") // Complexity spec from generation
+
+  // Foreign key relations
+  template          Template?          @relation("QuestionTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+  generatedQuestion GeneratedQuestion? @relation("QuestionFromGenerated", fields: [generatedFrom], references: [id], onDelete: SetNull)
 
   // Complexity feature extraction fields
   cognitiveLoad       Float? // [0, 1] 认知负荷
@@ -73,9 +77,16 @@ model Question {
   extractionError     String? // 失败原因记录
   extractionModel     String?   @default("gemma-4-31b-it-v1")
 
+  // Deep thinking question fields
+  isDeepThinking      Boolean  @default(false) // 是否为深度思考题
+  deepType            String?  // 'optimization' | 'growth' | 'geometry' | 'special'
+  cognitiveLevel      Json?    @default("{}") // JSON: {understanding: 1-5, modeling: 1-5, solving: 1-5}
+
   steps QuestionStep[]
 
   @@index([extractionStatus])
+  @@index([templateId])
+  @@index([generatedFrom])
 }
 
 // UOK State Persistence - stores student and question learning state
@@ -128,6 +139,8 @@ model Attempt {
   completedAt DateTime?
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   steps       AttemptStep[]
+
+  @@index([userId, startedAt])
 }
 
 model AttemptStep {
@@ -154,6 +167,7 @@ model UserKnowledge {
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, knowledgePointId])
+  @@index([knowledgePointId])
 }
 
 model OCRTask {
@@ -363,6 +377,7 @@ model Template {
   generation  TemplateGeneration?  @relation("GenerationTemplate", fields: [generationId], references: [id])
   validations TemplateValidation[]
   reviews     TemplateReview[]
+  questions   Question[]           @relation("QuestionTemplate")
 }
 
 model TemplateVersion {
@@ -481,7 +496,7 @@ model LearningPath {
   name          String
   type          String
   status        String           @default("active")
-  knowledgeData String           @default("[]")
+  knowledgeData Json             @default("[]")
   generatedAt   DateTime         @default(now())
   expiresAt     DateTime?
   createdAt     DateTime         @default(now())
@@ -510,9 +525,9 @@ model WeeklyReport {
   pathId          String
   weekStart       DateTime
   weekEnd         DateTime
-  summary         String       @default("{}")
-  staleKnowledge  String       @default("[]")
-  recommendations String       @default("{}")
+  summary         Json         @default("{}")
+  staleKnowledge  Json         @default("[]")
+  recommendations Json         @default("{}")
   viewed          Boolean      @default(false)
   createdAt       DateTime     @default(now())
   path            LearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
@@ -594,6 +609,9 @@ model GeneratedQuestion {
   promotedAt      DateTime?
   auditReason     String?
 
+  // 反向关系：由此生成的题目
+  questions Question[] @relation("QuestionFromGenerated")
+
   @@index([batchId])
   @@index([promotionStatus])
 }
@@ -612,6 +630,7 @@ model RLModelVersion {
   priorBeta  Float @default(1)
 
   trainedAt DateTime?
+  deployedAt DateTime?
 
   avgReward       Float?
   totalSelections Int    @default(0)

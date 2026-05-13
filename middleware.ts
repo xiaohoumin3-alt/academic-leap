@@ -1,6 +1,16 @@
+// 动态导入 admin-auth 以避免 Edge Runtime 兼容性问题
 import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+
+async function verifyAdminTokenSafe(token: string): Promise<{ userId: string } | null> {
+  try {
+    const { verifyAdminToken } = await import('@/lib/admin-auth');
+    return verifyAdminToken(token);
+  } catch {
+    return null;
+  }
+}
 
 export default auth(async (req) => {
   const isLoggedIn = !!req.auth;
@@ -22,20 +32,12 @@ export default auth(async (req) => {
     if (isLoggedIn) {
       return NextResponse.next();
     }
-    // 检查 admin token cookie
+    // 检查 admin token cookie - 动态导入避免 Edge Runtime 问题
     const adminToken = req.cookies.get('admin-token');
     if (adminToken?.value) {
-      try {
-        const payload = JSON.parse(Buffer.from(adminToken.value, 'base64').toString());
-        if (payload.userId && payload.createdAt) {
-          // Token 有效（检查是否过期，7天）
-          const age = Date.now() - payload.createdAt;
-          if (age < 7 * 24 * 60 * 60 * 1000) {
-            return NextResponse.next();
-          }
-        }
-      } catch {
-        // Token 解析失败，重定向登录
+      const payload = await verifyAdminTokenSafe(adminToken.value);
+      if (payload) {
+        return NextResponse.next();
       }
     }
     // 无效 token，重定向到控制台登录页
