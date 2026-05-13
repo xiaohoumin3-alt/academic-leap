@@ -37,12 +37,13 @@ export async function GET(
       );
     }
 
-    // Get questions associated with this knowledge point
-    // knowledgePoints is a JSON array, use array contains mode
+    // Get questions associated with this knowledge point - use QuestionKnowledgePoint relation
     const questions = await prisma.question.findMany({
       where: {
-        knowledgePoints: {
-          equals: expect.any(Array),
+        questionKnowledgePoints: {
+          some: {
+            knowledgePointId: id,
+          },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -54,25 +55,15 @@ export async function GET(
         reasoningDepth: true,
         extractionStatus: true,
         createdAt: true,
-        knowledgePoints: true,
       },
-    });
-
-    // Filter questions that contain this knowledge point ID
-    const filteredQuestions = questions.filter(q => {
-      const kps = q.knowledgePoints;
-      if (Array.isArray(kps)) {
-        return kps.some(kp => typeof kp === 'object' && (kp as { id?: string }).id === id);
-      }
-      return false;
     });
 
     // Calculate stats
     const stats = {
-      total: filteredQuestions.length,
-      pending: filteredQuestions.filter(q => q.extractionStatus === 'PENDING').length,
-      completed: filteredQuestions.filter(q => q.extractionStatus === 'SUCCESS' || q.extractionStatus === 'FALLBACK').length,
-      failed: filteredQuestions.filter(q => q.extractionStatus === 'FAILED').length,
+      total: questions.length,
+      pending: questions.filter(q => q.extractionStatus === 'PENDING').length,
+      completed: questions.filter(q => q.extractionStatus === 'SUCCESS' || q.extractionStatus === 'FALLBACK').length,
+      failed: questions.filter(q => q.extractionStatus === 'FAILED').length,
     };
 
     return NextResponse.json({
@@ -91,7 +82,7 @@ export async function GET(
             name: (knowledgePoint.chapter as unknown as { chapterName?: string })?.chapterName,
           },
         },
-        questions: filteredQuestions,
+        questions: questions,
         stats,
       },
     });
