@@ -501,3 +501,103 @@ export async function generateCardsWithChunks(params: GenerateCardsParams): Prom
 
   return allCards.slice(0, count)
 }
+
+// ============================================================
+// DeepTutor 通用 LLM 调用（新增）
+// ============================================================
+
+/**
+ * DeepTutor LLM 调用请求
+ */
+export interface LLMRequest {
+  systemPrompt?: string
+  userPrompt: string
+  maxTokens?: number
+}
+
+/**
+ * 通用 LLM 调用（复用现有 callMimoAPI 逻辑）
+ */
+export async function callLLM(request: LLMRequest): Promise<string> {
+  const config = getAIConfig()
+  const maxTokens = request.maxTokens || 4096
+
+  // 构建消息数组：system prompt 单独发送
+  const messages: Array<{ role: 'system' | 'user'; content: string }> = []
+
+  if (request.systemPrompt) {
+    messages.push({ role: 'system', content: request.systemPrompt })
+  }
+  messages.push({ role: 'user', content: request.userPrompt })
+
+  return retryWithBackoff(
+    async () => {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), config.timeout)
+
+      try {
+        const response = await fetch(`${config.baseURL}/v1/messages`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: config.model,
+            max_tokens: maxTokens,
+            messages,
+          }),
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          const error = await response.text()
+          throw new Error(`LLM API ${response.status}: ${error}`)
+        }
+
+        const data = (await response.json()) as {
+          error?: { message: string }
+          content?: Array<{ type: string; text?: string }>
+        }
+
+        if (data.error) {
+          throw new Error(`LLM API error: ${data.error.message}`)
+        }
+
+        const textBlocks = data.content
+          ?.filter((block) => block.type === 'text' && block.text)
+          .map((block) => block.text || '')
+
+        const content = textBlocks?.join('')
+        if (!content) {
+          throw new Error('LLM API: no text content in response')
+        }
+
+        return content
+      } finally {
+        clearTimeout(timeoutId)
+      }
+    },
+    config.retryConfig
+  )
+}
+
+/**
+ * 解析 JSON 响应（处理 markdown 代码块）
+ */
+export function parseJSONResponse<T>(raw: string): T | null {
+  const cleaned = stripMarkdownCodeBlock(raw)
+  try {
+    return JSON.parse(cleaned) as T
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 安全解析 JSON（带 fallback）
+ */
+export function safeParseJSON<T>(raw: string, fallback: T): T {
+  const result = parseJSONResponse<T>(raw)
+  return result !== null ? result : fallback
+}

@@ -16,6 +16,7 @@ import type {
 const BATCH_SIZE = 5
 const MAX_QUESTIONS = 50
 const DEFAULT_COUNT = 3
+const MAX_ITERATIONS = Math.ceil(MAX_QUESTIONS / BATCH_SIZE) + 2 // 最多 12 次迭代
 
 export class AgentCoordinator {
   private ideaAgent: IdeaAgent
@@ -41,8 +42,11 @@ export class AgentCoordinator {
     const results: GenerationResult['results'] = []
     let templates: QuestionTemplate[] = []
 
-    // 批量生成模板
-    while (templates.length < requestedCount) {
+    // 批量生成模板（带迭代上限防止死循环）
+    let iterations = 0
+    while (templates.length < requestedCount && iterations < MAX_ITERATIONS) {
+      iterations++
+
       const numIdeas = Math.min(BATCH_SIZE, requestedCount - templates.length)
 
       const newTemplates = await this.ideaAgent.process({
@@ -54,6 +58,12 @@ export class AgentCoordinator {
         difficulty,
         questionType
       })
+
+      // 无进展时退出循环（防止死循环）
+      if (newTemplates.length === 0) {
+        console.warn(`[AgentCoordinator] No templates generated at iteration ${iterations}, stopping`)
+        break
+      }
 
       // 更新已使用的考察点
       this.updateConcentrations(newTemplates)

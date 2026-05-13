@@ -62,12 +62,17 @@ function validateRequest(body: any): string | null {
     return `knowledgeContext exceeds maximum length of ${MAX_CONTEXT_LENGTH}`
   }
 
-  if (body.mode !== 'custom') {
+  // mode 可选，未提供时默认为 'custom'
+  if (body.mode !== undefined && body.mode !== 'custom') {
     return 'Invalid mode. Only "custom" is supported in v1.'
   }
 
   if (body.count < 1 || body.count > MAX_QUESTIONS) {
     return `count must be between 1 and ${MAX_QUESTIONS}`
+  }
+
+  if (typeof body.count !== 'number' || !Number.isInteger(body.count)) {
+    return 'count must be an integer'
   }
 
   return null
