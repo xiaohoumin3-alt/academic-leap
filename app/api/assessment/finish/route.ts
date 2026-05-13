@@ -409,7 +409,19 @@ export async function POST(req: NextRequest) {
     if (answers && questionIds) {
       const questions = await prisma.question.findMany({
         where: { id: { in: questionIds as string[] } },
-        select: { id: true, content: true, answer: true, knowledgePoints: true },
+        select: {
+          id: true,
+          content: true,
+          answer: true,
+          questionKnowledgePoints: {
+            select: {
+              knowledgePointId: true,
+              knowledgePoint: {
+                select: { id: true, name: true },
+              },
+            },
+          },
+        },
       });
 
       const questionMap = new Map(questions.map(q => [q.id, q]));
@@ -429,33 +441,10 @@ export async function POST(req: NextRequest) {
           questionContent = '题目内容解析失败';
         }
 
-        let kpList: string[] = [];
-        // knowledgePoints is now a Json type, may be array or already-parsed object
-        const kpValue = question.knowledgePoints;
-        if (Array.isArray(kpValue)) {
-          kpList = kpValue.map(kp => {
-            if (typeof kp === 'string') return kp;
-            if (typeof kp === 'object' && kp !== null) {
-              return (kp as { id?: string; name?: string }).id || (kp as { id?: string; name?: string }).name || '';
-            }
-            return String(kp);
-          }).filter(Boolean);
-        } else if (typeof kpValue === 'string') {
-          try {
-            const parsed = JSON.parse(kpValue || '[]');
-            if (Array.isArray(parsed)) {
-              kpList = parsed.map(kp => {
-                if (typeof kp === 'string') return kp;
-                if (typeof kp === 'object' && kp !== null) {
-                  return (kp as { id?: string; name?: string }).id || (kp as { id?: string; name?: string }).name || '';
-                }
-                return String(kp);
-              }).filter(Boolean);
-            }
-          } catch {
-            kpList = [];
-          }
-        }
+        // Use QuestionKnowledgePoint relation for knowledge points
+        const kpList = question.questionKnowledgePoints
+          .map(kp => kp.knowledgePoint?.name || kp.knowledgePointId)
+          .filter(Boolean);
 
         return {
           questionId,

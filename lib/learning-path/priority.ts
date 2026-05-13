@@ -149,7 +149,7 @@ export async function getRecentFailureRate(
   const since = new Date();
   since.setDate(since.getDate() - days);
 
-  // Fix N+1 query: Filter at database level and use correct Prisma relationships
+  // Fix N+1 query: Filter at database level and use QuestionKnowledgePoint relation
   const recentSteps = await db.attemptStep.findMany({
     where: {
       attempt: {
@@ -162,7 +162,13 @@ export async function getRecentFailureRate(
     include: {
       questionStep: {
         include: {
-          question: true
+          question: {
+            select: {
+              questionKnowledgePoints: {
+                select: { knowledgePointId: true }
+              }
+            }
+          }
         }
       }
     }
@@ -172,27 +178,17 @@ export async function getRecentFailureRate(
   let failureCount = 0;
 
   for (const step of recentSteps) {
-    try {
-      if (step.questionStep?.question) {
-        const kpValue = step.questionStep.question.knowledgePoints;
-        let knowledgePoints: unknown[] = [];
-        if (Array.isArray(kpValue)) {
-          knowledgePoints = kpValue;
-        } else if (typeof kpValue === 'string') {
-          try {
-            const parsed = JSON.parse(kpValue || '[]');
-            if (Array.isArray(parsed)) knowledgePoints = parsed;
-          } catch { /* ignore */ }
-        }
-        if (knowledgePoints.includes(knowledgePointId)) {
+    if (step.questionStep?.question?.questionKnowledgePoints) {
+      // Use QuestionKnowledgePoint relation for ID-based matching
+      for (const kpLink of step.questionStep.question.questionKnowledgePoints) {
+        if (kpLink.knowledgePointId === knowledgePointId) {
           relevantCount++;
           if (!step.isCorrect) {
             failureCount++;
           }
+          break; // Each step counts once per knowledge point
         }
       }
-    } catch (error) {
-      console.warn(`[getRecentFailureRate] Failed to parse knowledgePoints for step ${step.id}:`, error);
     }
   }
 
