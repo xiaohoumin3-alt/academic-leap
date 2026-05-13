@@ -43,23 +43,23 @@ export interface GenerateResult {
   totalCount: number
 }
 
-// Prisma Question 类型（简化）
+// Prisma Question 类型（简化）- Updated for Json types
 interface Question {
   id: string
   type: string
   difficulty: number
-  content: string
+  content: unknown // Json type
   answer: string
   hint: string | null
-  knowledgePoints: string
+  knowledgePoints: unknown // Json type
   createdBy: string | null
   isAI: boolean
   createdAt: Date
-  params: string | null
-  stepTypes: string | null
+  params: unknown | null // Json type
+  stepTypes: unknown | null // Json type
   templateId: string | null
   generatedFrom: string | null
-  complexitySpec: string | null
+  complexitySpec: unknown | null // Json type
   cognitiveLoad: number | null
   reasoningDepth: number | null
   complexity: number | null
@@ -157,12 +157,17 @@ export async function generateCardsWithComplexity(params: GenerateParams): Promi
   const extractor = new ComplexityExtractor()
   const complexityResults = await extractor.extractBatch(
     tempQuestions.map((q) => {
-      const content = JSON.parse(q.content) as { question: string; options?: string[]; explanation?: string }
+      // content is now Json type - may be object or string
+      const contentObj = typeof q.content === 'object' && q.content !== null
+        ? q.content as { question?: string; options?: string[]; explanation?: string }
+        : typeof q.content === 'string'
+          ? JSON.parse(q.content || '{}')
+          : { question: '' };
       return {
         id: q.id,
         content: {
           title: q.type,
-          description: content.question,
+          description: contentObj.question || '',
         },
       }
     }),

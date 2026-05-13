@@ -52,6 +52,46 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // 2. 创建 PracticeSession 记录（用于推荐时排除重复题目）
+    // 查找或创建活跃的 PracticeSession
+    let practiceSession = await prisma.practiceSession.findFirst({
+      where: {
+        userId,
+        status: 'active',
+      },
+    });
+
+    const answersData = steps.map(s => ({
+      questionId: s.questionId,
+      isCorrect: s.isCorrect,
+      userAnswer: s.userAnswer,
+      duration: s.duration,
+    }));
+
+    if (practiceSession) {
+      // 更新现有会话
+      practiceSession = await prisma.practiceSession.update({
+        where: { id: practiceSession.id },
+        data: {
+          answers: JSON.stringify(answersData),
+          questionCount: totalQuestions,
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      // 创建新会话
+      practiceSession = await prisma.practiceSession.create({
+        data: {
+          userId,
+          status: 'completed',
+          currentQuestionIndex: totalQuestions,
+          answers: JSON.stringify(answersData),
+          questionCount: totalQuestions,
+          completedAt: new Date(),
+        },
+      });
+    }
+
     // 2. 创建答题步骤记录
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
@@ -131,17 +171,24 @@ async function updateKnowledgeMastery(userId: string, attemptId: string) {
   const knowledgeStats = new Map<string, { correct: number; total: number }>();
 
   for (const step of attempt.steps) {
-    const kpJson = step.questionStep?.question?.knowledgePoints || '[]';
-    try {
-      const kpIds: string[] = JSON.parse(kpJson);
-      for (const kpId of kpIds) {
-        const stats = knowledgeStats.get(kpId) || { correct: 0, total: 0 };
+    const kpValue = step.questionStep?.question?.knowledgePoints;
+    let kpIds: unknown[] = [];
+    if (Array.isArray(kpValue)) {
+      kpIds = kpValue;
+    } else if (typeof kpValue === 'string') {
+      try {
+        const parsed = JSON.parse(kpValue || '[]');
+        if (Array.isArray(parsed)) kpIds = parsed;
+      } catch { /* skip */ }
+    }
+    for (const kp of kpIds) {
+      const id = typeof kp === 'string' ? kp : (kp as { id?: string }).id || (kp as { name?: string }).name || '';
+      if (id) {
+        const stats = knowledgeStats.get(id) || { correct: 0, total: 0 };
         stats.total += 1;
         if (step.isCorrect) stats.correct += 1;
-        knowledgeStats.set(kpId, stats);
+        knowledgeStats.set(id, stats);
       }
-    } catch {
-      // Skip invalid JSON
     }
   }
 

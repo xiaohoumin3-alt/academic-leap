@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 import { UOK } from '@/lib/qie';
 
 const uok = new UOK();
@@ -8,9 +9,22 @@ export async function GET(req: NextRequest) {
   const studentId = searchParams.get('studentId');
   const questionId = searchParams.get('questionId');
 
-  // Load student state from database if exists
+  // Load student state from UserKnowledge table (Phase 5: UOK doesn't call DB)
   if (studentId) {
-    await uok.loadStudentState(studentId);
+    const userKnowledgeRecords = await prisma.userKnowledge.findMany({
+      where: { userId: studentId },
+      select: {
+        knowledgePointId: true,
+        mastery: true,
+      },
+    });
+
+    const knowledgeData = new Map<string, number>();
+    for (const record of userKnowledgeRecords) {
+      knowledgeData.set(record.knowledgePointId, record.mastery);
+    }
+
+    uok.loadKnowledge(studentId, knowledgeData);
   }
 
   const target: { studentId?: string; questionId?: string } = {};

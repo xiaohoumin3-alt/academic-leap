@@ -5,7 +5,7 @@ import { MixedText } from './MathRenderer';
 
 export interface QuestionData {
   id: string;
-  type: 'fill_blank' | 'multiple_choice' | 'short_answer';
+  type: 'fill_blank' | 'multiple_choice' | 'short_answer' | 'calculation';
   question: string;
   answer: string | string[];
   options?: string[];
@@ -27,6 +27,7 @@ const questionTypeLabels: Record<QuestionData['type'], string> = {
   fill_blank: '填空题',
   multiple_choice: '选择题',
   short_answer: '简答题',
+  calculation: '计算题',
 };
 
 /**
@@ -163,6 +164,28 @@ export function QuestionRenderer({
     );
   };
 
+  // 渲染计算题
+  const renderCalculation = () => {
+    return (
+      <div className="space-y-4">
+        <input
+          type="text"
+          value={typeof userAnswer === 'string' ? userAnswer : ''}
+          onChange={(e) => onAnswerChange?.(e.target.value)}
+          disabled={disabled}
+          placeholder="输入答案（数字）"
+          className={cn(
+            'w-full max-w-xs px-4 py-3 rounded-2xl border-2 text-center text-xl',
+            'focus:outline-none focus:ring-2 focus:ring-primary/30',
+            !showResult && 'border-outline hover:border-primary focus:border-primary bg-surface-container-low',
+            showResult && isCorrect(typeof userAnswer === 'string' ? userAnswer : '') === true && 'border-success bg-success-container/20 text-success font-bold',
+            showResult && isCorrect(typeof userAnswer === 'string' ? userAnswer : '') === false && 'border-error bg-error-container/20 text-error'
+          )}
+        />
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       {/* 题目类型标签 */}
@@ -192,6 +215,14 @@ export function QuestionRenderer({
               <MixedText text={questionText} />
             </p>
             {renderShortAnswer()}
+          </>
+        )}
+        {type === 'calculation' && (
+          <>
+            <p className="text-xl leading-relaxed text-on-surface font-medium mb-4">
+              <MixedText text={questionText} />
+            </p>
+            {renderCalculation()}
           </>
         )}
       </div>

@@ -109,16 +109,24 @@ export async function POST(req: NextRequest) {
     const kpFailureCounts = new Map<string, { total: number; failures: number }>();
     for (const step of recentSteps) {
       if (step.questionStep?.question) {
-        try {
-          const kps = JSON.parse(step.questionStep.question.knowledgePoints || '[]');
-          for (const kpId of kps) {
-            const current = kpFailureCounts.get(kpId) || { total: 0, failures: 0 };
+        const kpValue = step.questionStep.question.knowledgePoints;
+        let kps: unknown[] = [];
+        if (Array.isArray(kpValue)) {
+          kps = kpValue;
+        } else if (typeof kpValue === 'string') {
+          try {
+            const parsed = JSON.parse(kpValue || '[]');
+            if (Array.isArray(parsed)) kps = parsed;
+          } catch { /* ignore */ }
+        }
+        for (const kpId of kps) {
+          const id = typeof kpId === 'string' ? kpId : (kpId as { id?: string }).id || '';
+          if (id) {
+            const current = kpFailureCounts.get(id) || { total: 0, failures: 0 };
             current.total++;
             if (!step.isCorrect) current.failures++;
-            kpFailureCounts.set(kpId, current);
+            kpFailureCounts.set(id, current);
           }
-        } catch {
-          // Ignore parse errors
         }
       }
     }

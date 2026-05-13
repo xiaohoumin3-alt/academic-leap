@@ -76,43 +76,42 @@ export class RecommendationEngine {
   }
 
   /**
-   * 确保学生状态存在
+   * 确保学生状态存在 - 从 UserKnowledge 表加载（Phase 5: UOK 不直接访问数据库）
    */
   private async ensureStudentState(studentId: string): Promise<void> {
-    const existingState = await prisma.uOKState.findUnique({
-      where: { studentId },
+    // 从 UserKnowledge 表加载知识点掌握情况
+    const userKnowledgeRecords = await prisma.userKnowledge.findMany({
+      where: { userId: studentId },
+      select: {
+        knowledgePointId: true,
+        mastery: true,
+      },
     });
 
-    if (!existingState) {
-      // 创建初始状态
-      await prisma.uOKState.create({
-        data: {
-          studentId,
-          knowledge: '{}',
-          attemptCount: 0,
-          correctCount: 0,
-        },
-      });
+    // 构建知识点 Map
+    const knowledgeData = new Map<string, number>();
+    for (const record of userKnowledgeRecords) {
+      knowledgeData.set(record.knowledgePointId, record.mastery);
     }
 
-    // 加载到 UOK
-    this.uok.loadStudentState(studentId);
+    // 加载到 UOK（UOK 不直接访问数据库）
+    this.uok.loadKnowledge(studentId, knowledgeData);
   }
 
   /**
    * 处理 UOK 返回的动作
    */
-  private handleAction(
+  private async handleAction(
     action: Action,
     studentId: string,
     excludeQuestionIds: string[]
-  ): RecommendationResponse {
+  ): Promise<RecommendationResponse> {
     switch (action.type) {
       case 'recommend':
-        return this.handleRecommend(action.topic, studentId, excludeQuestionIds);
+        return await this.handleRecommend(action.topic, studentId, excludeQuestionIds);
 
       case 'recommend_question':
-        return this.handleRecommend(action.topic, studentId, excludeQuestionIds);
+        return await this.handleRecommend(action.topic, studentId, excludeQuestionIds);
 
       case 'done':
         return createRecommendationResponse(false, undefined, createErrorResponse(
@@ -141,7 +140,7 @@ export class RecommendationEngine {
       default:
         return createRecommendationResponse(false, undefined, createErrorResponse(
           ErrorCode.SYSTEM_ERROR,
-          { actionType: action.type }
+          { actionType: (action as { type: string }).type }
         ));
     }
   }
@@ -193,7 +192,10 @@ export class RecommendationEngine {
       ));
     }
 
-    const beforeProbability = this.uok.predict(studentId, question.id);
+    const beforeProbability = this.uok.predict(studentId, question.id, {
+      difficulty: 0.5,
+      complexity: question.complexity ?? 0.5,
+    });
 
     return createRecommendationResponse(true, createSuccessResponse(
       question,
@@ -245,7 +247,10 @@ export class RecommendationEngine {
     }
 
     // 获取预测前概率
-    const beforeProbability = this.uok.predict(studentId, questionId);
+    const beforeProbability = this.uok.predict(studentId, questionId, {
+      difficulty: question.difficulty ?? 0.5,
+      complexity: question.complexity ?? 0.5,
+    });
 
     // 编码题目到 UOK
     this.uok.encodeQuestion({
@@ -257,13 +262,46 @@ export class RecommendationEngine {
     // 编码答案
     const afterProbability = this.uok.encodeAnswer(studentId, questionId, correct);
 
-    // 保存状态
-    await this.uok.saveStudentState(studentId);
+    // Phase 5: 状态持久化由调用方负责（RecommendationEngine 不直接写数据库）
+    // 调用方需要将新的 mastery 值写回 UserKnowledge 表
 
     // 记录到 RL 控制器（如果启用）
     // TODO: 集成 RL 控制器
 
     return { beforeProbability, afterProbability };
+  }
+
+  /**
+   * 保存学生状态（由调用方使用）
+   * 将 UOK 中的 mastery 写回 UserKnowledge 表
+   */
+  async persistStudentState(studentId: string): Promise<void> {
+    const student = this.uok.getStudentState(studentId);
+    if (!student) return;
+
+    // 批量更新 UserKnowledge 表
+    const updates = Array.from(student.knowledge.entries()).map(([kpId, mastery]) =>
+      prisma.userKnowledge.upsert({
+        where: {
+          userId_knowledgePointId: {
+            userId: studentId,
+            knowledgePointId: kpId,
+          },
+        },
+        create: {
+          userId: studentId,
+          knowledgePointId: kpId,
+          mastery,
+        },
+        update: {
+          mastery,
+          lastPractice: new Date(),
+          practiceCount: { increment: 1 },
+        },
+      })
+    );
+
+    await prisma.$transaction(updates);
   }
 
   /**

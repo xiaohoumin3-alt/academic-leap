@@ -7,7 +7,7 @@ export type PracticeState = 'answering' | 'showing_answer' | 'completed' | 'erro
 
 export interface PracticeQuestion {
   id: string;
-  type: 'fill_blank' | 'multiple_choice' | 'short_answer';
+  type: 'fill_blank' | 'multiple_choice' | 'short_answer' | 'calculation';
   question: string;
   answer: string | string[];
   options?: string[];

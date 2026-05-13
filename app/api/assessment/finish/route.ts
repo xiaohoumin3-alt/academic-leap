@@ -170,24 +170,43 @@ export async function POST(req: NextRequest) {
     for (const step of attemptSteps as any[]) {
       let knowledgePointIds: string[] = [];
 
-      // 从数据库记录获取知识点
+      // 从数据库记录获取知识点 (Json type)
       if (step.questionStepId) {
         const questionStep = questionStepMap.get(step.questionStepId);
-        try {
-          if (questionStep?.question?.knowledgePoints) {
-            knowledgePointIds = JSON.parse(questionStep.question.knowledgePoints);
-          }
-        } catch (e) {}
+        const kpValue = questionStep?.question?.knowledgePoints;
+        if (Array.isArray(kpValue)) {
+          knowledgePointIds = kpValue.map(kp => {
+            if (typeof kp === 'string') return kp;
+            if (typeof kp === 'object' && kp !== null) {
+              return (kp as { id?: string; name?: string }).id || (kp as { id?: string; name?: string }).name || '';
+            }
+            return String(kp);
+          }).filter(Boolean);
+        } else if (typeof kpValue === 'string') {
+          try {
+            const parsed = JSON.parse(kpValue);
+            if (Array.isArray(parsed)) {
+              knowledgePointIds = parsed.map(kp => {
+                if (typeof kp === 'string') return kp;
+                if (typeof kp === 'object' && kp !== null) {
+                  return (kp as { id?: string; name?: string }).id || (kp as { id?: string; name?: string }).name || '';
+                }
+                return String(kp);
+              }).filter(Boolean);
+            }
+          } catch (e) { /* ignore parse error */ }
+        }
       }
       // 从前端传递的数据获取知识点
       else if (step.knowledgePoints) {
-        try {
-          knowledgePointIds = JSON.parse(step.knowledgePoints);
-        } catch (e) {
-          // knowledgePoints 可能已经是数组
-          if (Array.isArray(step.knowledgePoints)) {
-            knowledgePointIds = step.knowledgePoints;
-          }
+        const kpValue = step.knowledgePoints;
+        if (Array.isArray(kpValue)) {
+          knowledgePointIds = kpValue;
+        } else if (typeof kpValue === 'string') {
+          try {
+            const parsed = JSON.parse(kpValue);
+            knowledgePointIds = Array.isArray(parsed) ? parsed : [];
+          } catch (e) { /* ignore parse error */ }
         }
       }
 
@@ -419,10 +438,31 @@ export async function POST(req: NextRequest) {
         }
 
         let kpList: string[] = [];
-        try {
-          kpList = JSON.parse(question.knowledgePoints || '[]');
-        } catch {
-          kpList = [];
+        // knowledgePoints is now a Json type, may be array or already-parsed object
+        const kpValue = question.knowledgePoints;
+        if (Array.isArray(kpValue)) {
+          kpList = kpValue.map(kp => {
+            if (typeof kp === 'string') return kp;
+            if (typeof kp === 'object' && kp !== null) {
+              return (kp as { id?: string; name?: string }).id || (kp as { id?: string; name?: string }).name || '';
+            }
+            return String(kp);
+          }).filter(Boolean);
+        } else if (typeof kpValue === 'string') {
+          try {
+            const parsed = JSON.parse(kpValue || '[]');
+            if (Array.isArray(parsed)) {
+              kpList = parsed.map(kp => {
+                if (typeof kp === 'string') return kp;
+                if (typeof kp === 'object' && kp !== null) {
+                  return (kp as { id?: string; name?: string }).id || (kp as { id?: string; name?: string }).name || '';
+                }
+                return String(kp);
+              }).filter(Boolean);
+            }
+          } catch {
+            kpList = [];
+          }
         }
 
         return {

@@ -52,6 +52,8 @@ export default function TrainingPage() {
 
         const data = await response.json();
 
+        console.log('[TrainingMode fetchQuestions] Response data:', data);
+
         // 检查题目不足错误（明确错误提示，拒绝降级）
         if (data.code === 'INSUFFICIENT_QUESTIONS') {
           // 显示详细错误信息，包括缺失难度和可用数量
@@ -80,7 +82,7 @@ export default function TrainingPage() {
         }
 
         // 检查是否需要诊断
-        if (data.needsDiagnostic && data.redirectTo) {
+        if (data.code === 'NEEDS_DIAGNOSTIC' || data.needsDiagnostic) {
           setError(data.message || '建议先完成诊断测评以获得个性化推荐');
           return;
         }
@@ -90,13 +92,42 @@ export default function TrainingPage() {
         }
 
         const mappedQuestions: PracticeQuestion[] = data.questions.map((q: any) => {
+          console.log('[TrainingMode] Processing question:', q.id, 'type:', q.type, 'content type:', typeof q.content);
           // 解析content字段（可能是JSON字符串或已解析对象）
           const content = typeof q.content === 'string' ? JSON.parse(q.content) : q.content;
+
+          // 处理不同类型题目的content结构
+          // calculation类型: {title, description, context, a, b}
+          // 其他类型: {question}
+          let questionText = '';
+          if (typeof content === 'object' && content !== null) {
+            if (content.question) {
+              questionText = content.question;
+            } else if (content.title && content.context) {
+              // calculation类型题目
+              questionText = `${content.title}\n${content.context}`;
+            } else if (content.title) {
+              questionText = content.title;
+            } else if (content.description) {
+              questionText = content.description;
+            } else {
+              questionText = JSON.stringify(content);
+            }
+          } else {
+            questionText = String(content);
+          }
+
+          console.log('[TrainingMode] Mapped question:', {
+            id: q.id,
+            type: q.type,
+            questionText: questionText.substring(0, 50),
+            answer: q.answer,
+          });
 
           return {
             id: q.id,
             type: q.type,
-            question: content.question,
+            question: questionText,
             answer: q.answer,
             options: q.options,
             explanation: q.explanation,

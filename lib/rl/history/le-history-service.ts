@@ -110,7 +110,7 @@ export class PrismaLEHistoryService implements LEHistoryService {
       update: {
         correct: { increment: correct ? 1 : 0 },
         total: { increment: 1 },
-        accuracy: {},
+        // accuracy will be recalculated below
         lastUpdatedAt: new Date()
       }
     });

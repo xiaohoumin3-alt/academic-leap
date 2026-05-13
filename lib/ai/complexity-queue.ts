@@ -6,10 +6,8 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import {
-  extractComplexityForQuestion,
-  type ExtractionResult,
-} from '../qie/complexity-extractor';
+import { ComplexityExtractor } from '@/lib/qie/complexity-extractor';
+import type { ExtractionResult, QuestionContent } from '@/lib/qie/complexity-extractor';
 
 export interface QueueItem {
   questionId: string;
@@ -35,11 +33,13 @@ export class ComplexityQueue {
   private queue: QueueItem[] = [];
   private processing: boolean = false;
   private onExtractionComplete?: (questionId: string, result: ExtractionResult) => void;
+  private extractor: ComplexityExtractor;
 
   constructor(
     onExtractionComplete?: (questionId: string, result: ExtractionResult) => void
   ) {
     this.onExtractionComplete = onExtractionComplete;
+    this.extractor = new ComplexityExtractor();
   }
 
   /**
@@ -136,7 +136,7 @@ export class ComplexityQueue {
     }
 
     // 执行复杂度提取
-    const result = await extractComplexityForQuestion(questionId, question.content);
+    const result = await this.extractor.extract(questionId, question.content as QuestionContent);
 
     // 更新题目复杂度特征
     await prisma.question.update({

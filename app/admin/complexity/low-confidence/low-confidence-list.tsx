@@ -75,11 +75,19 @@ export async function LowConfidenceList() {
         <div className="space-y-4">
           {flagged.map((q) => {
             let contentPreview = '';
-            try {
-              const parsed = JSON.parse(q.content);
-              contentPreview = parsed.question?.text || parsed.text || q.content.substring(0, 100);
-            } catch {
-              contentPreview = q.content.substring(0, 100);
+            // Handle Json type - content is now an object, not a string
+            const contentObj = typeof q.content === 'object' ? q.content : null;
+            if (contentObj && typeof contentObj === 'object') {
+              contentPreview = (contentObj as { question?: { text?: string }, text?: string }).question?.text || (contentObj as { text?: string }).text || JSON.stringify(contentObj).substring(0, 100);
+            } else {
+              // Fallback for string content (during migration)
+              const contentStr = String(q.content ?? '');
+              try {
+                const parsed = JSON.parse(contentStr);
+                contentPreview = parsed.question?.text || parsed.text || contentStr.substring(0, 100);
+              } catch {
+                contentPreview = contentStr.substring(0, 100);
+              }
             }
 
             const cog = q.cognitiveLoad || 0;

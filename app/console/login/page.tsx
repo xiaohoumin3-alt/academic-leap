@@ -8,8 +8,8 @@ import MaterialIcon from '../../../components/MaterialIcon';
 export default function AdminLoginPage() {
   const router = useRouter();
   const [formData, setFormData] = useState({
-    email: 'admin@example.com',
-    password: 'admin123',
+    email: '',
+    password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -148,12 +148,7 @@ export default function AdminLoginPage() {
           </div>
         </div>
 
-        <div className="mt-6 text-center">
-          <p className="text-xs text-on-surface-variant/60 font-mono">
-            Test Credentials: admin@example.com / admin123
-          </p>
-        </div>
-      </motion.div>
+        </motion.div>
     </div>
   );
 }

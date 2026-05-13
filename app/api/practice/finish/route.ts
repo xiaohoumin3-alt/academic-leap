@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { gamificationListener } from '@/lib/gaming/event-listener';
+import { parseKnowledgePointNames } from '@/lib/utils/kp-parse';
 
 // POST /api/practice/finish - 完成练习
 export async function POST(req: NextRequest) {
@@ -42,19 +43,26 @@ export async function POST(req: NextRequest) {
     const knowledgeStats = new Map<string, { correct: number; total: number }>();
 
     attempt.steps.forEach(step => {
-      const knowledgePoints = step.questionStep?.question?.knowledgePoints;
-      if (knowledgePoints) {
-        try {
-          const points = JSON.parse(knowledgePoints);
-          points.forEach((p: string) => {
-            const stats = knowledgeStats.get(p) || { correct: 0, total: 0 };
+      const kpValue = step.questionStep?.question?.knowledgePoints;
+      if (kpValue) {
+        let points: unknown[] = [];
+        if (Array.isArray(kpValue)) {
+          points = kpValue;
+        } else if (typeof kpValue === 'string') {
+          try {
+            const parsed = JSON.parse(kpValue);
+            if (Array.isArray(parsed)) points = parsed;
+          } catch (e) { /* ignore */ }
+        }
+        points.forEach((p: unknown) => {
+          const id = typeof p === 'string' ? p : (p as { id?: string }).id || (p as { name?: string }).name || '';
+          if (id) {
+            const stats = knowledgeStats.get(id) || { correct: 0, total: 0 };
             stats.total++;
             if (step.isCorrect) stats.correct++;
-            knowledgeStats.set(p, stats);
-          });
-        } catch (e) {
-          // ignore parse error
-        }
+            knowledgeStats.set(id, stats);
+          }
+        });
       }
     });
 
@@ -112,14 +120,12 @@ export async function POST(req: NextRequest) {
         for (const s of a.steps) {
           const kps = s.questionStep?.question?.knowledgePoints;
           if (kps) {
-            try {
-              const points = JSON.parse(kps);
-              // 检查是否包含当前知识点名称
-              if (points.includes(knowledgePointName)) {
-                totalSteps++;
-                if (s.isCorrect) totalCorrect++;
-              }
-            } catch (e) {}
+            const points = parseKnowledgePointNames(kps);
+            // 检查是否包含当前知识点名称
+            if (points.includes(knowledgePointName)) {
+              totalSteps++;
+              if (s.isCorrect) totalCorrect++;
+            }
           }
         }
       }

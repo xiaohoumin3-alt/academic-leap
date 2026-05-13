@@ -54,12 +54,20 @@ export async function GET(req: NextRequest) {
     for (const attempt of weeklyAttempts) {
       for (const step of attempt.steps) {
         if (step.questionStep?.question) {
-          try {
-            const kps = JSON.parse(step.questionStep.question.knowledgePoints || '[]');
-            kps.forEach((kp: string) => allPracticedKnowledgeIds.add(kp));
-          } catch {
-            // Ignore parse errors
+          const kpValue = step.questionStep.question.knowledgePoints;
+          let kps: unknown[] = [];
+          if (Array.isArray(kpValue)) {
+            kps = kpValue;
+          } else if (typeof kpValue === 'string') {
+            try {
+              const parsed = JSON.parse(kpValue || '[]');
+              if (Array.isArray(parsed)) kps = parsed;
+            } catch { /* ignore */ }
           }
+          kps.forEach((kp: unknown) => {
+            const id = typeof kp === 'string' ? kp : (kp as { id?: string }).id || '';
+            if (id) allPracticedKnowledgeIds.add(id);
+          });
         }
       }
     }
@@ -116,7 +124,12 @@ export async function GET(req: NextRequest) {
     }> = [];
 
     if (path) {
-      const allNodes = JSON.parse(path.knowledgeData as string);
+      // knowledgeData is now a Json type, may be array or already-parsed
+      const allNodes = Array.isArray(path.knowledgeData)
+        ? path.knowledgeData
+        : typeof path.knowledgeData === 'string'
+          ? JSON.parse(path.knowledgeData || '[]')
+          : [];
       // Filter nodes to only include those in current textbook
       const nodes = textbookKpIds.size > 0
         ? allNodes.filter((n: { nodeId: string }) => textbookKpIds.has(n.nodeId))

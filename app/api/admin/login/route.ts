@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createAdminToken } from '@/lib/admin-auth';
 import { cookies } from 'next/headers';
-
-const ADMIN_SECRET = process.env.ADMIN_SECRET || 'your-admin-secret-change-in-production';
+import bcrypt from 'bcryptjs';
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,7 +21,7 @@ export async function POST(req: NextRequest) {
       include: { admin: true }
     });
 
-    if (!user || user.password !== password) {
+    if (!user || !(await bcrypt.compare(password, user.password))) {
       return NextResponse.json(
         { success: false, error: '邮箱或密码错误', code: 'INVALID_CREDENTIALS' },
         { status: 401 }

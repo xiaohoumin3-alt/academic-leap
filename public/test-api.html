@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head><title>API Test</title></head>
+<body>
+<h1>Testing API endpoints...</h1>
+<pre id="result"></pre>
+<script>
+async function test() {
+  const results = [];
+  
+  // Test 1: GET /api/uok/recommend
+  try {
+    const r1 = await fetch('/api/uok/recommend');
+    results.push(`GET /api/uok/recommend: ${r1.status}`);
+  } catch(e) {
+    results.push(`GET /api/uok/recommend: ERROR - ${e.message}`);
+  }
+  
+  // Test 2: POST /api/uok/recommend
+  try {
+    const r2 = await fetch('/api/uok/recommend', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({count: 3})
+    });
+    results.push(`POST /api/uok/recommend: ${r2.status}`);
+  } catch(e) {
+    results.push(`POST /api/uok/recommend: ERROR - ${e.message}`);
+  }
+  
+  // Test 3: GET /api/practice/recommend (different endpoint)
+  try {
+    const r3 = await fetch('/api/practice/recommend');
+    results.push(`GET /api/practice/recommend: ${r3.status}`);
+  } catch(e) {
+    results.push(`GET /api/practice/recommend: ERROR - ${e.message}`);
+  }
+  
+  // Show cookies
+  results.push(`\nCookies: ${document.cookie}`);
+  
+  document.getElementById('result').textContent = results.join('\n');
+}
+test();
+</script>
+</body>
+</html>

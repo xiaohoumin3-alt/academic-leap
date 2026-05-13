@@ -1,7 +1,6 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { SessionProvider } from 'next-auth/react';
 import { Suspense } from 'react';
 import AnalyzePage from '@/components/AnalyzePage';
 
@@ -17,10 +16,8 @@ export default function AnalyzePageRoute() {
   };
 
   return (
-    <SessionProvider>
-      <Suspense fallback={<div className="p-8 text-center">加载中...</div>}>
-        <AnalyzePageContent onBack={handleBack} />
-      </Suspense>
-    </SessionProvider>
+    <Suspense fallback={<div className="p-8 text-center">加载中...</div>}>
+      <AnalyzePageContent onBack={handleBack} />
+    </Suspense>
   );
 }

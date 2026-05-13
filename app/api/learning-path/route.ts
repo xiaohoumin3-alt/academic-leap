@@ -95,8 +95,13 @@ export async function GET(): Promise<NextResponse> {
     }>;
 
     try {
-      const allNodes = JSON.parse(activePath.knowledgeData);
-      // Filter out nodes not in current textbook
+      // knowledgeData is now Json type, may be array or string
+      const rawData = activePath.knowledgeData;
+      const allNodes = Array.isArray(rawData)
+        ? rawData
+        : typeof rawData === 'string'
+          ? JSON.parse(rawData)
+          : [];
       knowledgeNodes = allNodes.filter((node: { nodeId: string }) => validKpIds.has(node.nodeId));
     } catch (error) {
       return NextResponse.json(
@@ -159,7 +164,13 @@ export async function GET(): Promise<NextResponse> {
     const assessmentMasteryMap = new Map<string, number>();
     if (latestAssessment) {
       try {
-        const knowledgeData = JSON.parse(latestAssessment.knowledgeData as string);
+        // knowledgeData is Json type (for LearningPath) or Json (for Assessment - same)
+        const rawData = latestAssessment.knowledgeData;
+        const knowledgeData = typeof rawData === 'object' && rawData !== null
+          ? rawData as Record<string, unknown>
+          : typeof rawData === 'string'
+            ? JSON.parse(rawData)
+            : {};
         // knowledgeData format: { "知识点名称": level (0-4) }
         // Convert level to mastery
         const levelToMastery = (level: number): number => {
@@ -271,16 +282,24 @@ export async function GET(): Promise<NextResponse> {
     for (const attempt of recentAttempts) {
       for (const step of attempt.steps) {
         if (step.questionStep?.question) {
-          try {
-            const kps = JSON.parse(step.questionStep.question.knowledgePoints || '[]');
-            for (const kp of kps) {
+          const kpValue = step.questionStep.question.knowledgePoints;
+          let kps: unknown[] = [];
+          if (Array.isArray(kpValue)) {
+            kps = kpValue;
+          } else if (typeof kpValue === 'string') {
+            try {
+              const parsed = JSON.parse(kpValue || '[]');
+              if (Array.isArray(parsed)) kps = parsed;
+            } catch { /* ignore */ }
+          }
+          for (const kp of kps) {
+            const kpId = typeof kp === 'string' ? kp : (kp as { id?: string }).id || '';
+            if (kpId) {
               knowledgePointPracticeCount.set(
-                kp,
-                (knowledgePointPracticeCount.get(kp) || 0) + 1
+                kpId,
+                (knowledgePointPracticeCount.get(kpId) || 0) + 1
               );
             }
-          } catch {
-            // Ignore parse errors
           }
         }
       }
@@ -333,7 +352,13 @@ export async function GET(): Promise<NextResponse> {
     let lastWeekAvgMastery = 0;
     if (lastWeekAssessment?.knowledgeData) {
       try {
-        const lastWeekData = JSON.parse(lastWeekAssessment.knowledgeData as string);
+        // knowledgeData is Json type
+        const rawData = lastWeekAssessment.knowledgeData;
+        const lastWeekData = typeof rawData === 'object' && rawData !== null
+          ? rawData as Record<string, unknown>
+          : typeof rawData === 'string'
+            ? JSON.parse(rawData)
+            : {};
         const levelToMastery = (level: number): number => {
           if (level <= 0) return 0.3;
           if (level === 1) return 0.55;

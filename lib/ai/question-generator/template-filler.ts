@@ -1,8 +1,18 @@
 /**
  * AI Template Filler
  *
+ * ⚠️ EXPERIMENTAL - This module is not yet implemented.
+ *
  * Uses AI models to fill in template parameters with contextual values,
  * making questions more varied and engaging.
+ *
+ * Current status: Placeholder implementation
+ * TODO: Implement AI template filling
+ *   1. Load template structure
+ *   2. Generate AI prompt for parameter generation
+ *   3. Call AI model
+ *   4. Validate generated parameters
+ *   5. Return filled template
  */
 
 export interface TemplateFillOptions {

@@ -97,7 +97,13 @@ export async function getUserMastery(
 
   if (latestAssessment) {
     try {
-      const knowledgeData = JSON.parse(latestAssessment.knowledgeData as string);
+      // knowledgeData is now Json type
+      const rawData = latestAssessment.knowledgeData;
+      const knowledgeData = typeof rawData === 'object' && rawData !== null
+        ? rawData as Record<string, unknown>
+        : typeof rawData === 'string'
+          ? JSON.parse(rawData)
+          : {};
       const kpData = knowledgeData[knowledgePointId];
       if (kpData && kpData.mastery !== undefined) {
         return kpData.mastery;
@@ -168,7 +174,16 @@ export async function getRecentFailureRate(
   for (const step of recentSteps) {
     try {
       if (step.questionStep?.question) {
-        const knowledgePoints = JSON.parse(step.questionStep.question.knowledgePoints || '[]');
+        const kpValue = step.questionStep.question.knowledgePoints;
+        let knowledgePoints: unknown[] = [];
+        if (Array.isArray(kpValue)) {
+          knowledgePoints = kpValue;
+        } else if (typeof kpValue === 'string') {
+          try {
+            const parsed = JSON.parse(kpValue || '[]');
+            if (Array.isArray(parsed)) knowledgePoints = parsed;
+          } catch { /* ignore */ }
+        }
         if (knowledgePoints.includes(knowledgePointId)) {
           relevantCount++;
           if (!step.isCorrect) {

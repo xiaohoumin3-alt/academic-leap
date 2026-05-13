@@ -106,20 +106,89 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // 添加详细调试：检查UOK状态
-    const { UOK } = await import('@/lib/qie/uok');
-    const uok = new UOK();
-    await uok.getOrCreateStudentWithState(session.user.id);
-    const action = uok.act('next_question', session.user.id);
-    console.log('[UOK Recommend POST] action.type:', action.type);
-    console.log('[UOK Recommend POST] action:', JSON.stringify(action));
+    // 获取用户最近做过的题目（避免重复推荐）
+    // 从 PracticeSession 获取最近7天的练习记录
+    const recentSessions = await prisma.practiceSession.findMany({
+      where: {
+        userId: session.user.id,
+        updatedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }, // 最近7天
+      },
+      select: { answers: true },
+    });
+
+    // 解析 answers 字段获取已做题目ID
+    const recentlyDoneIds = new Set<string>();
+    for (const session of recentSessions) {
+      try {
+        const answers = JSON.parse(session.answers);
+        for (const answer of answers) {
+          if (answer.questionId) {
+            recentlyDoneIds.add(answer.questionId);
+          }
+        }
+      } catch {
+        // 忽略解析错误
+      }
+    }
+
+    // 同时从 Attempt 表获取历史记录（诊断测评等）
+    const recentAttempts = await prisma.attempt.findMany({
+      where: {
+        userId: session.user.id,
+        startedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+      },
+      select: { id: true },
+      take: 100,
+    });
+
+    // 将 Attempt 关联的题目ID也加入排除列表（需要通过 AttemptStep 关联）
+    const attemptStepIds = await prisma.attemptStep.findMany({
+      where: {
+        attemptId: { in: recentAttempts.map(a => a.id) },
+      },
+      select: { questionStepId: true },
+    });
+
+    for (const step of attemptStepIds) {
+      if (step.questionStepId) {
+        // 通过 QuestionStep 找到对应的 Question
+        const question = await prisma.question.findFirst({
+          where: {
+            steps: { some: { id: step.questionStepId } },
+          },
+          select: { id: true },
+        });
+        if (question) {
+          recentlyDoneIds.add(question.id);
+        }
+      }
+    }
+
+    // 合并所有排除ID
+    const allExcludeIds = [...new Set([...excludeIds, ...Array.from(recentlyDoneIds)])];
+    console.log('[UOK Recommend POST] Excluding', allExcludeIds.length, 'recently done questions');
+
+    // Load student knowledge data for UOK (Phase 5: UOK doesn't call DB)
+    const userKnowledgeRecords = await prisma.userKnowledge.findMany({
+      where: { userId: session.user.id },
+      select: {
+        knowledgePointId: true,
+        mastery: true,
+      },
+    });
+
+    const knowledgeData = new Map<string, number>();
+    for (const record of userKnowledgeRecords) {
+      knowledgeData.set(record.knowledgePointId, record.mastery);
+    }
 
     const questions: any[] = [];
+    const sessionExcludeIds = [...allExcludeIds]; // 本次请求的排除列表
 
     for (let i = 0; i < count; i++) {
       const recommendation = await service.getRecommendation(
         session.user.id,
-        excludeIds
+        sessionExcludeIds
       );
 
       console.log('[UOK Recommend POST] recommendation', i, ':', recommendation ? 'found' : 'null');
@@ -135,7 +204,7 @@ export async function POST(req: NextRequest) {
           rationale: recommendation.rationale,
           beforeProbability: recommendation.beforeProbability,
         });
-        excludeIds.push(recommendation.questionId);
+        sessionExcludeIds.push(recommendation.questionId);
       }
     }
 

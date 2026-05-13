@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { requireAdmin } from '@/lib/admin-auth';
 
 // GET /api/questions - 获取题目列表
 export async function GET(req: NextRequest) {
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '未登录' }, { status: 401 });
     }
 
-    // TODO: 检查是否为管理员
+    await requireAdmin('editor');
 
     const { type, difficulty, content, answer, hint, knowledgePoints, steps } = await req.json();
 

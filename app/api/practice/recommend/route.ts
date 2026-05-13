@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getRecommendedDifficulty, getKnowledgeLevel } from '@/lib/scoring';
+import { parseKnowledgePointNames } from '@/lib/utils/kp-parse';
 
 /**
  * GET /api/practice/recommend
@@ -69,26 +70,60 @@ export async function GET(req: NextRequest) {
 
     // 找出最薄弱的知识点（掌握度最低）
     const weakestKnowledge = userKnowledge[0];
+
+    // FIX: kpId (kp17-2-folding) 与 Question.knowledgePoints (["勾股定理"]) 不匹配
+    // 需要将 kp ID 转为 name 再搜索
+    const kpRecord = await prisma.knowledgePoint.findUnique({
+      where: { id: weakestKnowledge.knowledgePointId },
+      select: { name: true },
+    });
+    const kpName = kpRecord?.name || weakestKnowledge.knowledgePoint.name;
+
     const recommendedLevel = getKnowledgeLevel(weakestKnowledge.mastery) + 1;
     const { difficultyMultiplier } = getRecommendedDifficulty(recommendedLevel - 1);
 
     // 根据推荐难度查找题目
     const difficultyLevel = Math.min(5, Math.max(1, Math.round(difficultyMultiplier)));
 
-    // 查找该知识点的题目（使用 knowledgePointId）
-    const kpId = weakestKnowledge.knowledgePointId;
-    const questions = await prisma.question.findMany({
-      where: {
-        knowledgePoints: { contains: kpId },
+    // 查找该知识点的题目 (Json filtering in memory)
+    const allQuestions = await prisma.question.findMany({
+      where: { difficulty: difficultyLevel },
+      select: {
+        id: true,
+        type: true,
+        difficulty: true,
+        content: true,
+        knowledgePoints: true,
       },
-      take: 3, // 推荐3道题
+      take: 50,
     });
+
+    // Filter by knowledgePoint match (Json array)
+    const questions = allQuestions.filter(q => {
+      const kps = q.knowledgePoints;
+      if (Array.isArray(kps)) {
+        return kps.some(kp => {
+          if (typeof kp === 'string') return kp.includes(kpName);
+          if (typeof kp === 'object' && kp !== null) {
+            const name = (kp as { name?: string }).name || '';
+            return name.includes(kpName);
+          }
+          return false;
+        });
+      }
+      return false;
+    }).slice(0, 3);
 
     // 如果没有足够题目，补充其他题
     if (questions.length < 3) {
       const additionalQuestions = await prisma.question.findMany({
-        where: {
-          difficulty: difficultyLevel,
+        where: { difficulty: difficultyLevel },
+        select: {
+          id: true,
+          type: true,
+          difficulty: true,
+          content: true,
+          knowledgePoints: true,
         },
         take: 3 - questions.length,
       });
@@ -103,8 +138,13 @@ export async function GET(req: NextRequest) {
           id: q.id,
           type: q.type,
           difficulty: q.difficulty,
-          content: JSON.parse(q.content || '{}'),
-          knowledgePoints: JSON.parse(q.knowledgePoints || '[]'),
+          // content is now Json type - may be object or string
+          content: typeof q.content === 'object' && q.content !== null
+            ? q.content
+            : typeof q.content === 'string'
+              ? JSON.parse(q.content || '{}')
+              : {},
+          knowledgePoints: parseKnowledgePointNames(q.knowledgePoints),
         })),
         focusKnowledge: weakestKnowledge.knowledgePoint.name,
         focusKnowledgeMastery: Math.round(weakestKnowledge.mastery * 100),

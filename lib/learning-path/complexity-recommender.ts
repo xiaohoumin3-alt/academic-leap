@@ -14,7 +14,7 @@ export interface ComplexityProfile {
 
 export interface QuestionWithComplexity {
   id: string;
-  content: string;
+  content: unknown; // Json type
   cognitiveLoad: number;
   reasoningDepth: number;
   complexity: number;

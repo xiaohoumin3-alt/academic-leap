@@ -156,8 +156,12 @@ export async function applyMicroAdjustments(
     throw new Error('路径不存在');
   }
 
-  // Parse and apply adjustments
-  const nodes: PathKnowledgeNode[] = JSON.parse(path.knowledgeData as string);
+  // Parse and apply adjustments (knowledgeData is now Json type)
+  const nodes: PathKnowledgeNode[] = Array.isArray(path.knowledgeData)
+    ? path.knowledgeData as PathKnowledgeNode[]
+    : typeof path.knowledgeData === 'string'
+      ? JSON.parse(path.knowledgeData)
+      : [];
   const adjustmentMap = new Map(adjustments.map(a => [a.nodeId, a.newPriority]));
 
   for (const node of nodes) {

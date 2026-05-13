@@ -62,8 +62,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '步骤不存在', success: false }, { status: 404 });
     }
 
-    // 解析参数和步骤类型
-    const params = JSON.parse(question.params || '{}');
+    // 解析参数和步骤类型 (params is now Json type)
+    const params = typeof question.params === 'object' && question.params !== null
+      ? question.params
+      : typeof question.params === 'string'
+        ? JSON.parse(question.params || '{}')
+        : {};
     const stepType = step.type as any;
 
     // 安全解析 step.answer（可能是 JSON 字符串或普通值）

@@ -798,134 +798,83 @@ private sigmoid(z: number): number {
   // ========== Persistence Methods ==========
 
   /**
-   * Save student state to database
+   * Get current student state (memory only)
+   * Phase 5: Persistence is handled by caller (RecommendationEngine)
    */
-  async saveStudentState(studentId: string): Promise<void> {
-    const { prisma } = await import('@/lib/prisma');
-
-    const student = this.state.students.get(studentId);
-    if (!student) return;
-
-    const embedding = this.state._ml.embeddings.students.get(studentId);
-    const embeddingBase64 = embedding
-      ? Buffer.from(embedding.buffer).toString('base64')
-      : null;
-
-    await prisma.uOKState.upsert({
-      where: { studentId },
-      create: {
-        studentId,
-        knowledge: JSON.stringify(Object.fromEntries(student.knowledge)),
-        attemptCount: student.attemptCount,
-        correctCount: student.correctCount,
-        embedding: embeddingBase64,
-      },
-      update: {
-        knowledge: JSON.stringify(Object.fromEntries(student.knowledge)),
-        attemptCount: student.attemptCount,
-        correctCount: student.correctCount,
-        embedding: embeddingBase64,
-        lastUpdated: new Date(),
-      },
-    });
+  getStudentState(studentId: string): StudentState | undefined {
+    return this.state.students.get(studentId);
   }
 
   /**
-   * Load student state from database
-   * Reads from UserKnowledge table (written by diagnostic assessment flow)
+   * Get student state or throw
    */
-  async loadStudentState(studentId: string): Promise<StudentState | null> {
-    // Load from UserKnowledge table (written by diagnostic assessment)
-      const { prisma } = await import('@/lib/prisma');
-      const userKnowledgeRecords = await prisma.userKnowledge.findMany({
-        where: { userId: studentId },
-        select: {
-          knowledgePointId: true,
-          mastery: true,
-        },
-      });
-
-      if (userKnowledgeRecords.length === 0) return null;
-
-      const knowledgeMap = new Map<string, number>();
-      let totalAttempts = 0;
-      let totalCorrect = 0;
-
-      for (const record of userKnowledgeRecords) {
-        knowledgeMap.set(record.knowledgePointId, record.mastery);
-        // Estimate attempts/correct from mastery
-        // Use mastery as proxy: if mastery >= 0.6, student has shown competence
-        if (record.mastery > 0) {
-          totalAttempts += 1;
-          if (record.mastery >= 0.5) totalCorrect += 1;
-        }
-      }
-
-      const student: StudentState = {
-        id: studentId,
-        knowledge: knowledgeMap,
-        attemptCount: totalAttempts,
-        correctCount: totalCorrect,
-      };
-
-      this.state.students.set(studentId, student);
-      return student;
+  requireStudentState(studentId: string): StudentState {
+    const state = this.state.students.get(studentId);
+    if (!state) {
+      throw new Error(`Student ${studentId} not found in UOK state`);
+    }
+    return state;
   }
 
   /**
-   * Save question state to database
+   * Load student knowledge from external data (not from database)
+   * This is the preferred method for Phase 5 refactor - UOK doesn't call Prisma
    */
-  async saveQuestionState(questionId: string): Promise<void> {
-    const { prisma } = await import('@/lib/prisma');
+  loadKnowledge(studentId: string, knowledgeData: Map<string, number>): StudentState {
+    const student: StudentState = {
+      id: studentId,
+      knowledge: knowledgeData,
+      attemptCount: 0,
+      correctCount: 0,
+    };
 
-    const question = this.state.questions.get(questionId);
-    if (!question) return;
-
-    const embedding = this.state._ml.embeddings.questions.get(questionId);
-    const embeddingBase64 = embedding
-      ? Buffer.from(embedding.buffer).toString('base64')
-      : null;
-
-    await prisma.uOKQuestionState.upsert({
-      where: { questionId },
-      create: {
-        questionId,
-        topic: question.topics[0] || null,
-        attemptCount: question.attemptCount,
-        correctCount: question.correctCount,
-        embedding: embeddingBase64,
-      },
-      update: {
-        topic: question.topics[0] || null,
-        attemptCount: question.attemptCount,
-        correctCount: question.correctCount,
-        embedding: embeddingBase64,
-        lastUpdated: new Date(),
-      },
-    });
+    this.state.students.set(studentId, student);
+    return student;
   }
 
   /**
-   * Get or create student with database state
+   * Get or create student with knowledge data (Phase 5: no DB call)
+   * Call this instead of getOrCreateStudentWithState when you have knowledge data
    */
-  async getOrCreateStudentWithState(id: string): Promise<StudentState> {
+  ensureStudentWithKnowledge(id: string, knowledgeData: Map<string, number>): StudentState {
     // Check in-memory first
     const cached = this.state.students.get(id);
     if (cached) return cached;
 
-    // Try to load from database
-    const loaded = await this.loadStudentState(id);
-    if (loaded) return loaded;
+    // Create new student with provided knowledge
+    return this.loadKnowledge(id, knowledgeData);
+  }
 
-    // Create new student
-    const newStudent: StudentState = {
-      id,
-      knowledge: new Map(),
-      attemptCount: 0,
-      correctCount: 0,
-    };
-    this.state.students.set(id, newStudent);
-    return newStudent;
+  /**
+   * @deprecated Phase 5: Use ensureStudentWithKnowledge with knowledge data instead
+   * This method is kept for backward compatibility but doesn't load from DB
+   */
+  async getOrCreateStudentWithState(id: string): Promise<StudentState> {
+    const cached = this.state.students.get(id);
+    if (cached) return cached;
+
+    // Create with empty knowledge (caller should load knowledge data)
+    return this.loadKnowledge(id, new Map());
+  }
+
+  /**
+   * @deprecated Phase 5: Use ensureStudentWithKnowledge with knowledge data instead
+   * This method is kept for backward compatibility but doesn't load from DB
+   */
+  async loadStudentState(studentId: string): Promise<StudentState | null> {
+    // Phase 5: UOK no longer loads from DB directly
+    // Call loadKnowledge() with data from UserKnowledge table instead
+    const cached = this.state.students.get(studentId);
+    return cached ?? null;
+  }
+
+  /**
+   * @deprecated Phase 5: UOK no longer persists state. Call persistStudentState from caller.
+   * This method is kept for backward compatibility but doesn't write to DB
+   */
+  async saveStudentState(studentId: string): Promise<void> {
+    // Phase 5: UOK no longer saves to DB
+    // Call RecommendationEngine.persistStudentState() instead
   }
 }
 

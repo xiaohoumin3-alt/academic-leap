@@ -135,9 +135,9 @@ export async function POST(req: NextRequest) {
       for (const kpId of kpIds) {
         if (questions.length >= targetCount) break;
 
-        const question = await prisma.question.findFirst({
+        // Fetch questions with difficulty constraints (Json field can't use contains)
+        const candidateQuestions = await prisma.question.findMany({
           where: {
-            knowledgePoints: { contains: kpId },
             id: { notIn: Array.from(usedQuestionIds) },
             difficulty: {
               gte: minDiff,
@@ -151,8 +151,25 @@ export async function POST(req: NextRequest) {
             difficulty: true,
             content: true,
             answer: true,
+            knowledgePoints: true,
             steps: true,
           },
+          take: 20,
+        });
+
+        // Filter by knowledgePoint match (Json array)
+        const question = candidateQuestions.find(q => {
+          const kps = q.knowledgePoints;
+          if (Array.isArray(kps)) {
+            return kps.some(kp => {
+              if (typeof kp === 'string') return kp === kpId;
+              if (typeof kp === 'object' && kp !== null) {
+                return (kp as { id?: string }).id === kpId;
+              }
+              return false;
+            });
+          }
+          return false;
         });
 
         if (question) {
@@ -226,8 +243,9 @@ export async function POST(req: NextRequest) {
       try {
         console.log(`[Assessment Start] 预置题目不足(${questions.length}/${targetCount})，调用 AI 生成`);
 
-        // CRITICAL 修复：添加超时保护
-        const timeout = parseInt(process.env.AI_GENERATION_TIMEOUT || '15000', 10);
+        // CRITICAL 修复：添加超时保护（默认5分钟，与AI config对齐）
+        const timeout = parseInt(process.env.AI_GENERATION_TIMEOUT || '300000', 10);
+        console.log(`[Assessment Start] AI生成超时设置: ${timeout}ms`);
 
         const generatePromise = generateAndSaveCards({
           knowledgePointId: knowledgePoints[0]?.id || '',
@@ -342,6 +360,30 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('开始测评错误:', error);
-    return NextResponse.json({ success: false, error: '开始失败' }, { status: 500 });
+
+    // 提供更详细的错误信息
+    let errorMessage = '开始失败';
+    let errorDetails: string | undefined;
+
+    if (error instanceof Error) {
+      errorDetails = error.message;
+
+      // 根据错误类型提供更友好的提示
+      if (error.message.includes('timeout') || error.message.includes('超时')) {
+        errorMessage = '题目生成超时，请稍后重试';
+      } else if (error.message.includes('题目生成失败')) {
+        errorMessage = '题目生成失败，请稍后重试';
+      } else if (error.message.includes('API') || error.message.includes('fetch')) {
+        errorMessage = 'AI服务暂时不可用，请稍后重试';
+      } else if (error.message.includes('Database') || error.message.includes('prisma')) {
+        errorMessage = '数据库错误，请稍后重试';
+      }
+    }
+
+    return NextResponse.json({
+      success: false,
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? errorDetails : undefined
+    }, { status: 500 });
   }
 }

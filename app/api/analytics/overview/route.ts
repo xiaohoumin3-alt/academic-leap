@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseKnowledgePointNames } from "@/lib/utils/kp-parse";
 
 // Threshold constants for mastery status
 const MASTERY_HIGH = 0.8;
@@ -86,13 +87,8 @@ export async function GET(req: NextRequest) {
     // 按知识点聚合 - 先预加载所有相关 KnowledgePoint 获取中文名称
     const uniqueKpIds = new Set<string>();
     for (const step of trainingKnowledgeMastery) {
-      const kpJson = step.questionStep?.question?.knowledgePoints || '[]';
-      try {
-        const kpIds: string[] = JSON.parse(kpJson);
-        kpIds.forEach(id => uniqueKpIds.add(id));
-      } catch {
-        // Skip invalid JSON
-      }
+      const kpIds = parseKnowledgePointNames(step.questionStep?.question?.knowledgePoints || null);
+      kpIds.forEach(id => uniqueKpIds.add(id));
     }
 
     // 批量查询 KnowledgePoint 获取中文名称映射
@@ -105,18 +101,13 @@ export async function GET(req: NextRequest) {
     // 聚合数据，使用中文名称而非ID
     const trainingKpMap = new Map<string, { correct: number; total: number; name: string }>();
     for (const step of trainingKnowledgeMastery) {
-      const kpJson = step.questionStep?.question?.knowledgePoints || '[]';
-      try {
-        const kpIds: string[] = JSON.parse(kpJson);
-        for (const kpId of kpIds) {
-          const displayName = kpNameMap.get(kpId) || kpId; // 回退到ID如果未找到
-          const existing = trainingKpMap.get(displayName) || { correct: 0, total: 0, name: displayName };
-          existing.total += 1;
-          if (step.isCorrect) existing.correct += 1;
-          trainingKpMap.set(displayName, existing);
-        }
-      } catch {
-        // Skip invalid JSON
+      const kpIds = parseKnowledgePointNames(step.questionStep?.question?.knowledgePoints || null);
+      for (const kpId of kpIds) {
+        const displayName = kpNameMap.get(kpId) || kpId; // 回退到ID如果未找到
+        const existing = trainingKpMap.get(displayName) || { correct: 0, total: 0, name: displayName };
+        existing.total += 1;
+        if (step.isCorrect) existing.correct += 1;
+        trainingKpMap.set(displayName, existing);
       }
     }
 

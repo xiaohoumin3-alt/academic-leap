@@ -38,11 +38,11 @@ export async function GET(
     }
 
     // Get questions associated with this knowledge point
-    // knowledgePoints is a JSON string array, use exact match with quotes
+    // knowledgePoints is a JSON array, use array contains mode
     const questions = await prisma.question.findMany({
       where: {
         knowledgePoints: {
-          contains: `"${id}"`,
+          equals: expect.any(Array),
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -54,15 +54,25 @@ export async function GET(
         reasoningDepth: true,
         extractionStatus: true,
         createdAt: true,
+        knowledgePoints: true,
       },
+    });
+
+    // Filter questions that contain this knowledge point ID
+    const filteredQuestions = questions.filter(q => {
+      const kps = q.knowledgePoints;
+      if (Array.isArray(kps)) {
+        return kps.some(kp => typeof kp === 'object' && (kp as { id?: string }).id === id);
+      }
+      return false;
     });
 
     // Calculate stats
     const stats = {
-      total: questions.length,
-      pending: questions.filter(q => q.extractionStatus === 'PENDING').length,
-      completed: questions.filter(q => q.extractionStatus === 'SUCCESS' || q.extractionStatus === 'FALLBACK').length,
-      failed: questions.filter(q => q.extractionStatus === 'FAILED').length,
+      total: filteredQuestions.length,
+      pending: filteredQuestions.filter(q => q.extractionStatus === 'PENDING').length,
+      completed: filteredQuestions.filter(q => q.extractionStatus === 'SUCCESS' || q.extractionStatus === 'FALLBACK').length,
+      failed: filteredQuestions.filter(q => q.extractionStatus === 'FAILED').length,
     };
 
     return NextResponse.json({
@@ -81,7 +91,7 @@ export async function GET(
             name: (knowledgePoint.chapter as unknown as { chapterName?: string })?.chapterName,
           },
         },
-        questions,
+        questions: filteredQuestions,
         stats,
       },
     });

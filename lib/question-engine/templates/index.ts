@@ -40,6 +40,7 @@ import { PythagorasFoldingTemplate } from './chapter17/pythagoras_folding';
 import { TriangleVerifyTemplate } from './chapter17/triangle_verify';
 import { PythagorasWordProblemTemplate } from './chapter17/pythagoras_word_problem';
 import { QuadraticWordProblemTemplate } from './chapter19/quadratic_word_problem';
+import { QuadraticWordProblemTemplateV2 } from './chapter19/quadratic_word_problem_v2';
 
 /**
  * 模板注册表
@@ -67,6 +68,7 @@ export const TEMPLATE_REGISTRY: Record<string, QuestionTemplate> = {
   quadratic_growth: QuadraticGrowthTemplate,
   quadratic_area: QuadraticAreaTemplate,
   quadratic_word_problem: QuadraticWordProblemTemplate, // 场景化应用题，权重较高
+  quadratic_word_problem_v2: QuadraticWordProblemTemplateV2, // 深度思考题，三段式推理链
 
   // 数据分析（第20章）
   central_tendency: CentralTendencyTemplate,

@@ -14,6 +14,9 @@ type QuestionProtocolUnion = Omit<QuestionProtocol, 'steps'> & {
 // Question type enum
 type QuestionType = 'calculation' | 'fill_blank';
 
+// Generation mode enum
+type GenerationMode = 'simple' | 'deep' | 'mixed';
+
 /**
  * 生成单个题目
  */
@@ -21,15 +24,26 @@ async function generateSingleQuestion(
   knowledgePoint: string,
   difficulty: number,
   renderStyle: 'standard' | 'guided' | 'gamified' | 'story',
-  questionType: QuestionType = 'calculation'
+  questionType: QuestionType = 'calculation',
+  mode: GenerationMode = 'simple'
 ): Promise<QuestionProtocolUnion> {
   // 填空题使用 AI 直接生成，不需要模板
   if (questionType === 'fill_blank') {
     return generateFillBlankQuestion(knowledgePoint, difficulty, renderStyle);
   }
 
+  // 深度思考题：使用 v2 模板
+  if (mode === 'deep' && knowledgePoint === '二次函数') {
+    return generateDeepThinkingQuestion(knowledgePoint, difficulty, renderStyle);
+  }
+
   // 1. 根据知识点获取模板ID
-  const templateId = await getTemplateIdByKnowledgePointId(knowledgePoint);
+  let templateId = await getTemplateIdByKnowledgePointId(knowledgePoint);
+
+  // 深度模式：优先使用 v2 模板
+  if (mode === 'deep' && templateId === 'quadratic_word_problem') {
+    templateId = 'quadratic_word_problem_v2';
+  }
 
   if (!templateId) {
     throw new Error(`该知识点 "${knowledgePoint}" 暂未配置题目模板，请联系管理员`);
@@ -158,6 +172,33 @@ async function generateFillBlankQuestion(
   return question;
 }
 
+/**
+ * 生成深度思考题（使用 v2 模板）
+ */
+async function generateDeepThinkingQuestion(
+  knowledgePoint: string,
+  difficulty: number,
+  renderStyle: 'standard' | 'guided' | 'gamified' | 'story'
+): Promise<QuestionProtocolUnion> {
+  // 动态导入 v2 模板
+  const { createDeepThinkingQuestion } = await import('@/lib/question-engine/templates/chapter19/quadratic_word_problem_v2');
+
+  // 生成随机参数
+  const params = {
+    a: Math.floor(Math.random() * 20) + 20,  // 20-40
+    problemTypeIndex: Math.random() < 0.5 ? 1 : 2,  // area 或 profit
+    type: Math.floor(Math.random() * 2),
+    level: difficulty,
+  };
+
+  // 使用 v2 模板创建深度思考题
+  const question = createDeepThinkingQuestion(params, difficulty);
+
+  // AI增强渲染（可选）
+  const renderedQuestion = await renderQuestion(question as QuestionProtocol, renderStyle);
+  return renderedQuestion as QuestionProtocolUnion;
+}
+
 // POST /api/questions/generate - 使用模板引擎生成题目
 export async function POST(req: NextRequest) {
   let knowledgePoint = '二次函数';  // 默认知识点
@@ -165,6 +206,7 @@ export async function POST(req: NextRequest) {
   let count = 1;
   let renderStyle: 'standard' | 'guided' | 'gamified' | 'story' = 'standard';
   let questionType: QuestionType = 'calculation';
+  let mode: GenerationMode = 'simple';  // 默认简单模式
 
   try {
     const requestData = await req.json();
@@ -173,8 +215,9 @@ export async function POST(req: NextRequest) {
     count = requestData.count || 1;
     renderStyle = requestData.renderStyle || 'standard';
     questionType = requestData.type === 'fill_blank' ? 'fill_blank' : 'calculation';
+    mode = requestData.mode === 'deep' || requestData.mode === 'mixed' ? requestData.mode : 'simple';
 
-    console.log('=== 使用模板引擎生成题目 ===', { knowledgePoint, difficulty, count, renderStyle, questionType });
+    console.log('=== 使用模板引擎生成题目 ===', { knowledgePoint, difficulty, count, renderStyle, questionType, mode });
   } catch (e) {
     console.error('解析请求失败:', e);
   }
@@ -226,10 +269,18 @@ export async function POST(req: NextRequest) {
     const questions: QuestionProtocolUnion[] = [];
 
     for (let i = 0; i < count; i++) {
+      // mixed 模式：30%深度题，70%简单题
+      let currentMode = mode;
+      if (mode === 'mixed') {
+        currentMode = Math.random() < 0.3 ? 'deep' : 'simple';
+      }
+
       const question = await generateSingleQuestion(
         knowledgePoint,
         difficulty,
-        renderStyle
+        renderStyle,
+        'calculation',
+        currentMode
       );
       questions.push(question);
     }
@@ -244,6 +295,12 @@ export async function POST(req: NextRequest) {
     // 保存到数据库
     const savedQuestions = await Promise.all(
       questions.map(async (q) => {
+        // 检查是否为深度思考题
+        const isDeepThinkingQuestion = 'isDeepThinking' in q && q.isDeepThinking === true;
+        const deepType = isDeepThinkingQuestion ? (q as any).deepType : null;
+        const cognitiveLevel = isDeepThinkingQuestion ? (q as any).cognitiveLevel : null;
+        const reasoningDepth = isDeepThinkingQuestion ? (q as any).reasoningDepth : null;
+
         const question = await prisma.question.create({
           data: {
             type: 'calculation',
@@ -251,11 +308,17 @@ export async function POST(req: NextRequest) {
             content: JSON.stringify(q.content),
             answer: '', // 答案在步骤中
             hint: q.content.context || '',
-            knowledgePoints: JSON.stringify([knowledgePoint]), // 直接使用中文知识点
+            // Json 类型字段 - 直接传递对象，Prisma 会自动处理
+            knowledgePoints: [knowledgePoint], // Json array
             isAI: renderStyle !== 'standard', // 非标准风格使用了AI
             templateId: q.templateId,
-            params: JSON.stringify(q.params),
-            stepTypes: JSON.stringify(q.steps.map(s => 'type' in s ? s.type : (s as StepProtocolV2).answerMode)),
+            params: q.params, // Json object
+            stepTypes: q.steps.map(s => 'type' in s ? s.type : (s as StepProtocolV2).answerMode), // Json array
+            // 深度思考题字段
+            isDeepThinking: isDeepThinkingQuestion,
+            deepType: deepType,
+            cognitiveLevel: cognitiveLevel || undefined, // Json object or undefined
+            reasoningDepth: reasoningDepth,
           },
         });
 
