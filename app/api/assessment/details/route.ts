@@ -34,8 +34,15 @@ export async function GET(req: NextRequest) {
                   select: {
                     id: true,
                     content: true,
-                    knowledgePoints: true,
                     answer: true,
+                    questionKnowledgePoints: {
+                      select: {
+                        knowledgePointId: true,
+                        knowledgePoint: {
+                          select: { id: true, name: true },
+                        },
+                      },
+                    },
                   },
                 },
               },
@@ -57,32 +64,10 @@ export async function GET(req: NextRequest) {
 
       const question = step.questionStep.question;
 
-      // 解析知识点 - Json 类型可能是对象或数组
-      let knowledgePoints: string[] = [];
-      if (Array.isArray(question.knowledgePoints)) {
-        knowledgePoints = question.knowledgePoints.map(kp => {
-          if (typeof kp === 'string') return kp;
-          if (typeof kp === 'object' && kp !== null) {
-            return (kp as { id?: string; name?: string }).id || (kp as { id?: string; name?: string }).name || '';
-          }
-          return String(kp);
-        }).filter(Boolean);
-      } else if (typeof question.knowledgePoints === 'string') {
-        try {
-          const parsed = JSON.parse(question.knowledgePoints || '[]');
-          if (Array.isArray(parsed)) {
-            knowledgePoints = parsed.map(kp => {
-              if (typeof kp === 'string') return kp;
-              if (typeof kp === 'object' && kp !== null) {
-                return (kp as { id?: string; name?: string }).id || (kp as { id?: string; name?: string }).name || '';
-              }
-              return String(kp);
-            }).filter(Boolean);
-          }
-        } catch (e) {
-          // Keep empty array on error
-        }
-      }
+      // 解析知识点 - 使用 QuestionKnowledgePoint 关系
+      const knowledgePoints: string[] = question.questionKnowledgePoints
+        .map(kp => kp.knowledgePoint?.name || kp.knowledgePointId)
+        .filter(Boolean);
 
       return {
         id: question.id,
