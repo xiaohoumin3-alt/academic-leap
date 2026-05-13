@@ -522,13 +522,12 @@ export async function callLLM(request: LLMRequest): Promise<string> {
   const config = getAIConfig()
   const maxTokens = request.maxTokens || 4096
 
-  // 构建消息数组：system prompt 单独发送
-  const messages: Array<{ role: 'system' | 'user'; content: string }> = []
+  // 构建消息：部分 API 不支持 role: 'system'，将 system prompt 合并到 user message
+  const userContent = request.systemPrompt
+    ? `${request.systemPrompt}\n\n${request.userPrompt}`
+    : request.userPrompt
 
-  if (request.systemPrompt) {
-    messages.push({ role: 'system', content: request.systemPrompt })
-  }
-  messages.push({ role: 'user', content: request.userPrompt })
+  const messages = [{ role: 'user' as const, content: userContent }]
 
   return retryWithBackoff(
     async () => {
