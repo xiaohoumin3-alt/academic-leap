@@ -267,7 +267,11 @@ export async function GET(): Promise<NextResponse> {
               include: {
                 question: {
                   select: {
-                    knowledgePoints: true,
+                    questionKnowledgePoints: {
+                      select: {
+                        knowledgePointId: true,
+                      },
+                    },
                   },
                 },
               },
@@ -281,19 +285,10 @@ export async function GET(): Promise<NextResponse> {
     const knowledgePointPracticeCount = new Map<string, number>();
     for (const attempt of recentAttempts) {
       for (const step of attempt.steps) {
-        if (step.questionStep?.question) {
-          const kpValue = step.questionStep.question.knowledgePoints;
-          let kps: unknown[] = [];
-          if (Array.isArray(kpValue)) {
-            kps = kpValue;
-          } else if (typeof kpValue === 'string') {
-            try {
-              const parsed = JSON.parse(kpValue || '[]');
-              if (Array.isArray(parsed)) kps = parsed;
-            } catch { /* ignore */ }
-          }
-          for (const kp of kps) {
-            const kpId = typeof kp === 'string' ? kp : (kp as { id?: string }).id || '';
+        if (step.questionStep?.question?.questionKnowledgePoints) {
+          // Use QuestionKnowledgePoint relation for ID-based matching
+          for (const kpLink of step.questionStep.question.questionKnowledgePoints) {
+            const kpId = kpLink.knowledgePointId;
             if (kpId) {
               knowledgePointPracticeCount.set(
                 kpId,

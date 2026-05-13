@@ -41,7 +41,13 @@ export async function GET(req: NextRequest) {
           include: {
             questionStep: {
               include: {
-                question: true
+                question: {
+                  select: {
+                    questionKnowledgePoints: {
+                      select: { knowledgePointId: true }
+                    }
+                  }
+                }
               }
             }
           }
@@ -53,21 +59,13 @@ export async function GET(req: NextRequest) {
     const allPracticedKnowledgeIds = new Set<string>();
     for (const attempt of weeklyAttempts) {
       for (const step of attempt.steps) {
-        if (step.questionStep?.question) {
-          const kpValue = step.questionStep.question.knowledgePoints;
-          let kps: unknown[] = [];
-          if (Array.isArray(kpValue)) {
-            kps = kpValue;
-          } else if (typeof kpValue === 'string') {
-            try {
-              const parsed = JSON.parse(kpValue || '[]');
-              if (Array.isArray(parsed)) kps = parsed;
-            } catch { /* ignore */ }
+        if (step.questionStep?.question?.questionKnowledgePoints) {
+          // Use QuestionKnowledgePoint relation for ID-based matching
+          for (const kpLink of step.questionStep.question.questionKnowledgePoints) {
+            if (kpLink.knowledgePointId) {
+              allPracticedKnowledgeIds.add(kpLink.knowledgePointId);
+            }
           }
-          kps.forEach((kp: unknown) => {
-            const id = typeof kp === 'string' ? kp : (kp as { id?: string }).id || '';
-            if (id) allPracticedKnowledgeIds.add(id);
-          });
         }
       }
     }

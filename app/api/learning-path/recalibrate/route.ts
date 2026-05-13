@@ -98,7 +98,13 @@ export async function POST(req: NextRequest) {
       include: {
         questionStep: {
           include: {
-            question: true
+            question: {
+              select: {
+                questionKnowledgePoints: {
+                  select: { knowledgePointId: true }
+                }
+              }
+            }
           }
         }
       },
@@ -108,19 +114,10 @@ export async function POST(req: NextRequest) {
     // Build knowledge point map from recent steps
     const kpFailureCounts = new Map<string, { total: number; failures: number }>();
     for (const step of recentSteps) {
-      if (step.questionStep?.question) {
-        const kpValue = step.questionStep.question.knowledgePoints;
-        let kps: unknown[] = [];
-        if (Array.isArray(kpValue)) {
-          kps = kpValue;
-        } else if (typeof kpValue === 'string') {
-          try {
-            const parsed = JSON.parse(kpValue || '[]');
-            if (Array.isArray(parsed)) kps = parsed;
-          } catch { /* ignore */ }
-        }
-        for (const kpId of kps) {
-          const id = typeof kpId === 'string' ? kpId : (kpId as { id?: string }).id || '';
+      if (step.questionStep?.question?.questionKnowledgePoints) {
+        // Use QuestionKnowledgePoint relation for ID-based matching
+        for (const kpLink of step.questionStep.question.questionKnowledgePoints) {
+          const id = kpLink.knowledgePointId;
           if (id) {
             const current = kpFailureCounts.get(id) || { total: 0, failures: 0 };
             current.total++;
