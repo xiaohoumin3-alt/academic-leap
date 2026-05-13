@@ -56,45 +56,30 @@ export async function POST(req: NextRequest) {
     };
 
     if (knowledgePointId) {
-      // Find questions that match the knowledge point (Json filtering in memory)
-      const allQuestions = await prisma.question.findMany({
+      // Find questions that match the knowledge point using QuestionKnowledgePoint relation
+      const questions = await prisma.question.findMany({
         where: {
           extractionStatus: 'SUCCESS',
           complexity: { not: null },
           id: { notIn: excludeQuestionIds },
+          // Use the QuestionKnowledgePoint relation for ID-based matching
+          questionKnowledgePoints: {
+            some: {
+              knowledgePointId: knowledgePointId,
+            },
+          },
         },
         select: {
           id: true,
           content: true,
-          knowledgePoints: true,
           complexity: true,
           cognitiveLoad: true,
           reasoningDepth: true,
           difficulty: true,
         },
-        take: 200,
-        orderBy: { createdAt: 'desc' },
+        take: 50,
+        orderBy: { featuresExtractedAt: 'desc' },
       });
-
-      // Filter by knowledgePointId in memory (Json type)
-      const questions = allQuestions.filter(q => {
-        const kps = q.knowledgePoints;
-        if (Array.isArray(kps)) {
-          return kps.some(kp => {
-            if (typeof kp === 'string') return kp.includes(knowledgePointId);
-            if (typeof kp === 'object' && kp !== null) {
-              const name = (kp as { name?: string }).name || (kp as { id?: string }).id || '';
-              return name.includes(knowledgePointId);
-            }
-            return false;
-          });
-        }
-        // Fallback to string search in content (less reliable)
-        if (typeof q.content === 'object' && q.content !== null) {
-          return JSON.stringify(q.content).includes(knowledgePointId);
-        }
-        return false;
-      }).slice(0, 50);
 
       // Score and rank questions
       const scored = questions.map(q => {

@@ -26,9 +26,11 @@ export async function GET(request: NextRequest) {
     const where: Record<string, unknown> = {};
 
     if (knowledgePointId) {
-      // knowledgePoints is a JSON string array, use exact match with quotes
-      where.knowledgePoints = {
-        contains: `"${knowledgePointId}"`,
+      // Use QuestionKnowledgePoint relation for ID-based matching
+      where.questionKnowledgePoints = {
+        some: {
+          knowledgePointId: knowledgePointId,
+        },
       };
     }
 
