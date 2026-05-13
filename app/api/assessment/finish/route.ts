@@ -75,13 +75,19 @@ export async function POST(req: NextRequest) {
 
     // 如果没有答题记录但前端传递了答案，使用前端传递的答案
     if (attemptSteps.length === 0 && answers && questionIds) {
-      // 获取题目信息（用于获取知识点）
+      // 获取题目信息（用于获取知识点） - Use QuestionKnowledgePoint relation
       const questions = await prisma.question.findMany({
         where: { id: { in: questionIds as string[] } },
-        select: { id: true, knowledgePoints: true, answer: true },
+        select: {
+          id: true,
+          answer: true,
+          questionKnowledgePoints: {
+            select: { knowledgePointId: true }
+          }
+        },
       });
 
-      console.log('[Assessment Finish] Fetched questions:', questions.map(q => ({ id: q.id, kp: q.knowledgePoints })));
+      console.log('[Assessment Finish] Fetched questions:', questions.map(q => ({ id: q.id, kp: q.questionKnowledgePoints.map(k => k.knowledgePointId) })));
 
       const questionMap = new Map(questions.map(q => [q.id, q]));
 
@@ -98,7 +104,7 @@ export async function POST(req: NextRequest) {
           questionId,
           isCorrect,
           duration: 0,
-          knowledgePoints: question.knowledgePoints,
+          knowledgePoints: question.questionKnowledgePoints.map(k => k.knowledgePointId),
         };
       }).filter(Boolean);
     }
@@ -130,7 +136,11 @@ export async function POST(req: NextRequest) {
         where: { id: { in: stepIds as string[] } },
         include: {
           question: {
-            select: { knowledgePoints: true },
+            select: {
+              questionKnowledgePoints: {
+                select: { knowledgePointId: true }
+              }
+            },
           },
         },
       });
@@ -170,31 +180,13 @@ export async function POST(req: NextRequest) {
     for (const step of attemptSteps as any[]) {
       let knowledgePointIds: string[] = [];
 
-      // 从数据库记录获取知识点 (Json type)
+      // 从数据库记录获取知识点 - Use QuestionKnowledgePoint relation
       if (step.questionStepId) {
         const questionStep = questionStepMap.get(step.questionStepId);
-        const kpValue = questionStep?.question?.knowledgePoints;
-        if (Array.isArray(kpValue)) {
-          knowledgePointIds = kpValue.map(kp => {
-            if (typeof kp === 'string') return kp;
-            if (typeof kp === 'object' && kp !== null) {
-              return (kp as { id?: string; name?: string }).id || (kp as { id?: string; name?: string }).name || '';
-            }
-            return String(kp);
-          }).filter(Boolean);
-        } else if (typeof kpValue === 'string') {
-          try {
-            const parsed = JSON.parse(kpValue);
-            if (Array.isArray(parsed)) {
-              knowledgePointIds = parsed.map(kp => {
-                if (typeof kp === 'string') return kp;
-                if (typeof kp === 'object' && kp !== null) {
-                  return (kp as { id?: string; name?: string }).id || (kp as { id?: string; name?: string }).name || '';
-                }
-                return String(kp);
-              }).filter(Boolean);
-            }
-          } catch (e) { /* ignore parse error */ }
+        if (questionStep?.question?.questionKnowledgePoints) {
+          knowledgePointIds = questionStep.question.questionKnowledgePoints
+            .map((kp: { knowledgePointId: string }) => kp.knowledgePointId)
+            .filter(Boolean);
         }
       }
       // 从前端传递的数据获取知识点
